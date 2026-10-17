@@ -101,3 +101,10 @@ so it works at a domain root or a sub-path.
 
 ## Privacy
 Player data never leaves the device, except for the text you choose to share.
+
+## Screenshots
+390 px mobile viewport, light and dark:
+
+| Players | Game | Teams | Teams (dark) |
+|---|---|---|---|
+| ![](docs/screenshots/light-02-players.png) | ![](docs/screenshots/light-04-game.png) | ![](docs/screenshots/light-05-teams.png) | ![](docs/screenshots/dark-08-reroll.png) |
