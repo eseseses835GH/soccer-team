@@ -313,6 +313,11 @@ select {
   background: var(--surface);
   border-color: var(--border);
 }
+.btn-outline {
+  background: var(--surface);
+  color: var(--accent);
+  border: 2px solid var(--accent);
+}
 .btn-whatsapp {
   background: var(--wa);
   color: #fff;

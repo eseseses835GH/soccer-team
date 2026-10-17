@@ -23,3 +23,30 @@ These are the assumptions and judgment calls I made while building the app on my
 - **"Generate" always returns the best split.** "Re-roll" is how you get variety. Re-roll samples from the cached pool (instant) and keeps a history so you don't keep seeing the same teams.
 - **Score shown to users:** `100 · exp(−0.5 · cost)`. A typical well-balanced split scores 80–95. A missing goalkeeper drops it into the 30s, and a broken constraint drops it to nearly 0.
 - **Out-of-range ratings** (missing or NaN) are clamped to 1–10, with 5 as the default.
+
+## Data and state
+- **One localStorage key, `kochot:v1`, holds the whole app state.** Every load goes through `sanitize()`, which clamps ratings, drops dangling ids, and discards an invalid result. Corrupt storage therefore resets parts of the state instead of crashing the app.
+- **The last generated result is persisted**, so refreshing the page at the pitch keeps the teams. If attendance or the team count changes afterwards, the teams screen shows a "changed since the split" banner with a one-tap re-split. It does not silently recompute.
+- **Ratings edited after a split show up live** in the score and totals, because results store player ids, not copies. The re-roll pool's costs are from generation time; a fresh "split" refreshes them.
+- **New players (quick or full add) are marked as present automatically**, since the main use is adding someone at the pitch. You can untick them with one tap.
+- **Duplicate names are rejected** (after trimming). Names are capped at 24 characters.
+- **"Load sample squad" merges** with your own players. It replaces only earlier sample players (ids `sample-*`) and ticks 10 of the 14 so the demo is a 5v5.
+- **A pair can't be both "together" and "apart".** Adding one removes the other. Deleting a player removes their constraints.
+
+## UI
+- **Four bottom tabs:** שחקנים (players) / המשחק (game) / קבוצות (teams) / הגדרות (settings). Tabs sync with `location.hash`, so the phone's back button works.
+- **Teams are named by bib colour** (אדומים, כחולים, ירוקים, צהובים: red, blue, green, yellow), which is how teams are called at the pitch. That caps the app at **4 teams**.
+- **The minimum is 2 players per team.** The Generate button stays disabled with a message until there are enough players.
+- **Manual changes are swaps only.** Moving a single player would break the target sizes. "Undo swaps" restores the generated split.
+- **Quick add uses tap-to-rate (1–10 buttons) for overall skill.** The full form uses sliders for all 8 attributes.
+- **Constraints live in Settings.** The game screen shows a count and a link to them.
+- **Weights range from 0 to 5 in 0.5 steps.** 0 means the attribute is ignored.
+- **The leader icon is ©** (the captain-armband convention). Goalkeepers get 🧤.
+- **The attribute table shows totals (sums)**, as requested, plus a gap column. For goalkeeping it shows each team's best keeper, matching what the engine optimizes, with a footnote. The team header shows the weighted per-player average, which is what the engine actually compares.
+- **Share:** the "שיתוף" (share) button uses `navigator.share` when available and otherwise opens `wa.me`. There is also an explicit WhatsApp link and a copy button. Each line starts with a Right-to-Left Mark, so Latin names or numbers don't flip the line order in WhatsApp.
+- **System fonts only, no web fonts.** This keeps the app fast and working offline after the first load, and Hebrew system fonts are good on iOS and Android.
+- **The re-roll button is outlined; share is solid green.** In dark mode the two filled greens looked identical.
+
+## Tooling
+- **Playwright runs with an explicit `executablePath`** because the container provides a pre-installed Chromium build. Override it with `CHROMIUM_PATH`.
+- **A GitHub Pages workflow is included.** It runs on pushes to `main` only, so it does nothing on feature branches.

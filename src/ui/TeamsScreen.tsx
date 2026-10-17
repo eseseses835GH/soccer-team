@@ -184,7 +184,7 @@ export function TeamsScreen() {
       </div>
 
       <div className="actions">
-        <button type="button" className="btn btn-primary btn-big" onClick={reroll}>
+        <button type="button" className="btn btn-outline btn-big" onClick={reroll}>
           <Icon name="dice" /> הגרלה מחדש
         </button>
         <button type="button" className="btn btn-whatsapp btn-big" onClick={share}>
