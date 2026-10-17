@@ -44,7 +44,7 @@ These are the assumptions and judgment calls I made while building the app on my
 - **The leader icon is ©** (the captain-armband convention). Goalkeepers get 🧤.
 - **The attribute table shows totals (sums)**, as requested, plus a gap column. For goalkeeping it shows each team's best keeper, matching what the engine optimizes, with a footnote. The team header shows the weighted per-player average, which is what the engine actually compares.
 - **Share:** the "שיתוף" (share) button uses `navigator.share` when available and otherwise opens `wa.me`. There is also an explicit WhatsApp link and a copy button. Each line starts with a Right-to-Left Mark, so Latin names or numbers don't flip the line order in WhatsApp.
-- **System fonts only, no web fonts.** This keeps the app fast and working offline after the first load, and Hebrew system fonts are good on iOS and Android.
+- **System fonts only, no web fonts.** This keeps the app fast (there is no service worker, so it is not offline-capable yet), and Hebrew system fonts are good on iOS and Android.
 - **The re-roll button is outlined; share is solid green.** In dark mode the two filled greens looked identical.
 
 ## Tooling

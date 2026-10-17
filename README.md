@@ -38,6 +38,7 @@ and fails on console errors or horizontal overflow:
 ```bash
 npm run build && npx vite preview --port 4173 &
 npm run screenshots -- ./screenshots
+npm run e2e          # functional flows: quick add, validation, persistence, 22 players/3 teams, re-roll, keep-apart
 # CHROMIUM_PATH=/path/to/chrome if Playwright's bundled browser isn't at the default path
 ```
 
