@@ -76,6 +76,8 @@ export interface TeamStats {
   strength: number;
   goalkeepers: number;
   leaders: number;
+  /** Goalkeeping rating of the team's best keeper (declared keepers first). */
+  bestKeeper: number;
 }
 
 export interface Evaluation {

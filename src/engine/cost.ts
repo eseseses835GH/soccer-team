@@ -201,7 +201,7 @@ export function evaluate(
       totals[key] = ag.sums[t * NA + a];
       strength += pr.weights[a] * ag.sums[t * NA + a];
     });
-    return { size: ag.sizes[t], totals, strength, goalkeepers: ag.gks[t], leaders: ag.leaders[t] };
+    return { size: ag.sizes[t], totals, strength, goalkeepers: ag.gks[t], leaders: ag.leaders[t], bestKeeper: ag.bestGK[t] };
   });
   const byId = (i: number) => players[i].id;
   const together = pr.together.filter(([a, b]) => asg[a] !== asg[b]).map(([a, b]) => [byId(a), byId(b)] as Pair);
