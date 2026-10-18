@@ -14,12 +14,17 @@ and a nudge when one team keeps winning.
 | ![](docs/screenshots/home.png) | ![](docs/screenshots/teams.png) | ![](docs/screenshots/match.png) | ![](docs/screenshots/players.png) |
 
 ## How it works for the group
-1. **Players (once).** Each player needs a name and a level (1–10). Optionally, pick up to two
-   player *cards*: 🦍 החיה (the beast), 🎯 הצלף (the sniper), 🪄 הקוסם (the magician),
-   🙅 לא מוסר (doesn't pass), 🧱 הסלע (the rock), 📣 הקפטן (the captain). Cards shape the eight
-   ratings used for balancing (stamina, passing, dribbling, shooting, defence, teamwork,
-   leadership). The sliders are optional fine-tuning. You can also paste a whole list or upload a
-   CSV ([template](docs/roster-template.csv)).
+1. **Players (once).** Each player needs a name and a level (1 = just started, 10 = the best in the
+   group). Optionally, pick up to three player *cards*, in two rows:
+   - **חוזקות (strengths):** 🦍 החיה (the beast), 🎯 הצלף (the sniper), 🪄 הקוסם (the magician),
+     🧠 המוח (the brain), 🧱 הסלע (the rock), 📣 הקפטן (the captain).
+   - **חולשות (weaknesses):** 🐢 איטי (slow), 😮‍💨 נגמר אחרי 5 דקות (done after 5 minutes),
+     🏖️ לא חוזר להגנה (doesn't track back), 🙅 לא מוסר (doesn't pass), 🥶 מפחד מהכדור (afraid of the
+     ball), 🌱 מתחיל (beginner).
+
+   Cards shape the eight ratings used for balancing (stamina, passing, dribbling, shooting, defence,
+   teamwork, leadership). "דירוג מפורט" (detailed rating) opens one slider per rating, both when adding
+   and when editing. You can also paste a whole list or upload a CSV ([template](docs/roster-template.csv)).
 2. **Tonight.** Tick who came and choose players per team (3–7). The app explains the plan in one line:
    - 10 players, 5-a-side → `5 נגד 5` (5 vs 5)
    - 14 → `5 נגד 5 · 4 בחוץ, משלימים 1 מהמפסידה` (5 vs 5, 4 wait outside and borrow 1 from the losing team)
@@ -62,13 +67,14 @@ node scripts/icons.mjs                 # regenerate PWA PNG icons from public/fa
 ```
 
 ## Importing a roster
-One player per line: a name, then optionally the level, the word `שוער` ("goalkeeper") and card names.
+One player per line: a name, then optionally the level, the word `שוער` ("goalkeeper") and card names
+(any of the twelve; `נגמר`, `לא חוזר` and `מפחד` also work as short forms).
 Commas, semicolons, tabs or spaces all work, and a header line is ignored:
 ```
 שם,רמה,שוער,כרטיסיות
 אבי,8,,הקפטן
 דני הקטן 6 שוער
-נועם, 7, הקוסם
+נועם, 7, הקוסם, לא חוזר להגנה
 יוסי
 ```
 Duplicate names and levels outside 1–10 are skipped and listed. A backup `.json` file can be imported

@@ -42,8 +42,17 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: 'השחקנים' }).click();
   await shot('03-players');
   await checkLayout('players');
+  await page.getByRole('button', { name: 'הצלף', exact: true }).click();
+  await page.getByRole('button', { name: 'נגמר אחרי 5 דקות', exact: true }).click();
+  await page.getByText('דירוג מפורט').click();
+  await shot('03b-add-detailed', true);
+  await checkLayout('quick add with detailed rating');
+  await page.getByText('דירוג מפורט').click();
   await page.getByRole('button', { name: /אבי/ }).click();
   await shot('04-player-sheet');
+  await page.locator('.sheet').evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await shot('04b-player-sheet-sliders');
+  await checkLayout('player sheet');
   await page.getByRole('button', { name: 'סגירה' }).click();
   await page.getByRole('button', { name: /^חזרה$/ }).click();
   await page.getByRole('button', { name: 'עושים כוחות' }).click();

@@ -20,13 +20,22 @@ await page.goto(base);
 
 // 1. Quick add with level + card, duplicate rejected.
 await page.getByRole('button', { name: 'הוספת שחקנים' }).click();
-for (const [n, lvl, card] of [['אלון', '7', 'החיה'], ['Ben', '4', null], ['גיא', '9', 'הקוסם']]) {
+for (const [n, lvl, cards] of [['אלון', '7', ['החיה']], ['Ben', '4', ['איטי', 'מפחד מהכדור']], ['גיא', '9', ['הקוסם']]]) {
   await page.getByPlaceholder('איך קוראים לו?').fill(n);
   await page.getByRole('radio', { name: lvl, exact: true }).click();
-  if (card) await page.getByRole('button', { name: new RegExp(card) }).click();
+  for (const card of cards) await page.getByRole('button', { name: card, exact: true }).click();
+  if (n === 'Ben') {
+    // Optional detailed rating in quick add: shooting slider 4-2 → 6.
+    await page.getByText('דירוג מפורט').click();
+    await page.getByLabel('בעיטה').fill('6');
+    await page.getByText('דירוג מפורט').click();
+  }
   await page.getByRole('button', { name: /^הוספה$/ }).click();
 }
 assert((await page.locator('.roster li').count()) === 3, 'quick add should create 3 players');
+const ben = await page.evaluate(() => JSON.parse(localStorage.getItem('kochot:v1')).players.find((p) => p.name === 'Ben'));
+assert(JSON.stringify(ben.cards) === '["slow","scared"]', `Ben's cards ${JSON.stringify(ben.cards)}`);
+assert(ben.attrs.shooting === 6 && ben.attrs.stamina === 2 && ben.attrs.overall === 4, `Ben's ratings ${JSON.stringify(ben.attrs)}`);
 await page.getByPlaceholder('איך קוראים לו?').fill('גיא');
 await page.getByRole('button', { name: /^הוספה$/ }).click();
 assert(await page.getByText('כבר יש שחקן בשם הזה').isVisible(), 'duplicate name error');
@@ -113,9 +122,13 @@ assert(await page.getByRole('button', { name: /כמו בפעם הקודמת/ }).
 // 10. Backup link → import on another device.
 await page.getByRole('button', { name: 'הגדרות' }).click();
 // Capture what the app copies (headless clipboard reads are unreliable).
+// Desktop Chrome on macOS has navigator.share, so stub that path too.
 await page.evaluate(() => {
   navigator.clipboard.writeText = async (t) => {
     window.__copied = t;
+  };
+  if (navigator.share) navigator.share = async (d) => {
+    window.__copied = d.url ?? d.text;
   };
 });
 await page.getByRole('button', { name: /שליחת קישור/ }).click();

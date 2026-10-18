@@ -11,7 +11,7 @@ import {
   type Solution,
   type Weights,
 } from '../engine';
-import { isCardId, type CardId } from './cards';
+import { sanitizeCards, type CardId } from './cards';
 import type { MatchState } from '../match/match';
 import { sanitizeMatch } from '../match/match';
 
@@ -176,7 +176,7 @@ export function sanitizePlayer(p: unknown): Player | null {
     const v = Number(raw);
     if (Number.isFinite(v)) attrs[k] = Math.min(10, Math.max(1, Math.round(v)));
   }
-  const cards = Array.isArray(r.cards) ? r.cards.filter(isCardId).slice(0, 2) : [];
+  const cards = sanitizeCards(r.cards);
   return { id: r.id, name: r.name.trim().slice(0, 24), attrs, canGK: !!r.canGK, cards };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { scoreLabel } from '../i18n';
-import { CARDS, type CardId } from '../state/cards';
+import { ATTR_KEYS, type Attributes } from '../engine';
+import { ATTR_LABELS, scoreLabel } from '../i18n';
+import { STRENGTHS, WEAKNESSES, cardById, type Card, type CardId } from '../state/cards';
 
 /** Labelled slider with a visible value. */
 export function RatingSlider({
@@ -51,37 +52,73 @@ export function LevelPicker({ value, onChange, label = 'רמה' }: { value: numb
   );
 }
 
-export function CardPicker({ value, onToggle }: { value: CardId[]; onToggle: (id: CardId) => void }) {
+function CardGroup({ title, cards, value, onToggle }: { title: string; cards: Card[]; value: CardId[]; onToggle: (id: CardId) => void }) {
   return (
-    <div className="cards" role="group" aria-label="סוג שחקן (עד 2)">
-      {CARDS.map((c) => {
-        const on = value.includes(c.id);
-        return (
-          <button key={c.id} type="button" className={`card-chip ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => onToggle(c.id)}>
-            <span className="card-emoji" aria-hidden="true">
-              {c.emoji}
-            </span>
-            <span className="card-text">
-              <strong>{c.name}</strong>
-              <small>{c.blurb}</small>
-            </span>
-          </button>
-        );
-      })}
+    <div className="card-group" role="group" aria-label={title}>
+      <span className="card-group-title">{title}</span>
+      <div className="card-chips">
+        {cards.map((c) => {
+          const on = value.includes(c.id);
+          return (
+            <button key={c.id} type="button" className={`card-chip ${on ? 'on' : ''}`} aria-pressed={on} title={c.blurb} onClick={() => onToggle(c.id)}>
+              <span className="card-emoji" aria-hidden="true">
+                {c.emoji}
+              </span>
+              {c.name}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-export function CardBadges({ cards }: { cards: CardId[] }) {
-  if (!cards.length) return null;
+/** Two labelled rows of card chips (strengths, then weaknesses) and the blurbs of the picked ones. */
+export function CardPicker({ value, onToggle }: { value: CardId[]; onToggle: (id: CardId) => void }) {
+  const picked = value.map(cardById).filter((c): c is Card => !!c);
   return (
-    <span className="badges" aria-label={cards.map((id) => CARDS.find((c) => c.id === id)?.name).join(', ')}>
-      {cards.map((id) => (
-        <span key={id} aria-hidden="true" title={CARDS.find((c) => c.id === id)?.name}>
-          {CARDS.find((c) => c.id === id)?.emoji}
+    <div className="card-picker">
+      <CardGroup title="חוזקות" cards={STRENGTHS} value={value} onToggle={onToggle} />
+      <CardGroup title="חולשות" cards={WEAKNESSES} value={value} onToggle={onToggle} />
+      {picked.length > 0 && (
+        <ul className="card-notes" aria-live="polite">
+          {picked.map((c) => (
+            <li key={c.id}>
+              <span aria-hidden="true">{c.emoji}</span> <strong>{c.name}:</strong> {c.blurb}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Card emojis next to a name. Screens that people can see over the organizer's
+ * shoulder show strengths only; the players screen passes `all`.
+ */
+export function CardBadges({ cards, all = false }: { cards: CardId[]; all?: boolean }) {
+  const shown = cards.map(cardById).filter((c): c is Card => !!c && (all || c.kind === 'strength'));
+  if (!shown.length) return null;
+  return (
+    <span className="badges" aria-label={shown.map((c) => c.name).join(', ')}>
+      {shown.map((c) => (
+        <span key={c.id} aria-hidden="true" title={c.name}>
+          {c.emoji}
         </span>
       ))}
     </span>
+  );
+}
+
+/** One slider per attribute except the level. */
+export function AttrSliders({ attrs, onChange }: { attrs: Attributes; onChange: (a: Attributes) => void }) {
+  return (
+    <div className="sliders">
+      {ATTR_KEYS.filter((k) => k !== 'overall').map((k) => (
+        <RatingSlider key={k} label={ATTR_LABELS[k]} value={attrs[k]} onChange={(v) => onChange({ ...attrs, [k]: v })} />
+      ))}
+    </div>
   );
 }
 

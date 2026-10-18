@@ -1,4 +1,4 @@
-import { CARDS, type CardId, applyCards } from './cards';
+import { CARDS, applyCards, sanitizeCards, type CardId } from './cards';
 import { newId, sanitizePlayer, sanitizeSettings, type Player, type Settings } from './model';
 import type { Constraints } from '../engine';
 
@@ -54,16 +54,32 @@ export function parseRoster(text: string, existingNames: string[] = []): ParsedR
     }
     const lower = rest.toLowerCase();
     const canGK = GK_WORDS.some((w) => lower.split(/\s+/).includes(w));
-    const cards = CARDS.filter((c) => rest.includes(c.name))
-      .map((c) => c.id)
-      .slice(0, 2) as CardId[];
+    const cards = parseCardNames(rest);
     taken.add(name);
     players.push({ id: newId(), name, attrs: applyCards(level, cards), canGK, cards });
   }
   return { players, skipped };
 }
 
-export const ROSTER_TEMPLATE = '﻿שם,רמה,שוער,כרטיסיות\nאבי,8,,הקפטן\nדני,5,שוער,\nנועם,7,,הקוסם\nליאור,6,,החיה\n';
+export const ROSTER_TEMPLATE = '﻿שם,רמה,שוער,כרטיסיות\nאבי,8,,הקפטן\nדני,5,שוער,איטי\nנועם,7,,הקוסם לא חוזר להגנה\nליאור,6,,החיה\nגיל,3,,מתחיל\n';
+
+/**
+ * Card names (or short aliases) in the order they appear in the text. Longer terms are
+ * matched first and blanked out, so a short name inside a longer one can't match twice.
+ * Opposites and the card limit apply as if the cards were tapped in that order.
+ */
+export function parseCardNames(text: string): CardId[] {
+  const terms = CARDS.flatMap((c) => [c.name, ...(c.aliases ?? [])].map((term) => ({ id: c.id, term }))).sort((a, b) => b.term.length - a.term.length);
+  let rest = text;
+  const found: { id: CardId; at: number }[] = [];
+  for (const { id, term } of terms) {
+    const at = rest.indexOf(term);
+    if (at < 0) continue;
+    found.push({ id, at });
+    rest = rest.slice(0, at) + ' '.repeat(term.length) + rest.slice(at + term.length);
+  }
+  return sanitizeCards(found.sort((a, b) => a.at - b.at).map((f) => f.id));
+}
 
 // ---------- full backup (file / link) ----------
 

@@ -72,8 +72,8 @@ describe('cards', () => {
     expect(a.teamwork).toBe(6);
     expect(applyCards(1, ['noPass']).passing).toBe(1);
   });
-  it('at most two cards', () => {
-    expect(toggleCard(['beast', 'rock'], 'sniper')).toEqual(['rock', 'sniper']);
+  it('at most three cards', () => {
+    expect(toggleCard(['beast', 'rock', 'slow'], 'sniper')).toEqual(['rock', 'slow', 'sniper']);
     expect(toggleCard(['beast'], 'beast')).toEqual([]);
   });
 });

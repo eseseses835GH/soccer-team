@@ -1,16 +1,36 @@
 import { useRef, useState } from 'react';
-import { ATTR_KEYS } from '../engine';
-import { ATTR_LABELS, playersCount } from '../i18n';
-import { applyCards, toggleCard, type CardId } from '../state/cards';
+import { ATTR_KEYS, type Attributes } from '../engine';
+import { playersCount } from '../i18n';
+import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
 import { ROSTER_TEMPLATE, parseBackup, parseRoster, type ParsedRoster } from '../state/io';
 import { newId, type Player } from '../state/model';
 import { useStore } from '../state/store';
 import { downloadText } from '../share';
 import { useUi } from './App';
-import { CardBadges, CardPicker, LevelPicker, RatingSlider, Sheet, Toggle } from './components';
+import { AttrSliders, CardBadges, CardPicker, LevelPicker, Sheet, Toggle } from './components';
 import { Icon } from './icons';
 
 const MAX_NAME = 24;
+/** What "level" means, so everyone rates on the same scale. */
+const LEVEL_HINT = '1 = רק התחיל לשחק · 5 = באמצע החבורה · 10 = הכי טוב אצלנו';
+
+/** True when the sliders were moved away from what level + cards give. */
+const isTuned = (attrs: Attributes, cards: CardId[]) => {
+  const base = applyCards(attrs.overall, cards);
+  return ATTR_KEYS.some((k) => attrs[k] !== base[k]);
+};
+
+function DetailedRating({ attrs, cards, open, onChange }: { attrs: Attributes; cards: CardId[]; open?: boolean; onChange: (a: Attributes) => void }) {
+  return (
+    <details className="fold detailed" open={open}>
+      <summary>
+        דירוג מפורט <small>{isTuned(attrs, cards) ? 'כוונן ידנית' : 'לא חובה'}</small>
+      </summary>
+      <p className="hint small">מתחיל מהרמה ומהכרטיסיות. שינוי רמה או כרטיסייה מחשב אותו מחדש.</p>
+      <AttrSliders attrs={attrs} onChange={onChange} />
+    </details>
+  );
+}
 
 export function PlayersScreen() {
   const { state, dispatch } = useStore();
@@ -18,10 +38,18 @@ export function PlayersScreen() {
   const [name, setName] = useState('');
   const [level, setLevel] = useState(5);
   const [cards, setCards] = useState<CardId[]>([]);
+  const [attrs, setAttrs] = useState<Attributes>(() => applyCards(5, []));
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Player | null>(null);
   const [importing, setImporting] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
+  const setProfile = (l: number, c: CardId[]) => {
+    setLevel(l);
+    setCards(c);
+    setAttrs(applyCards(l, c));
+  };
 
   const nameTaken = (n: string, exceptId?: string) => state.players.some((p) => p.id !== exceptId && p.name.trim() === n.trim());
 
@@ -30,11 +58,10 @@ export function PlayersScreen() {
     const n = name.trim();
     if (!n) return setError('צריך שם');
     if (nameTaken(n)) return setError('כבר יש שחקן בשם הזה. אפשר להוסיף כינוי, למשל "דני ג׳"');
-    dispatch({ type: 'addPlayer', player: { id: newId(), name: n, attrs: applyCards(level, cards), canGK: false, cards }, present: true });
+    dispatch({ type: 'addPlayer', player: { id: newId(), name: n, attrs: { ...attrs, overall: level }, canGK: false, cards }, present: true });
     notify(`${n} נוסף ומסומן שהגיע`);
     setName('');
-    setLevel(5);
-    setCards([]);
+    setProfile(5, []);
     setError(null);
     nameRef.current?.focus();
   };
@@ -64,11 +91,13 @@ export function PlayersScreen() {
         />
         {error && <p className="field-error">{error}</p>}
         <span className="label">רמה</span>
-        <LevelPicker value={level} onChange={setLevel} />
+        <LevelPicker value={level} onChange={(l) => setProfile(l, cards)} />
+        <p className="hint small level-hint">{LEVEL_HINT}</p>
         <span className="label">
-          איזה שחקן הוא? <small>לא חובה · עד 2</small>
+          איזה שחקן הוא? <small>לא חובה · עד {MAX_CARDS}</small>
         </span>
-        <CardPicker value={cards} onToggle={(id) => setCards((c) => toggleCard(c, id))} />
+        <CardPicker value={cards} onToggle={(id) => setProfile(level, toggleCard(cards, id))} />
+        <DetailedRating attrs={{ ...attrs, overall: level }} cards={cards} onChange={setAttrs} />
         <button type="submit" className="btn btn-primary btn-block">
           <Icon name="plus" size={20} /> הוספה
         </button>
@@ -94,7 +123,7 @@ export function PlayersScreen() {
             <li key={p.id}>
               <button type="button" onClick={() => setEditing(p)}>
                 <span className="name">{p.name}</span>
-                <CardBadges cards={p.cards} />
+                <CardBadges cards={p.cards} all />
                 <span className="level" aria-label={`רמה ${p.attrs.overall}`}>
                   {p.attrs.overall}
                 </span>
@@ -145,7 +174,7 @@ function PlayerSheet({
   const [draft, setDraft] = useState<Player>(player);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // Level/cards rebuild the attributes; fine-tuning with sliders comes after.
+  // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
   const setProfile = (level: number, cards: CardId[]) => setDraft((d) => ({ ...d, cards, attrs: applyCards(level, cards) }));
 
   const save = (e: React.FormEvent) => {
@@ -177,20 +206,13 @@ function PlayerSheet({
         {error && <p className="field-error">{error}</p>}
         <span className="label">רמה</span>
         <LevelPicker value={draft.attrs.overall} onChange={(v) => setProfile(v, draft.cards)} />
+        <p className="hint small level-hint">{LEVEL_HINT}</p>
         <span className="label">
-          איזה שחקן הוא? <small>עד 2</small>
+          איזה שחקן הוא? <small>עד {MAX_CARDS}</small>
         </span>
         <CardPicker value={draft.cards} onToggle={(id) => setProfile(draft.attrs.overall, toggleCard(draft.cards, id))} />
         {fixedKeepers && <Toggle checked={draft.canGK} onChange={(v) => setDraft({ ...draft, canGK: v })} label="שוער קבוע" hint="יתחלק שוער אחד לכל קבוצה" />}
-        <details className="fold">
-          <summary>כיוון עדין</summary>
-          <p className="hint small">שינוי רמה או כרטיסייה מחשב את זה מחדש.</p>
-          <div className="sliders">
-            {ATTR_KEYS.filter((k) => k !== 'overall').map((k) => (
-              <RatingSlider key={k} label={ATTR_LABELS[k]} value={draft.attrs[k]} onChange={(v) => setDraft({ ...draft, attrs: { ...draft.attrs, [k]: v } })} />
-            ))}
-          </div>
-        </details>
+        <DetailedRating attrs={draft.attrs} cards={draft.cards} open onChange={(a) => setDraft({ ...draft, attrs: a })} />
         <div className="stack">
           <button type="submit" className="btn btn-primary btn-block">
             שמירה
@@ -241,8 +263,8 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet title="ייבוא רשימה" onClose={onClose}>
-      <p className="lead">שחקן בכל שורה: שם, ואחריו רמה (לא חובה). אפשר להוסיף ״שוער״ או שם של כרטיסייה.</p>
-      <pre className="example" dir="rtl">{'אבי 8\nדני הקטן, 6, שוער\nנועם, 7, הקוסם\nיוסי'}</pre>
+      <p className="lead">שחקן בכל שורה: שם, ואחריו רמה (לא חובה). אפשר להוסיף ״שוער״ ושמות של כרטיסיות, למשל ״הקוסם״ או ״איטי״.</p>
+      <pre className="example" dir="rtl">{'אבי 8\nדני הקטן, 6, שוער\nנועם, 7, הקוסם, לא חוזר להגנה\nיוסי'}</pre>
       <textarea className="input textarea" rows={6} placeholder="מדביקים כאן…" value={text} onChange={(e) => setText(e.target.value)} aria-label="רשימת שחקנים" />
       <div className="row-links">
         <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
@@ -281,7 +303,7 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
           <ul className="preview-list">
             {parsed.players.slice(0, 30).map((p) => (
               <li key={p.id}>
-                {p.name} <span className="muted">{p.attrs.overall}</span> <CardBadges cards={p.cards} />
+                {p.name} <span className="muted">{p.attrs.overall}</span> <CardBadges cards={p.cards} all />
                 {p.canGK && ' 🧤'}
               </li>
             ))}

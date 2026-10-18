@@ -21,8 +21,8 @@
   - A **dominance hint** with a one-swap fix.
   - "End the evening".
 - **Players screen:**
-  - Quick add: name, level 1–10, up to 2 of 6 player cards.
-  - Edit sheet with optional sliders for fine-tuning.
+  - Quick add: name, level 1–10 (with a one-line scale hint), up to 3 of 12 player cards in two rows (6 strengths, 6 weaknesses).
+  - Optional "דירוג מפורט" (detailed rating) sliders, folded in quick add and open in the edit sheet.
   - **List import:** paste text or upload CSV/TXT/JSON, preview before adding, downloadable template (`docs/roster-template.csv`).
 - **Settings:**
   - Rotating vs. fixed keepers, and switch every 1/2/3 goals.
@@ -68,7 +68,7 @@
 - **Swap suggestions aren't browser-tested:** the "teams filled" suggestion and the dominance hint are unit-tested, but the browser flow doesn't trigger them.
 - **Scorer stats are per evening only;** nothing accumulates across evenings.
 - **No way to mark someone as left:** you untick them at home, which flags the teams as out of date.
-- **Fixed design limits:** the main screen offers 3–7 per team (larger sizes aren't reachable), there are 8 bib colours, and cards are a fixed list.
+- **Fixed design limits:** the main screen offers 3–7 per team (larger sizes aren't reachable), there are 8 bib colours, and cards are a fixed list (12).
 - **The backup link can get long** for very large rosters (it's roughly 1–2 KB for 25 players, which is fine for WhatsApp).
 
 ## Next steps, most valuable first
