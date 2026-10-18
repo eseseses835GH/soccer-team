@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   addGoal,
   addTeam,
+  borrowNeed,
+  borrowedInto,
   defaultOutOnDraw,
   dismissDominance,
   dominantTeam,
@@ -10,6 +12,7 @@ import {
   keeperIndex,
   loserOf,
   pauseClock,
+  setBorrow,
   sanitizeMatch,
   standings,
   startClock,
@@ -101,5 +104,53 @@ describe('match night', () => {
     expect(m.streak).toHaveLength(3);
     expect(sanitizeMatch({ onPitch: [0, 0] }, 2)).toBeNull();
     expect(sanitizeMatch({ onPitch: [1, 2], queue: [] }, 4)!.queue).toEqual([0, 3]);
+  });
+
+  it('borrowing: the short team completes itself from the team that just left, for one match', () => {
+    const sizes = [5, 5, 4];
+    let m = startSession(3);
+    expect(borrowNeed(m, sizes, 5)).toBeNull(); // first match: the short team waits
+    m = win(m, 0); // 1 loses, 2 (short) comes on
+    expect(m.onPitch).toEqual([0, 2]);
+    expect(borrowNeed(m, sizes, 5)).toEqual({ team: 2, from: 1, opponent: 0, need: 1 });
+    m = setBorrow(m, { team: 2, from: 1, ids: ['dani'] });
+    expect(borrowedInto(m, 2)).toEqual(['dani']);
+    expect(borrowedInto(m, 0)).toEqual([]);
+    // The short team wins and stays: the borrower goes back, and it borrows again from the new loser.
+    m = win(m, 2);
+    expect(m.borrow).toBeNull();
+    expect(m.history[1].borrow).toEqual({ team: 2, from: 1, ids: ['dani'] });
+    expect(m.onPitch).toEqual([1, 2]);
+    expect(m.queue).toEqual([0]);
+    expect(borrowNeed(m, sizes, 5)).toEqual({ team: 2, from: 0, opponent: 1, need: 1 });
+    // Skipping is recorded as an empty list and isn't kept in history.
+    m = setBorrow(m, { team: 2, from: 0, ids: [] });
+    m = win(m, 1);
+    expect(m.history[2].borrow).toBeUndefined();
+    // Two full teams on the pitch: nothing to borrow.
+    expect(m.onPitch).toEqual([1, 0]);
+    expect(borrowNeed(m, sizes, 5)).toBeNull();
+  });
+
+  it('borrowing: two short players, and no borrowing without a queue', () => {
+    let m = win(startSession(3), 1);
+    expect(borrowNeed(m, [5, 5, 3], 5)).toEqual({ team: 2, from: 0, opponent: 1, need: 2 });
+    let two = win(startSession(2), 0);
+    expect(borrowNeed(two, [5, 4], 5)).toBeNull();
+    two = setBorrow(two, null);
+    expect(two.borrow).toBeNull();
+  });
+
+  it('sanitize keeps a valid borrow and loads old states without one', () => {
+    let m = win(startSession(3), 0);
+    m = setBorrow(m, { team: 2, from: 1, ids: ['a', 'a', 'b'] });
+    expect(sanitizeMatch(JSON.parse(JSON.stringify(m)), 3)!.borrow).toEqual({ team: 2, from: 1, ids: ['a', 'b'] });
+    const old = JSON.parse(JSON.stringify(m));
+    delete old.borrow;
+    expect(sanitizeMatch(old, 3)!.borrow).toBeNull();
+    expect(sanitizeMatch({ ...old, borrow: { team: 9, from: 1, ids: [] } }, 3)!.borrow).toBeNull();
+    expect(sanitizeMatch({ ...old, borrow: { team: 1, from: 1, ids: [] } }, 3)!.borrow).toBeNull();
+    expect(sanitizeMatch({ ...old, borrow: { team: 2, from: 1, ids: 'x' } }, 3)!.borrow).toBeNull();
+    expect(sanitizeMatch({ ...old, borrow: { team: 2, from: 1, ids: [1, 'c'] } }, 3)!.borrow).toEqual({ team: 2, from: 1, ids: ['c'] });
   });
 });

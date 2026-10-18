@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { scoreFromCost, suggestWeakeningSwap } from '../engine';
 import {
   addGoal,
+  borrowedInto,
   defaultOutOnDraw,
   dismissDominance,
   dominantTeam,
@@ -22,6 +23,7 @@ import {
 import { engineOptions, teamLook } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
+import { BorrowCard } from './BorrowCard';
 import { Sheet } from './components';
 import { Icon } from './icons';
 
@@ -135,6 +137,11 @@ export function MatchScreen() {
     const inTeam = new Set(r.playerIds.filter((_, i) => r.assignment[i] === t));
     return order.filter((id) => inTeam.has(id));
   };
+  /** Who can score for a team: its members plus anyone borrowed for this match. */
+  const lineup = (t: number) => {
+    const own = members(t);
+    return [...own, ...borrowedInto(m, t).filter((id) => !own.includes(id))];
+  };
   const keeper = (t: number) => {
     const order = members(t);
     const idx = state.settings.gkMode === 'rotate' ? keeperIndex(m.conceded[t] ?? 0, state.settings.gkSwitchGoals, order.length) : 0;
@@ -210,6 +217,8 @@ export function MatchScreen() {
           </button>
         )}
       </div>
+
+      <BorrowCard m={m} r={r} set={set} />
 
       {dom !== null && weaken && (
         <div className="notice tip">
@@ -301,7 +310,7 @@ export function MatchScreen() {
       {scorerFor !== null && (
         <Sheet title={`מי הבקיע ל${teamLook(state.settings, scorerFor).name}?`} onClose={() => setScorerFor(null)}>
           <ul className="pick-list">
-            {members(scorerFor).map((id) => (
+            {lineup(scorerFor).map((id) => (
               <li key={id}>
                 <button
                   type="button"

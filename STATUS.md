@@ -19,6 +19,7 @@
   - Winner stays / loser to the back of the queue, and a draw picker.
   - The evening's standings and top scorers.
   - A **dominance hint** with a one-swap fix.
+  - **Borrowing from the losing team (v3):** when a short team is on the pitch, an optional card suggests who comes over from the team that just lost, so the next match is as even as possible. You can tap someone else, or skip. Borrowers play that match only, and they can be picked as scorers.
   - "End the evening".
 - **Players screen:**
   - Quick add: name, level 1–10 (with a one-line scale hint), up to 3 of 12 player cards in two rows (6 strengths, 6 weaknesses).
@@ -62,6 +63,8 @@
   - The new-day reset with "same as last time".
   - A backup link opened in a fresh browser imports all 23 players.
 
+- **Borrowing (v3):** 8 unit tests for the suggestion (best gap, weighted attributes, 2 borrowers, ties, keep-apart/together, edge cases) and 3 for the match state (who borrows from whom, the short team that stays borrows again, skip, sanitizing old states). The e2e drives the sample squad (14 → 5·5·4) through a match end, overrides the suggestion, scores with the borrower, reloads, and checks the borrow repeats from the new loser. Screenshots `10b`–`10d`.
+
 ## Known limitations
 - **Not tested on real phones:** the native share sheet, the iOS wake lock and vibration (iOS has no vibration API), and the install-to-home-screen flow were not checked on actual devices.
 - **First visit needs a connection:** the service worker caches on first use, so if the very first visit is offline, nothing is cached yet. Also, iOS only stops evicting local data once the app is added to the home screen; the app doesn't prompt for that yet.
@@ -70,6 +73,8 @@
 - **No way to mark someone as left:** you untick them at home, which flags the teams as out of date.
 - **Fixed design limits:** the main screen offers 3–7 per team (larger sizes aren't reachable), there are 8 bib colours, and cards are a fixed list (12).
 - **The backup link can get long** for very large rosters (it's roughly 1–2 KB for 25 players, which is fine for WhatsApp).
+
+- **Proposal, not built (changes balancing, so it needs the user's OK):** when the plan has a short team, pick the split from the near-optimal candidates (within +0.05) by how even the match is with the best borrower from each possible loser. In a simulation this raised the worst case from ~85 to ~88, at a cost of ~0.015 rating points in the split itself.
 
 ## Next steps, most valuable first
 1. **Try it at a real game** on 2–3 phones (iOS and Android): share, wake lock, install, offline. Then fix what hurts.

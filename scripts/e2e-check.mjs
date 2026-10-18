@@ -142,6 +142,52 @@ await other.getByRole('button', { name: 'השחקנים' }).click();
 const imported = await other.locator('.roster li').count();
 assert(imported === 23, `imported ${imported} players`);
 
+// 11. 14 players at 5-a-side (5 · 5 · 4): the short team borrows from the losing team for one match.
+{
+  const pg = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  pg.on('pageerror', (e) => errors.push(e.message));
+  await pg.goto(base);
+  await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+  await pg.waitForSelector('.team');
+  assert((await pg.locator('.team.waiting .member').count()) === 4, 'a short team of 4 waits');
+  await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+  assert((await pg.locator('.borrow').count()) === 0, 'no borrow step before the first match ends');
+  await pg.getByRole('button', { name: '+ גול' }).first().click();
+  await pg.getByRole('button', { name: 'דילוג' }).click();
+  await pg.getByRole('button', { name: 'סיום משחק' }).click();
+  const card = pg.locator('.borrow');
+  assert(await card.isVisible(), 'borrow step shown when the short team comes on');
+  const title = await card.locator('h3').innerText();
+  assert(/משלימים את ה.+ מה.+/.test(title), `borrow title: ${title}`);
+  assert(/מומלץ: .+ עובר ל.+, כך המשחק הבא הכי שווה/.test(await card.locator('.borrow-why').innerText()), 'borrow reason');
+  assert((await card.locator('.borrow-picks button').count()) === 5, 'five donors to pick from');
+  const suggested = await card.locator('.borrow-picks button.sel .name').innerText();
+  // Pick someone else, then confirm.
+  const other = card.locator('.borrow-picks button:not(.sel)').first();
+  const otherName = await other.locator('.name').innerText();
+  await other.click();
+  assert(/בחרתם/.test(await card.locator('.borrow-why').innerText()), 'override shown');
+  assert(/עם ההמלצה \d+/.test(await card.locator('.hint').innerText()), 'recommended score shown on override');
+  await card.getByRole('button', { name: 'אישור' }).click();
+  assert(await pg.getByText(new RegExp(`${otherName} משחק עם ה`)).isVisible(), 'borrow recorded');
+  // The borrower can score for the short team (second side = the team that came on).
+  await pg.getByRole('button', { name: '+ גול' }).nth(1).click();
+  assert(await pg.locator('.sheet .pick-list').getByText(otherName, { exact: true }).isVisible(), 'borrower listed as a scorer');
+  await pg.getByRole('button', { name: 'דילוג' }).click();
+  // Survives a reload.
+  await pg.reload();
+  assert(await pg.getByText(new RegExp(`${otherName} משחק עם ה`)).isVisible(), 'borrow survives reload');
+  // The short team wins and stays: the borrower goes back and it borrows again from the new loser.
+  await pg.getByRole('button', { name: 'סיום משחק' }).click();
+  assert(await pg.locator('.borrow').isVisible(), 'short team that stays borrows again');
+  const donors = await pg.locator('.borrow-picks .name').allInnerTexts();
+  assert(!donors.includes(otherName), 'borrows from the new loser, not the previous one');
+  await pg.locator('.borrow').getByRole('button', { name: 'דילוג' }).click();
+  assert((await pg.locator('.borrow').count()) === 0, 'skip hides the step');
+  console.log(`borrow: suggested ${suggested}, picked ${otherName}`);
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {

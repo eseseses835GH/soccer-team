@@ -1416,3 +1416,61 @@ thead th {
     block-size: 40px;
   }
 }
+
+/* ---------- borrowing from the losing team ---------- */
+/* A selected chip (borrow picks, and subs on the teams screen) is filled like a selected member. */
+.member.chip.sel {
+  background: var(--ink);
+  color: var(--bg);
+}
+.borrow {
+  margin-block: 4px 14px;
+  padding: 12px 14px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-block-start: 6px solid var(--team);
+}
+.borrow h3 {
+  font-size: 1rem;
+  font-weight: 800;
+}
+.borrow-why {
+  margin-block: 4px 10px;
+  color: var(--ink-2);
+}
+.borrow-why strong {
+  color: var(--ink);
+}
+.borrow-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-end: 10px;
+}
+.borrow-picks .rec {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.borrow-picks .member.sel .rec {
+  color: inherit;
+  opacity: 0.8;
+}
+.borrow-score {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.borrow .row-2 {
+  margin-block-start: 10px;
+}
+.borrow-done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-block: 0 14px;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
