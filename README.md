@@ -5,7 +5,9 @@ Nobody wants to be the captain who picks teams. Kochot is a small, mobile-first 
 to get balanced teams. It then runs the whole "winner stays" evening: timer, goals, who comes on next,
 and a nudge when one team keeps winning.
 
-- No signup, no backend. Data stays on the phone (`localStorage`), with a backup file or link.
+- No signup needed. Data stays on the phone (`localStorage`), with a backup file or link.
+- **Groups:** keep separate rosters for each group you play with (the neighbourhood, the army base, the office).
+- **Optional login** (Google, email code, or email + password) syncs a group between organizers' phones and lets you invite organizers with a link (Supabase).
 - Installable to the home screen and works offline at the pitch (PWA).
 - Static files only, so it can be hosted anywhere.
 
@@ -41,6 +43,12 @@ and a nudge when one team keeps winning.
    - If a team wins 3 in a row (or ≥ 75% after 4 games), the app suggests one swap to weaken it.
      It's a suggestion, never forced.
 
+5. **Groups and sync.** Tap the group name under "כוחות" to switch groups, add one, or rename it.
+   Without an account, groups live on the phone only. After logging in, **סנכרון בין טלפונים** puts the
+   group in the cloud, and **הזמנת מארגן** shares an invite link (valid 14 days). Whoever opens it and logs in
+   becomes an organizer, with full access including ratings. Edits merge between phones, and offline edits sync when the
+   phone is back online. Tonight's attendance, teams and match stay on each phone.
+
 A new game day (12 h after the last activity) starts with an empty attendance list and offers
 **כמו בפעם הקודמת** ("same as last time").
 
@@ -53,6 +61,10 @@ npm run build        # type-check + production build into dist/
 npm run preview      # serve dist/ on http://localhost:4173
 ```
 Requires Node 18+ (developed on Node 22).
+
+Login and sync use the Supabase project in `.env` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`).
+Remove those variables, and the app is local-only and hides login. The database schema and RLS are in
+`supabase/migrations/`.
 
 Browser checks against `npm run preview` (Playwright; set `CHROMIUM_PATH` if needed):
 ```bash
@@ -78,9 +90,11 @@ from the same screen.
 ```
 src/engine/   pure TypeScript: cost, search, team sizes (planFormat), swap suggestions + tests
 src/match/    pure "winner stays" evening: clock, goals, queue, standings, dominance + tests
-src/state/    model + v1→v2 migration, reducer, cards, late arrivals, import/backup + tests
+src/state/    model + v1→v2 migration, groups + storage migration, reducer, cards, late arrivals, import/backup + tests
 src/worker/   Web Worker wrapper around the search (falls back inline)
-src/ui/       React screens: Home, Teams, Match, Players, Settings
+src/sync/     groups sync: synced doc + 3-way merge, sync round, Supabase client (lazy), provider + tests
+src/ui/       React screens: Home, Teams, Match, Players, Settings; groups and login sheets
+supabase/     SQL migrations (tables, RLS, RPCs)
 public/       manifest, icons, service worker, roster template
 ```
 
@@ -121,7 +135,16 @@ Penalties keep rules near-hard:
   Enable it under *Settings → Pages → Source: GitHub Actions*.
 
 The service worker caches the app shell and fonts as they load, so the second visit works offline.
+It never caches Supabase calls.
+
+For login on a new host, add its address to the Supabase redirect URLs (Authentication → URL Configuration).
 
 ## Privacy
-Ratings never leave the phone, unless you deliberately send a backup link or file. Both include
-ratings, and the app warns you about this. The WhatsApp share text contains names only, plus the overall score.
+- **Without an account, nothing leaves the phone**, unless you deliberately send a backup link or file.
+  Both include ratings, and the app warns you about this. The app doesn't even contact the server.
+- **When you log in and sync a group,** its roster goes to the Supabase project (EU, Frankfurt). That includes
+  names, ratings, cards, pair rules, the group's settings and (when available) the evenings history.
+  Your email is stored for the login.
+  Row Level Security lets only that group's organizers read or change it. Invite links expire after 14 days.
+- **Tonight's attendance, teams and match, and your theme/colour, are never uploaded.**
+- The WhatsApp share text contains names only, plus the overall score.

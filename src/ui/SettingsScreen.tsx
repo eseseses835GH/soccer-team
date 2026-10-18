@@ -3,7 +3,8 @@ import { ATTR_KEYS, type Constraints } from '../engine';
 import { ATTR_LABELS } from '../i18n';
 import { IMPORT_HASH, encodeBackup, makeBackup } from '../state/io';
 import { ACCENTS, BIBS, type BibId } from '../state/model';
-import { useStore } from '../state/store';
+import { useGroups, useStore } from '../state/store';
+import { STATUS_TEXT, useSync } from '../sync/SyncProvider';
 import { copyText, downloadText, nativeShare } from '../share';
 import { useUi } from './App';
 import { RatingSlider, Segmented, Stepper } from './components';
@@ -17,6 +18,8 @@ export function SettingsScreen() {
   const [b, setB] = useState('');
   const [kind, setKind] = useState<keyof Constraints>('apart');
   const [confirmClear, setConfirmClear] = useState(false);
+  const sync = useSync();
+  const { current } = useGroups();
   const set = (patch: Partial<typeof settings>) => dispatch({ type: 'setSettings', settings: { ...settings, ...patch } });
 
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? '?';
@@ -202,9 +205,45 @@ export function SettingsScreen() {
         )}
       </div>
 
+      {sync.configured && (
+        <div className="group account">
+          <h2>חשבון וסנכרון</h2>
+          {sync.email ? (
+            <>
+              <p className="account-who">
+                מחוברים בתור <bdi dir="ltr">{sync.email}</bdi>
+              </p>
+              <p className="hint">
+                ״{current.name}״: {current.synced ? STATUS_TEXT[sync.status] : 'בטלפון הזה בלבד. אפשר לסנכרן אותה מתפריט הקבוצות (שם הקבוצה למעלה במסך הראשי).'}
+              </p>
+              <div className="stack">
+                {current.synced && (
+                  <button type="button" className="btn btn-quiet btn-block" onClick={sync.syncNow}>
+                    סנכרון עכשיו
+                  </button>
+                )}
+                <button type="button" className="btn btn-quiet btn-block" onClick={() => void sync.signOut()}>
+                  יציאה מהחשבון
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="hint">בלי חשבון הכול נשמר רק בטלפון הזה. עם חשבון אפשר לסנכרן קבוצה בין כמה מארגנים ולהזמין מארגנים נוספים.</p>
+              <button type="button" className="btn btn-quiet btn-block" onClick={() => sync.openLogin('account')}>
+                התחברות
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="group">
         <h2>גיבוי ושיתוף הסגל</h2>
-        <p className="hint">הכול נשמר רק בטלפון הזה. כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים.</p>
+        <p className="hint">
+          {current.synced ? 'הקבוצה מסונכרנת עם החשבון. ' : 'הכול נשמר רק בטלפון הזה. '}
+          כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים.
+        </p>
         <div className="stack">
           <button type="button" className="btn btn-quiet btn-block" disabled={!players.length} onClick={sendLink}>
             <Icon name="link" size={20} /> שליחת קישור למארגן נוסף
@@ -246,6 +285,7 @@ export function SettingsScreen() {
 
       <div className="group">
         <h2>נתונים</h2>
+        {current.synced && <p className="hint">הקבוצה מסונכרנת: מחיקה כאן תמחק את השחקנים גם אצל שאר המארגנים.</p>}
         <div className="stack">
           <button type="button" className="btn btn-quiet btn-block" onClick={() => dispatch({ type: 'loadSample', now: Date.now() })}>
             טעינת סגל לדוגמה

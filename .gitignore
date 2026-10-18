@@ -3,3 +3,5 @@ dist
 *.log
 screenshots/tmp
 .DS_Store
+.env.local
+.env.*.local

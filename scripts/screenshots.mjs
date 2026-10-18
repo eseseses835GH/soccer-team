@@ -69,6 +69,15 @@ for (const scheme of ['light', 'dark']) {
   await shot('10-match-after', true);
   await page.getByRole('button', { name: /לקבוצות/ }).click();
   await page.getByRole('button', { name: /^חזרה$/ }).click();
+  await page.waitForSelector('.toast:not(.show)'); // let the match toast fade
+  await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
+  await shot('12-groups-sheet');
+  await checkLayout('groups sheet');
+  await page.getByRole('button', { name: /קבוצה חדשה/ }).click();
+  await page.getByLabel('שם הקבוצה').fill('כדורגל בשכונה');
+  await shot('13-new-group');
+  await page.getByRole('button', { name: 'ביטול' }).click();
+  await page.getByRole('button', { name: 'סגירה' }).click();
   await page.getByRole('button', { name: 'הגדרות' }).click();
   await shot('11-settings', true);
   await checkLayout('settings');

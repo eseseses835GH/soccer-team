@@ -1304,6 +1304,180 @@ thead th {
   font-weight: 600;
 }
 
+/* ---------- groups, account, sync ---------- */
+.group-btn {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  min-block-size: 44px;
+  min-inline-size: 0;
+  text-align: start;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  font-size: 1.2rem;
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  line-height: 1.15;
+}
+.group-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: 0;
+}
+.group-name-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-inline-size: 52vw;
+}
+.chev {
+  font-size: 0.7rem;
+  color: var(--ink-3);
+}
+.sync-dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-3);
+}
+.sync-dot.tone-ok {
+  background: var(--accent);
+}
+.sync-dot.tone-warn {
+  background: #d99a00;
+}
+.sync-dot.tone-bad {
+  background: var(--danger);
+}
+.sync-dot.tone-busy {
+  background: var(--ink-3);
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  to {
+    opacity: 0.3;
+  }
+}
+.group-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+.group-list li {
+  border-block-end: 1px solid var(--line);
+}
+.group-list button {
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 60px;
+  padding-inline: 2px;
+  border: 0;
+  background: none;
+  text-align: start;
+}
+.group-check {
+  inline-size: 26px;
+  block-size: 26px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.group-check.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.group-text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.group-text strong {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-text small {
+  color: var(--ink-3);
+}
+.sheet-sub {
+  margin: 22px 0 10px;
+  font-size: 1rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+}
+.or::before,
+.or::after {
+  content: '';
+  flex: 1;
+  border-block-start: 1px solid var(--line);
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-block: 12px 8px;
+}
+.auth-form .text-btn {
+  align-self: center;
+}
+.code-input {
+  text-align: center;
+  letter-spacing: 0.3em;
+  font-variant-numeric: tabular-nums;
+}
+.auth-info {
+  margin-block: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-size: 0.9rem;
+}
+.sheet .hint.small {
+  margin-block: 10px 0;
+}
+.g-mark {
+  inline-size: 22px;
+  block-size: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: #4285f4;
+  font-weight: 800;
+  font-size: 0.85rem;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.account-who {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- sheet / toast ---------- */
 .sheet-backdrop {
   position: fixed;

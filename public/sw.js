@@ -1,6 +1,7 @@
 // Minimal offline support: the app shell and fonts are cached as they are used.
 // Pages: network first (so updates arrive), falling back to cache at the pitch.
 // Assets & fonts: cache first (Vite asset names are content-hashed).
+// Supabase (login + sync) is never cached.
 const CACHE = 'kochot-v2';
 
 self.addEventListener('install', (e) => {
@@ -21,6 +22,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // Never cache login/sync traffic (Supabase API, auth, realtime): always straight to the network.
+  if (url.hostname.endsWith('.supabase.co') || url.hostname.endsWith('.supabase.in') || /\/(auth|rest|realtime)\/v1\//.test(url.pathname)) return;
   const sameOrigin = url.origin === self.location.origin;
   const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   if (!sameOrigin && !isFont) return;

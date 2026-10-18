@@ -111,3 +111,44 @@ These came out of the conversation with the user. Points marked *(my call)* were
 - **Light/dark is a choice in Settings ("מראה"): בהיר (light), כהה (dark) or לפי הטלפון (follow the phone).** The default stays "follow the phone", so nothing changes for existing users. The choice sets `data-theme` on the page root, and the phone's status-bar colour (`theme-color`) follows it.
 - **A main ("accent") colour can be picked: green (default), blue, purple, orange, pink.** It colours buttons, attendance ticks and the balance score. Each colour has a darker shade for light mode and a lighter one for dark mode, so text stays readable. Bib colours and the WhatsApp green don't change. *(my call: the user asked for "different colours"; red was left out so it isn't confused with warnings and delete buttons.)*
 - **The look is per phone.** Importing another organizer's backup keeps your own theme and colour.
+
+## Groups, login and sync (v3)
+
+### Groups on the phone
+- **Every group ("כדורגל בשכונה", "בבסיס", "במשרד") has its own full app state** under `kochot:group:<id>`, plus an index `kochot:groups` (names, which one is open, which are in the cloud). Group ids are v4 UUIDs made with `crypto.getRandomValues`, because `crypto.randomUUID` is missing on plain-http LAN addresses (the phone at `http://172.20.10.2:5173`).
+- **Upgrade without data loss:** on first run the old `kochot:v1` blob is copied *as is* (not re-sanitized) into the first group, named "הקבוצה שלי". The old key is removed only after both new keys were written; if writing fails, the old key stays and the migration runs again next time. `sanitize()` is still the gate on every load and every pull.
+- **The group switcher is the group name under "כוחות" in the top bar** (with a ▾ and, for cloud groups, a status dot). It opens one sheet: the list, "קבוצה חדשה", and for the open group: sync/invite, rename, delete/leave. *(my call: no new screen or tab; the top bar already had room.)*
+- **The last group on the phone can't be deleted** (the button is disabled with a hint); "מחיקת כל הנתונים" in Settings now empties only the open group.
+- **The look (theme, accent) stays per phone:** it is carried over when switching groups and when joining one, and it is never uploaded.
+- **Settings other than the look are per group** (keepers, match length, bibs, weights, pairs), since they belong to how that group plays.
+
+### Login
+- **Optional.** Nothing changes for someone who never logs in: the Supabase library isn't even downloaded (it is a separate lazy chunk). It is loaded only when a session is stored on the phone, a login link returns (`?code=`), an invite link is opened, or the user taps "התחברות". The e2e test checks that a logged-out session makes no requests to Supabase.
+- **Methods: Google, a one-time code by email, email + password.** No SMS. The code form also accepts the magic link in the same email. The Google button checks `/auth/v1/settings` and, while Google isn't enabled in the project, shows "Google עוד לא הופעל בפרויקט…" instead of sending the user to an error page.
+- **PKCE flow, redirect = `location.origin + location.pathname`**, so the same build works on localhost, the LAN IP and a static host. The `?code=` is removed from the address bar after login.
+- **Logging out keeps everything on the phone.** Cloud groups just stop syncing (status "לא מחוברים") until you log in again. *(my call: the app is used at the pitch, and wiping on logout would be a surprise; a shared phone is unlikely.)*
+
+### Server (Supabase)
+- **Tables:** `groups (id, name, data jsonb, version, created_by/at, updated_by/at)`, `group_members (group_id, user_id, role, joined_at)`, `group_invites (token, group_id, role, created_by, created_at, expires_at, revoked_at)`. SQL is in `supabase/migrations/`.
+- **RLS on every table.** Members can read their groups, their groups' members and invites, and update a group's `name` and `data` (column-level grant). Nobody can insert or delete rows directly; that goes through RPCs. `anon` has no access at all. Membership is checked by `private.is_group_member()` (security definer, in a schema the API doesn't expose, so policies don't recurse).
+- **RPCs:** `create_group(id, name, data)` (the caller becomes organizer), `create_invite(group_id)` (members only), `join_group(token)`, `leave_group(group_id)` (the last organizer leaving deletes the group). The privileged bodies live in `private`; `public` has thin security-invoker wrappers, so the security advisor has no findings.
+- **Invites:** a random 24-byte token (base64url, 32 characters), valid for 14 days, reusable by several organizers within that time. Unknown, expired and revoked tokens give the same error. Revoking exists in the schema (`revoked_at`), not in the UI yet.
+- **Roles:** only `organizer` exists (sees and edits everything, ratings included). `role` is a column with a check constraint; a read-only "player" role needs a migration that widens the check and adds policies/views without ratings.
+- **A version number per group, bumped by a trigger on every update.** The trigger also pins `id`, `created_by`, `created_at` and sets `updated_by`.
+- **Size cap:** `data` must be under 1 MB.
+- **Realtime** is on for `groups` (RLS applies to what each phone receives).
+
+### What is synced, and how
+- **Synced:** players, pair rules, group settings (without theme/accent; see `LOCAL_SETTINGS` in `src/sync/doc.ts`), the group name, and `history` (evening records with an `id`) when the app has one. **Not synced:** tonight's attendance, players per team, the split, the running match, and "same as last time". Two organizers at the same pitch each tick attendance on their own phone. *(my call: live state changes every few seconds and conflicts are meaningless there; the roster is what people re-type.)*
+- **Local-first:** every edit is saved on the phone immediately, as before. Sync runs on open, on focus, when back online, on a realtime update from another phone (plus a 60 s poll while visible), and 1.5 s after a local edit to synced data.
+- **Three-way merge against the last agreed copy (`base`, kept in `kochot:sync:<id>`):** players and history records by id, pair rules as a set, settings per field. A change on one side wins; if both sides changed the same player, this phone wins; an edit beats a delete; anything added on either side is kept. So a new player can't be lost, even when two phones were offline at the same time.
+- **The push is conditional** (`update … where version = n`). If another phone got in first, the round pulls again and re-merges (up to 3 times). There is no separate offline queue: "local copy differs from `base`" *is* the queue, and it survives app restarts.
+- **Edits made while a round is in flight win** over what the round brings back (a second three-way merge when applying).
+- **Duplicate names:** if two organizers add "יוסי" at the same time, both are kept (different ids). *(my call: merging by name could merge two different people.)*
+- **A synced "מחיקת כל הנתונים" deletes for everyone**, and Settings says so above the button.
+- **"Leave group" needs a connection;** joining while offline remembers the invite and retries when the phone is back online.
+- **The service worker never touches Supabase requests** (explicit bypass for `*.supabase.co` and `/auth|rest|realtime/v1/`).
+
+### Config
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are in `.env`, which is committed. The publishable key is meant for browsers; RLS is what protects the data. No secret or service-role key is used anywhere in the client. Without these variables the app hides login and sync entirely.
+- **`@supabase/supabase-js` is pinned to 2.112.4** (released August 2026), not the newest.
