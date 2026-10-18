@@ -48,6 +48,9 @@ export const ACCENTS = [
 export type AccentId = (typeof ACCENTS)[number]['id'];
 const ACCENT_IDS = new Set<string>(ACCENTS.map((a) => a.id));
 
+/** Goal celebration sound: crowd + announcer, crowd only, or silent (the animation always plays). */
+export type GoalSound = 'all' | 'crowd' | 'off';
+
 export interface Settings {
   weights: Weights;
   leadershipThreshold: number;
@@ -60,6 +63,8 @@ export interface Settings {
   /** Look of the app on this phone (not taken from an imported backup). */
   theme: Theme;
   accent: AccentId;
+  /** Per phone, like the look. */
+  goalSound: GoalSound;
 }
 
 export interface GameResult {
@@ -106,6 +111,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bibs: BIBS.map((b) => b.id),
   theme: 'auto',
   accent: 'green',
+  goalSound: 'all',
 };
 
 export const INITIAL_STATE: AppState = {
@@ -194,6 +200,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     bibs: bibs.length >= 2 ? [...new Set(bibs)] : DEFAULT_SETTINGS.bibs,
     theme: r.theme === 'light' || r.theme === 'dark' ? r.theme : 'auto',
     accent: typeof r.accent === 'string' && ACCENT_IDS.has(r.accent) ? r.accent : 'green',
+    goalSound: r.goalSound === 'crowd' || r.goalSound === 'off' ? r.goalSound : 'all',
   };
 }
 

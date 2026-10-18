@@ -206,7 +206,7 @@ export function reducer(state: AppState, action: Action): AppState {
         players: action.players,
         constraints: action.constraints ?? state.constraints,
         // The look is per phone: an organizer's backup doesn't repaint your app.
-        settings: action.settings ? { ...action.settings, theme: state.settings.theme, accent: state.settings.accent } : state.settings,
+        settings: action.settings ? { ...action.settings, theme: state.settings.theme, accent: state.settings.accent, goalSound: state.settings.goalSound } : state.settings,
       };
     }
     case 'loadSample': {

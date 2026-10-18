@@ -1111,6 +1111,168 @@ thead th {
   color: var(--ink-2);
 }
 
+.match {
+  position: relative;
+}
+.sound-toggle {
+  position: absolute;
+  inset-block-start: -8px;
+  inset-inline-end: -10px;
+  color: var(--ink-3);
+}
+.sound-toggle.on {
+  color: var(--ink-2);
+}
+
+/* ---------- goal celebration ---------- */
+.goal-burst {
+  position: fixed;
+  inset: 0;
+  z-index: 55; /* above the scorer sheet, below toasts; never catches taps */
+  pointer-events: none;
+  overflow: hidden;
+  --team-tint: color-mix(in srgb, var(--team) 45%, #ffffff);
+  --gold: #ffc928;
+}
+.burst-center {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  inline-size: 0;
+  block-size: 0;
+}
+.burst-word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  font-size: clamp(4.2rem, 24vw, 6.5rem);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--team);
+  -webkit-text-stroke: 0.1em var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 6px 18px rgb(0 0 0 / 0.28);
+  animation: burst-word 1.9s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.goal-burst.calm .burst-word {
+  opacity: 0;
+}
+.burst-ring {
+  position: absolute;
+  left: -80px;
+  top: -80px;
+  inline-size: 160px;
+  block-size: 160px;
+  border-radius: 50%;
+  border: 10px solid var(--team);
+  opacity: 0;
+  animation: burst-ring 0.9s cubic-bezier(0.1, 0.7, 0.3, 1) 0.05s both;
+}
+.confetto {
+  position: absolute;
+  left: -4px;
+  top: -8px;
+  inline-size: 8px;
+  block-size: 16px;
+  border-radius: 2px;
+  background: var(--team);
+  opacity: 0;
+  animation: confetto 1.7s cubic-bezier(0.15, 0.7, 0.4, 1) both;
+}
+.confetto.dot {
+  inline-size: 10px;
+  block-size: 10px;
+  top: -5px;
+  border-radius: 50%;
+}
+.confetto.tone-1 {
+  background: var(--team-tint);
+}
+.confetto.tone-2 {
+  background: var(--gold);
+}
+.burst-ball {
+  position: absolute;
+  left: -0.5em;
+  top: -0.5em;
+  font-size: 2.6rem;
+  line-height: 1;
+  animation: burst-ball 1.1s cubic-bezier(0.3, 0.6, 0.4, 1) both;
+}
+@keyframes burst-word {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2) rotate(-14deg);
+    opacity: 0;
+  }
+  16% {
+    transform: translate(-50%, -50%) scale(1.22) rotate(4deg);
+    opacity: 1;
+  }
+  28% {
+    transform: translate(-50%, -50%) scale(0.94) rotate(-2deg);
+  }
+  40% {
+    transform: translate(-50%, -50%) scale(1.04) rotate(0deg);
+  }
+  50%,
+  78% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -90%) scale(1.08);
+    opacity: 0;
+  }
+}
+@keyframes burst-ring {
+  0% {
+    transform: scale(0.25);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.3);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+@keyframes confetto {
+  0% {
+    transform: translate(0, 0) scale(0.4) rotate(0deg);
+    opacity: 1;
+  }
+  35% {
+    transform: translate(var(--dx), var(--dy)) scale(1) rotate(calc(var(--rot) * 0.5));
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(var(--dx) * 1.15), calc(var(--dy) + 240px)) scale(0.9) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+/* The ball shoots up from the goal buttons, spinning, and drops into the "net" behind the word. */
+@keyframes burst-ball {
+  0% {
+    transform: translate(70px, 260px) scale(1.5) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  55% {
+    transform: translate(-40px, -95px) scale(0.85) rotate(-400deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-10px, -30px) scale(0.35) rotate(-620deg);
+    opacity: 0;
+  }
+}
+
 /* ---------- players ---------- */
 .add {
   padding-block: 8px 4px;

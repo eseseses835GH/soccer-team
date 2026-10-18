@@ -19,6 +19,7 @@
   - Winner stays / loser to the back of the queue, and a draw picker.
   - The evening's standings and top scorers.
   - A **dominance hint** with a one-swap fix.
+  - **Goal celebration:** "גוֹל!" burst with confetti in the bib colour, a synthesized crowd roar + air horn, and a Hebrew announcer (speechSynthesis). Sound setting (crowd + announcer / crowd / off) and a mute icon on the match screen.
   - "End the evening".
 - **Players screen:**
   - Quick add: name, level 1–10, up to 2 of 6 player cards.
