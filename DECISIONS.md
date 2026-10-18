@@ -50,3 +50,55 @@ These are the assumptions and judgment calls I made while building the app on my
 ## Tooling
 - **Playwright runs with an explicit `executablePath`** because the container provides a pre-installed Chromium build. Override it with `CHROMIUM_PATH`.
 - **A GitHub Pages workflow is included.** It runs on pushes to `main` only, so it does nothing on feature branches.
+
+---
+
+# v2: decisions after the first round of feedback
+
+These came out of the conversation with the user. Points marked *(my call)* were left open and I decided them.
+
+## Format: players per team, winner stays
+- **The user picks players per team (3–7 on the main screen), not the number of teams.** `planFormat` fills full teams first.
+- **A remainder missing at most 2 players (and of at least 2) becomes a short team that waits outside** and borrows from the losing team. For 5-a-side: 14 → 5·5·4 and 13 → 5·5·3. A smaller remainder becomes substitutes: 11 → 5·5 + 1 sub, 12 → 5·5 + 2 subs. *(my call: the user confirmed "5-a-side with 11 means one sub", and the 13 case was open.)*
+- **With fewer than two full teams, everyone is split into two even teams** and the plan says so (8 at 5-a-side → 4 נגד 4).
+- **At most 8 teams** (8 bib colours). Extra players beyond that become subs.
+- **The short team waits first; the two full teams start.**
+- **Who moves over from the losing team is decided at the pitch** (user's decision). The app only says "משלימים N מהמפסידה" (borrow N from the losing team).
+
+## Goalkeepers
+- **Default: rotating keepers.** Each team gets a random keeper order (1, 2, 3…) and keepers switch every N goals conceded (1 by default; 2 or 3 in settings). There is no goalkeeper rating any more.
+- **"Fixed keeper" mode** brings back the "one declared keeper per team" rule. The "שוער קבוע" (fixed keeper) toggle only appears on the player form in this mode.
+
+## Players and cards
+- **Attributes are now: level, stamina, passing, dribbling, shooting, defence, teamwork, leadership.** Defence and passing were added; coordination and goalkeeping were removed. v1 "coordination" is migrated into "passing".
+- **Every attribute starts at the player's level, and cards add or subtract on top of it.** In v1 the other attributes defaulted to 5, which made an "8" player average in everything. Changing the level or the cards recomputes the attributes. The sliders ("כיוון עדין", fine-tuning) come after that.
+- **Six cards, at most two per player.** The user felt even 8 was a lot, so the list is short and optional. Picking a third card drops the oldest.
+- **Sub selection is random**, preferring players without pair rules, and you can swap a sub in by tapping. *(my call: optimizing who sits out would always bench the weakest player, which feels bad.)*
+
+## Late arrivals
+- **A late arrival never reshuffles everyone.** They join the smallest team that isn't full (normally the short team outside). If every team is full, they become a sub, and once the subs reach the short-team threshold they become a new team that joins the back of the queue.
+- **A swap suggestion appears only when no team is short any more**, i.e. the arrival "completed" the teams (the user's example: 4-a-side, 3 waiting, the 4th arrives). It offers up to 2 swaps, shows the score before and after, and the user accepts or keeps things as they are.
+- **Someone arriving late who isn't in the roster** is added with a name and level and stays in the roster (they can be deleted later).
+
+## Match night
+- **The timer counts down from the match length** (default 8 minutes, set in settings), then shows overtime in red. It is timestamp-based, so it survives reloads and screen locks. It uses the Wake Lock API when available, and vibrates and beeps at zero.
+- **Draws:** you pick who leaves. The default is the team that has been on the pitch longer. On the first match there is no default. *(my call)*
+- **With exactly 2 teams nobody leaves;** results are just recorded.
+- **Dominance hint:** shown after 3 wins in a row, or ≥ 75% wins after 4+ matches. It offers one swap that makes that team weaker while keeping balance as good as possible. "Not now" hides it for 2 matches.
+- **Scorers are optional:** after each goal a sheet asks who scored, with "דילוג" (skip).
+
+## Storage, privacy, sharing
+- **Still local-only (localStorage),** with three additions:
+  - (1) **A PWA** (manifest and service worker): add to home screen, works offline, and installed web apps aren't subject to Safari's 7-day storage eviction.
+  - (2) **A backup link** (`#import=` + deflate + base64url) for a second organizer. Opening it shows an import sheet that merges players by id or name.
+  - (3) **A backup file** (JSON) and a CSV/text roster import, with a downloadable template.
+- **The link and the file include ratings**, and the UI says so.
+- **The teams screen no longer shows individual ratings,** since people look over your shoulder at the pitch. The 0–100 score stays big (the user liked it). The per-team averages table is folded under "פירוט האיזון" (balance details).
+- **The WhatsApp text has names, keeper order, borrowers, subs and the overall score;** no ratings.
+- **A new game day starts empty:** 12 hours after the last attendance or team activity, attendance and teams reset, and "כמו בפעם הקודמת" (same as last time) restores the previous list. The user said games aren't weekly and attendance varies.
+
+## Design
+- **One main screen ("מי הגיע היום?", "who came today?")** with a big black "עושים כוחות" button. Players and settings are icons in the top bar. No bottom tab bar.
+- **Less boxy design:** lists with dividers instead of cards, a warm off-white background, black as the main action colour, green only for "present" ticks and good scores, bib colours only on team headers. Font: Heebo (Google Fonts, cached by the service worker).
+- **The animation is at the moment of splitting, not on opening the app:** names "deal" into the team columns with a stagger, and the score counts up. Both are disabled under `prefers-reduced-motion`.
+- **Toasts appear at the bottom,** so they don't cover the match clock.

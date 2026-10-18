@@ -1,75 +1,78 @@
-# STATUS
+# STATUS (v2)
 
 ## What was built
-- **The full MVP** described in the brief: a Hebrew, RTL, mobile-first static web app (Vite + React + TypeScript). It has no backend and no signup, and stores data in `localStorage` through a never-throwing wrapper.
-- **Players screen:**
-  - Quick add: name plus tap-to-rate overall skill.
-  - Full form: 8 sliders (default 5) and a "can play goalkeeper" switch.
-  - Edit and delete, with confirmation.
-  - Duplicate-name check.
-  - Empty state with a "load sample squad" button.
-- **Game screen:**
-  - Attendance ticks, with select-all, clear, and search when there are more than 12 players.
-  - Team count stepper (2–4) with an auto-detected format (5 נגד 5, 6 נגד 5, 4 נגד 4 נגד 3…).
-  - Validation for the minimum number of players.
-  - Shortcut to constraints.
+- **Main screen "מי הגיע היום?" (who came today?):**
+  - Attendance ticks, with "everyone", "clear" and "same as last time".
+  - Players-per-team pills (3–7).
+  - A one-line plan, e.g. `5 נגד 5 · 4 בחוץ, משלימים 1 מהמפסידה`.
+  - One big **עושים כוחות** ("make teams") button.
 - **Teams screen:**
-  - Colour-named team cards and a live 0–100 balance score with a label.
-  - Rule-violation warnings.
-  - Tap-to-swap with live re-scoring, and undo swaps.
-  - Re-roll for a different near-optimal split.
-  - Share (native share / wa.me), an explicit WhatsApp link, and copy.
-  - An attribute comparison table: sums, best keeper, goalkeeper and leader counts, and the gap between teams.
-  - A "stale" banner when attendance changed after the split.
-- **Settings screen:**
-  - Attribute weights (0–5) and the leadership threshold.
-  - Keep-together / keep-apart pairs.
-  - Load sample squad, wipe data, and a short "how it works".
-- **Balancing engine** (`src/engine`, pure TypeScript):
-  - Weighted per-attribute deviation cost, plus goalkeeper, leader, constraint and size penalties.
-  - Exhaustive search for 2 teams with ≤ 14 players.
-  - Greedy or random restarts with swap hill-climbing otherwise.
-  - A deduplicated top-40 pool for re-rolls.
-  - Seeded RNG.
-  - Runs in a Web Worker, with an inline fallback.
-- **Design and accessibility:** light and dark themes via `prefers-color-scheme`, tap targets ≥ 44 px, ARIA labels and roles, visible focus, and `prefers-reduced-motion` support.
-- **Docs and deployment:** `README.md` (English), `PLAN.md`, `DECISIONS.md`, and a GitHub Pages deploy workflow.
+  - Animated 0–100 balance score, and bib-coloured team columns that "deal" in.
+  - A keeper rotation order per team, and a subs bench.
+  - Tap-to-swap, including subs, with undo.
+  - Re-roll, WhatsApp share, copy.
+  - **Late arrival** without reshuffling, plus a swap suggestion when the teams fill up.
+  - Rule warnings, and a folded table of per-team averages.
+- **Match night:**
+  - Countdown timer: overtime, wake lock, vibrate/beep, survives reloads.
+  - Goals with optional scorer, and undo goal.
+  - Winner stays / loser to the back of the queue, and a draw picker.
+  - The evening's standings and top scorers.
+  - A **dominance hint** with a one-swap fix.
+  - "End the evening".
+- **Players screen:**
+  - Quick add: name, level 1–10, up to 2 of 6 player cards.
+  - Edit sheet with optional sliders for fine-tuning.
+  - **List import:** paste text or upload CSV/TXT/JSON, preview before adding, downloadable template (`docs/roster-template.csv`).
+- **Settings:**
+  - Rotating vs. fixed keepers, and switch every 1/2/3 goals.
+  - Match length and bib colours (which you own, in order).
+  - Keep-apart / keep-together pairs.
+  - Backup link for a second organizer, backup file download.
+  - Advanced weights and leadership threshold; sample squad; wipe.
+- **Under the hood:**
+  - Engine v2: new attributes, explicit sizes, `planFormat`, `suggestSwaps`, `suggestWeakeningSwap`, optional goalkeeper rule.
+  - Pure match module.
+  - State v2 with migration from v1.
+  - PWA: manifest, icons, service worker. Heebo font.
 
 ## What was tested
-- **`npm test`:** 26 Vitest tests, all passing.
-  - Engine:
-    - Team sizes.
-    - Even and odd counts are optimal (checked against brute force).
-    - Local search reaches the exhaustive optimum.
-    - 3 teams match brute force.
-    - Uneven 3-team sizes.
-    - Keep-together and keep-apart, for both 2 and 3 teams.
-    - Violation reporting.
-    - Every team gets a goalkeeper when possible, and keepers are not stacked when there are too few.
-    - Leader distribution.
-    - Determinism with a fixed seed.
-    - Re-roll gives a different, near-optimal split.
-    - Canonicalization.
-  - Performance: 22 players in 2 or 3 teams finishes in about 0.3 s (limit 1 s); 14 players exhaustive takes a few ms.
-  - State: sanitizing corrupt storage, reducer cleanup on delete, constraint exclusivity, swap/undo, sample-squad merge.
-  - Share text: Hebrew team names and RTL marks on every line, plus the `wa.me` encoding.
-- **`npm run build`:** type-check and production build both pass.
-- **`npm run screenshots`** (Playwright, 390×844, light and dark): all screens and flows render with no console errors, no horizontal overflow, and `direction: rtl`. I reviewed the screenshots by eye. Two issues found and fixed: re-roll and share looked identical in dark mode, and screenshots were catching the sheet mid-animation.
-- **`npm run e2e`:** quick add, duplicate-name rejection, the "not enough players" state, persistence across reload, 22 players into 3 teams (about 350 ms in the browser, sizes 8/7/7), re-roll changes the teams, and a keep-apart pair entered in the UI is respected.
+- **`npm test`: 55 Vitest tests pass.**
+  - Engine: optimality vs. brute force, sizes, constraints, leaders/keepers, determinism, re-roll, 22 players under 1 s.
+  - Format plans: 10/11/12/13/14/15 players at 5-a-side, 9/10/11 at 4-a-side, the reduced 8→4v4 case.
+  - Explicit sizes, and the goalkeeper rule turned off.
+  - Swap suggestions and the weakening swap.
+  - Match: queue rotation, 2-team mode, draws, goals/undo/conceded, clock across pauses, dominance and dismissal, keeper rotation, sanitizing.
+  - State: v1→v2 migration, new-day reset, cards, late arrival (short team / bench / new team / filled / reduced), swap and sub swap keeping keeper slots, reset swaps, sample merge.
+  - Import parsing (CSV, free text, BOM, header, duplicates, bad levels), merge, backup-link round-trip.
+  - Share text.
+- **`npm run build`:** type-check and production build pass.
+- **`npm run screenshots`** (390×844, light and dark): every screen and sheet, with no console errors, no horizontal overflow, and RTL direction. I reviewed the screenshots by eye. Fixed during review:
+  - The toast was covering the match clock.
+  - The waiting team was cramped in a half column (it's now a full row with names in two columns).
+  - Two buttons had the same accessible name.
+- **`npm run e2e`:** the full flow in a real browser.
+  - Quick add with cards, duplicate rejection, the not-enough state.
+  - Pasted list import with preview.
+  - Persistence; 22 players at 5-a-side → 5·5·5·5 + 2 subs in about 350 ms; re-roll.
+  - A late arrival forms a new team of 3 and leaves the other teams untouched.
+  - A match: goal, end, the pitch rotates, standings.
+  - Keep-apart respected.
+  - The new-day reset with "same as last time".
+  - A backup link opened in a fresh browser imports all 23 players.
 
 ## Known limitations
-- **No offline/PWA support:** there is no service worker or manifest, so a reload without signal fails.
-- **No export/import or sync:** data lives in a single browser. A friend's phone can't see your roster.
-- **Re-roll uses a stale pool after settings changes:** the pool's costs come from when teams were generated. Changing weights or constraints afterwards affects the live score but not the re-roll candidates until you split again.
-- **Pool can be thin for small groups:** with very few players (e.g. 4–6), there may be only 1–2 near-optimal splits, so re-roll can alternate between them or say there's no alternative.
-- **Large groups aren't guaranteed optimal:** for more than 14 players or 3+ teams, local search is heuristic. Tests show it matches brute force on the sizes we can verify.
-- **Swap-only manual edits:** you can't move one player to make 6 vs 5 into 7 vs 4.
-- **No end-to-end check of the real share sheet:** native share and clipboard on real iOS and Android weren't tested (the headless browser has no share sheet). The text and URL generation are unit-tested.
-- **Hebrew sorting:** names are sorted with `localeCompare('he')`, and mixed Hebrew/Latin rosters sort Latin first.
+- **Not tested on real phones:** the native share sheet, the iOS wake lock and vibration (iOS has no vibration API), and the install-to-home-screen flow were not checked on actual devices.
+- **First visit needs a connection:** the service worker caches on first use, so if the very first visit is offline, nothing is cached yet. Also, iOS only stops evicting local data once the app is added to the home screen; the app doesn't prompt for that yet.
+- **Swap suggestions aren't browser-tested:** the "teams filled" suggestion and the dominance hint are unit-tested, but the browser flow doesn't trigger them.
+- **Scorer stats are per evening only;** nothing accumulates across evenings.
+- **No way to mark someone as left:** you untick them at home, which flags the teams as out of date.
+- **Fixed design limits:** the main screen offers 3–7 per team (larger sizes aren't reachable), there are 8 bib colours, and cards are a fixed list.
+- **The backup link can get long** for very large rosters (it's roughly 1–2 KB for 25 players, which is fine for WhatsApp).
 
-## 5 most valuable next steps
-1. **PWA:** add a manifest and service worker so it installs to the home screen and works with no reception at the pitch.
-2. **Share the roster:** export/import via a link or QR code (compressed JSON in the URL hash), so the group shares one rated roster without a backend.
-3. **Learn from results:** record match scores and nudge ratings over time (Elo-style), so ratings stop being a matter of opinion.
-4. **Smarter re-roll:** re-run the search with a fresh seed and current settings in the worker, and prefer splits that differ more from the previous ones.
-5. **Rating help:** add a "how good is 7?" guide and an optional peer-rating mode where several friends rate and the app averages, which makes ratings fairer and less awkward.
+## Next steps, most valuable first
+1. **Try it at a real game** on 2–3 phones (iOS and Android): share, wake lock, install, offline. Then fix what hurts.
+2. **"Add to home screen" prompt** after the second use, so iOS keeps the data.
+3. **"Left early" button** on the teams and match screens: remove a player and suggest one swap.
+4. **History across evenings:** results and scorers saved per date. Later, use results to nudge levels.
+5. **Shared roster for two organizers** without a backend: re-import a backup link to merge changes. A real sync (Supabase) only if they actually need it.
