@@ -14,6 +14,7 @@ import {
 import { sanitizeCards, type CardId } from './cards';
 import type { MatchState } from '../match/match';
 import { sanitizeMatch } from '../match/match';
+import { addEvening, buildEvening, sanitizeHistory, type EveningRecord } from './history';
 
 export interface Player extends EnginePlayer {
   cards: CardId[];
@@ -100,6 +101,8 @@ export interface AppState {
   constraints: Constraints;
   result: GameResult | null;
   match: MatchState | null;
+  /** Past evenings, newest first (see history.ts). */
+  history: EveningRecord[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -125,6 +128,7 @@ export const INITIAL_STATE: AppState = {
   constraints: { together: [], apart: [] },
   result: null,
   match: null,
+  history: [],
 };
 
 /** A new game day starts this long after the last activity. */
@@ -254,12 +258,19 @@ export function sanitize(raw: unknown, now = Date.now()): AppState {
     },
     result,
     match: result ? sanitizeMatch(r.match, result.numTeams) : null,
+    history: sanitizeHistory(r.history),
   };
 
   // Games aren't weekly and attendance changes: a new day starts with an empty list.
   if (state.dayAt && now - state.dayAt > NEW_DAY_MS && (state.presentIds.length || state.result)) {
+    // Nobody pressed "end the evening": save it to the history before it's cleared.
+    const evening =
+      state.match && state.result
+        ? buildEvening({ match: state.match, result: state.result, players, bibs: state.settings.bibs, now: state.dayAt })
+        : null;
     state = {
       ...state,
+      history: addEvening(state.history, evening),
       lastPresentIds: state.presentIds.length ? state.presentIds : state.lastPresentIds,
       presentIds: [],
       result: null,

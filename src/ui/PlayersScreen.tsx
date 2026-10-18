@@ -252,6 +252,7 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
         const b = parseBackup(JSON.parse(content));
         if (!b) return notify('הקובץ לא נראה כמו גיבוי של כוחות');
         const taken = new Set(state.players.map((p) => p.name.trim()));
+        if (b.history?.length) dispatch({ type: 'mergeHistory', records: b.history });
         commit(b.players.filter((p) => !taken.has(p.name.trim())).map((p) => ({ ...p, id: newId() })));
         return;
       }

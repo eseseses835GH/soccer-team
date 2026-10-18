@@ -95,8 +95,31 @@ assert(await page.getByText('טבלת הערב').isVisible(), 'standings shown')
 await page.getByRole('button', { name: /לקבוצות/ }).click();
 assert(await page.getByRole('button', { name: /חזרה למשחק/ }).isVisible(), 'match continues');
 
-// 8. Keep-apart pair is respected on a fresh split.
+// 7b. One more match with a scorer, then "end the evening" → summary → history.
+await page.getByRole('button', { name: /חזרה למשחק/ }).click();
+await page.getByRole('button', { name: /התחלה/ }).click();
+for (let i = 0; i < 2; i++) {
+  await page.getByRole('button', { name: '+ גול' }).first().click();
+  await page.locator('.sheet .pick-list button').first().click();
+}
+await page.getByRole('button', { name: 'סיום משחק' }).click();
+await page.getByRole('button', { name: 'סיום הערב' }).click();
+await page.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
+await page.waitForSelector('.evening');
+const summary = await page.locator('.evening').innerText();
+assert(/לקחו את הערב/.test(summary), 'summary names the evening winner');
+assert(summary.includes('מלך השערים'), 'summary shows the top scorer');
+await page.waitForTimeout(1200); // the totals count up
+const totals = await page.locator('.ev-stats dd').allInnerTexts();
+assert(totals[0] === '2' && totals[1] === '3', `summary totals: ${totals}`);
 await back();
+assert((await page.locator('.ev-list li').count()) === 1, 'history lists the evening');
+await page.getByRole('radio', { name: 'כל הזמנים' }).click();
+assert(await page.getByText('מלכי השערים').isVisible(), 'all-time scorers');
+await back();
+assert(await page.getByRole('button', { name: 'ערבים קודמים' }).isVisible(), 'history icon on the main screen');
+
+// 8. Keep-apart pair is respected on a fresh split.
 await page.getByRole('button', { name: 'הגדרות' }).click();
 await page.getByLabel('שחקן ראשון').selectOption({ label: 'אלון' });
 await page.getByLabel('שחקן שני').selectOption({ label: 'גיא' });
@@ -107,6 +130,10 @@ await page.waitForSelector('.team');
 const ta = await teamOf('אלון');
 const tg = await teamOf('גיא');
 assert(ta === -1 || tg === -1 || ta !== tg, 'keep-apart respected');
+// A match left half-played (no "end the evening")…
+await page.getByRole('button', { name: /התחלת משחק/ }).click();
+await page.getByRole('button', { name: '+ גול' }).first().click();
+await page.getByRole('button', { name: 'דילוג' }).click();
 
 // 9. A new game day starts with empty attendance and offers "same as last time".
 await page.evaluate(() => {
@@ -118,6 +145,10 @@ await page.goto(base + '#home');
 await page.reload();
 assert(await page.getByText(/^0$/).first().isVisible(), 'attendance reset');
 assert(await page.getByRole('button', { name: /כמו בפעם הקודמת/ }).isVisible(), 'same-as-last offered');
+// …is saved to the history by the new-day reset.
+await page.getByRole('button', { name: 'ערבים קודמים' }).click();
+assert((await page.locator('.ev-list li').count()) === 2, 'new-day reset saved the unfinished evening');
+await back();
 
 // 10. Backup link → import on another device.
 await page.getByRole('button', { name: 'הגדרות' }).click();
@@ -141,6 +172,7 @@ await other.getByRole('button', { name: /^ייבוא$/ }).click();
 await other.getByRole('button', { name: 'השחקנים' }).click();
 const imported = await other.locator('.roster li').count();
 assert(imported === 23, `imported ${imported} players`);
+assert((await other.getByRole('button', { name: 'ערבים קודמים' }).count()) === 0, 'the link leaves the history out');
 
 // 11. 14 players at 5-a-side (5 · 5 · 4): the short team borrows from the losing team for one match.
 {

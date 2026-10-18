@@ -1,6 +1,7 @@
 import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solution } from '../engine';
 import { addTeam, type MatchState } from '../match/match';
 import { DEFAULT_SETTINGS, INITIAL_STATE, type AppState, type GameResult, type Player, type Settings } from './model';
+import { addEvening, buildEvening, mergeHistory, stampSides, type EveningRecord } from './history';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
 export type Action =
@@ -33,6 +34,10 @@ export type Action =
   | { type: 'lateJoin'; player?: Player; id: string; result: GameResult; now: number }
   | { type: 'clearResult' }
   | { type: 'setMatch'; match: MatchState | null; now: number }
+  /** End the evening: save it to the history (as `id`) and close the match session. */
+  | { type: 'endEvening'; id: string; now: number }
+  | { type: 'mergeHistory'; records: EveningRecord[] }
+  | { type: 'deleteEvening'; id: string }
   | { type: 'importPlayers'; players: Player[]; constraints?: Constraints; settings?: Settings }
   | { type: 'loadSample'; now: number }
   | { type: 'clearAll' };
@@ -53,7 +58,32 @@ function reorderKeepers(orders: string[][], playerIds: string[], asg: number[], 
   );
 }
 
+/** Save the current match session as an evening record. */
+function archive(state: AppState, now: number, id?: string): EveningRecord[] {
+  if (!state.match || !state.result) return state.history;
+  const rec = buildEvening({ match: state.match, result: state.result, players: state.players, bibs: state.settings.bibs, now, id });
+  return addEvening(state.history, rec);
+}
+
 export function reducer(state: AppState, action: Action): AppState {
+  const next = baseReducer(state, action);
+  if (next === state || action.type === 'clearAll' || action.type === 'endEvening') return next;
+  const prev = state.match;
+  let match = next.match;
+  if (!prev || !state.result) return next;
+  // Finished matches remember who played, so per-player wins survive later swaps.
+  if (match && next.result && match.history.length > prev.history.length) {
+    match = stampSides(match, prev.history.length, next.result);
+    return { ...next, match };
+  }
+  // The session was dropped (re-split, player deleted, sample loaded…): keep what was played.
+  if (!match || match.history.length < prev.history.length) {
+    return { ...next, history: archive(state, 'now' in action ? action.now : Date.now()) };
+  }
+  return next;
+}
+
+function baseReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'addPlayer':
       return {
@@ -200,6 +230,12 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, result: null, match: null };
     case 'setMatch':
       return { ...state, match: action.match, dayAt: action.now };
+    case 'endEvening':
+      return { ...state, history: archive(state, action.now, action.id), match: null, dayAt: action.now };
+    case 'mergeHistory':
+      return { ...state, history: mergeHistory(state.history, action.records) };
+    case 'deleteEvening':
+      return { ...state, history: state.history.filter((r) => r.id !== action.id) };
     case 'importPlayers': {
       return {
         ...state,

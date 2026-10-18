@@ -96,3 +96,27 @@ export function downloadText(filename: string, text: string, type = 'text/plain'
     /* ignore */
   }
 }
+
+export interface EveningShareInput {
+  date: Date;
+  matches: number;
+  goals: number;
+  minutes?: number | null;
+  /** "🔴 אדומים" of the team that won the evening, if there was a clear one. */
+  champion?: string;
+  /** Standings, best first: "🔴 אדומים 4 נ׳ · 1 ת׳ · 1 ה׳". */
+  table: string[];
+  /** Highlight lines, e.g. "👑 מלך השערים: אבי (4)". */
+  highlights: string[];
+}
+
+/** Short recap of an evening for the group chat: no ratings, names only. */
+export function buildEveningShareText({ date, matches, goals, minutes, champion, table, highlights }: EveningShareInput): string {
+  const d = date.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
+  const totals = [`${matches} משחקים`, `${goals} שערים`, ...(minutes ? [`${minutes} דקות`] : [])].join(' · ');
+  const lines = [`${RLM}⚽ סיכום הערב – ${d}`, `${RLM}${totals}`, ''];
+  if (champion) lines.push(`${RLM}🏆 ${champion} לקחו את הערב`, '');
+  table.forEach((t, i) => lines.push(`${RLM}${i + 1}. ${t}${RLM}`));
+  if (highlights.length) lines.push('', ...highlights.map((h) => `${RLM}${h}${RLM}`));
+  return lines.join('\n');
+}

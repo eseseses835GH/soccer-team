@@ -43,6 +43,9 @@ and a nudge when one team keeps winning.
    - **סיום משחק** ("end match"): the loser goes to the back of the queue and the next team comes on.
      On a draw you pick who leaves; the default is the team that has been on longer.
    - Standings and top scorers for the evening.
+   - **סיום הערב** ("end the evening") opens a summary: who won the night, top scorer, longest streak,
+     biggest win, the table and every match. Past evenings and all-time leaders are under the clock icon
+     on the main screen. An evening left open is saved automatically when the next game day starts.
    - If a team wins 3 in a row (or ≥ 75% after 4 games), the app suggests one swap to weaken it.
      It's a suggestion, never forced.
 
@@ -62,7 +65,7 @@ Requires Node 18+ (developed on Node 22).
 Browser checks against `npm run preview` (Playwright; set `CHROMIUM_PATH` if needed):
 ```bash
 npm run screenshots -- ./screenshots   # 390px, light + dark; fails on console errors / overflow
-npm run e2e                            # add, import, split 22, re-roll, late arrival, match, pairs, new day, backup link
+npm run e2e                            # add, import, split 22, re-roll, late arrival, match, pairs, end evening + summary + history, new day, backup link
 node scripts/icons.mjs                 # regenerate PWA PNG icons from public/favicon.svg
 ```
 
@@ -84,7 +87,7 @@ from the same screen.
 ```
 src/engine/   pure TypeScript: cost, search, team sizes (planFormat), swap suggestions + tests
 src/match/    pure "winner stays" evening: clock, goals, queue, standings, dominance + tests
-src/state/    model + v1→v2 migration, reducer, cards, late arrivals, import/backup + tests
+src/state/    model + v1→v2 migration, reducer, cards, late arrivals, import/backup, evening history + tests
 src/worker/   Web Worker wrapper around the search (falls back inline)
 src/ui/       React screens: Home, Teams, Match, Players, Settings
 public/       manifest, icons, service worker, roster template

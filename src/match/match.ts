@@ -33,6 +33,10 @@ export interface MatchRecord {
   endedAt: number;
   /** Who was borrowed for this match, if anyone. */
   borrow?: Borrow;
+  /** Clock time of the match. */
+  ms?: number;
+  /** Who played for a and b (filled in by the reducer, which knows the rosters). */
+  sides?: [string[], string[]];
 }
 
 export interface Clock {
@@ -180,6 +184,7 @@ export function endMatch(m: MatchState, out: number, now: number): MatchState {
         out: hasQueue ? out : null,
         goals: m.goals,
         endedAt: now,
+        ms: elapsedMs(m.clock, now),
         ...(m.borrow?.ids.length ? { borrow: m.borrow } : {}),
       },
     ],
