@@ -134,7 +134,9 @@ export function TeamsScreen() {
   const share = async () => {
     const t = text();
     if (await nativeShare({ text: t })) return;
-    window.open(whatsappUrl(t), '_blank', 'noopener');
+    if (window.open(whatsappUrl(t), '_blank', 'noopener')) return;
+    // Pop-ups blocked (some in-app browsers): copy instead.
+    notify((await copyText(t)) ? 'הטקסט הועתק, מדביקים בוואטסאפ' : 'השיתוף לא זמין כאן');
   };
   const copy = async () => notify((await copyText(text())) ? 'הועתק' : 'ההעתקה נכשלה');
 
