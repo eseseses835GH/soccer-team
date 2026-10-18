@@ -102,3 +102,12 @@ These came out of the conversation with the user. Points marked *(my call)* were
 - **Less boxy design:** lists with dividers instead of cards, a warm off-white background, black as the main action colour, green only for "present" ticks and good scores, bib colours only on team headers. Font: Heebo (Google Fonts, cached by the service worker).
 - **The animation is at the moment of splitting, not on opening the app:** names "deal" into the team columns with a stagger, and the score counts up. Both are disabled under `prefers-reduced-motion`.
 - **Toasts appear at the bottom,** so they don't cover the match clock.
+
+---
+
+# v3: changes after setup
+
+## Look
+- **Light/dark is a choice in Settings ("מראה"): בהיר (light), כהה (dark) or לפי הטלפון (follow the phone).** The default stays "follow the phone", so nothing changes for existing users. The choice sets `data-theme` on the page root, and the phone's status-bar colour (`theme-color`) follows it.
+- **A main ("accent") colour can be picked: green (default), blue, purple, orange, pink.** It colours buttons, attendance ticks and the balance score. Each colour has a darker shade for light mode and a lighter one for dark mode, so text stays readable. Bib colours and the WhatsApp green don't change. *(my call: the user asked for "different colours"; red was left out so it isn't confused with warnings and delete buttons.)*
+- **The look is per phone.** Importing another organizer's backup keeps your own theme and colour.

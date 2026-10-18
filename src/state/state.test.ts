@@ -192,3 +192,20 @@ describe('orderBySize', () => {
     expect(orderBySize([0, 1, 1, 2, 2, 0, 1, 2], 3)).toEqual([2, 0, 0, 1, 1, 2, 0, 1]);
   });
 });
+
+describe('look (theme and accent)', () => {
+  it('defaults to following the phone, green; bad values fall back', () => {
+    const s = sanitize({ version: 2, players: [], settings: { theme: 'neon', accent: 'gold' } });
+    expect(s.settings.theme).toBe('auto');
+    expect(s.settings.accent).toBe('green');
+    const t = sanitize({ version: 2, players: [], settings: { theme: 'light', accent: 'blue' } });
+    expect(t.settings).toMatchObject({ theme: 'light', accent: 'blue' });
+  });
+
+  it("an imported backup keeps this phone's look", () => {
+    const mine: AppState = { ...INITIAL_STATE, settings: { ...INITIAL_STATE.settings, theme: 'light', accent: 'pink' } };
+    const theirs = { ...INITIAL_STATE.settings, theme: 'dark' as const, accent: 'blue' as const, matchMinutes: 12 };
+    const next = reducer(mine, { type: 'importPlayers', players: [p('a')], settings: theirs });
+    expect(next.settings).toMatchObject({ theme: 'light', accent: 'pink', matchMinutes: 12 });
+  });
+});

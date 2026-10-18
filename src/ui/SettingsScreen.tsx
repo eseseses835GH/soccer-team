@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ATTR_KEYS, type Constraints } from '../engine';
 import { ATTR_LABELS } from '../i18n';
 import { IMPORT_HASH, encodeBackup, makeBackup } from '../state/io';
-import { BIBS, type BibId } from '../state/model';
+import { ACCENTS, BIBS, type BibId } from '../state/model';
 import { useStore } from '../state/store';
 import { copyText, downloadText, nativeShare } from '../share';
 import { useUi } from './App';
@@ -107,6 +107,37 @@ export function SettingsScreen() {
               </button>
             );
           })}
+        </div>
+      </div>
+
+      <div className="group">
+        <h2>מראה</h2>
+        <Segmented
+          label="מצב תצוגה"
+          value={settings.theme}
+          onChange={(theme) => set({ theme })}
+          options={[
+            { value: 'light', label: 'בהיר' },
+            { value: 'dark', label: 'כהה' },
+            { value: 'auto', label: 'לפי הטלפון' },
+          ]}
+        />
+        <p className="hint">צבע ראשי (כפתורים, סימוני נוכחות וציון האיזון):</p>
+        <div className="bibs" role="radiogroup" aria-label="צבע ראשי">
+          {ACCENTS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              className={`bib ${settings.accent === c.id ? 'on' : ''}`}
+              aria-checked={settings.accent === c.id}
+              onClick={() => set({ accent: c.id })}
+              style={{ '--team': c.swatch } as React.CSSProperties}
+            >
+              <span className="swatch" aria-hidden="true" />
+              {c.name}
+            </button>
+          ))}
         </div>
       </div>
 

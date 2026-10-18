@@ -82,6 +82,22 @@
   color-scheme: light;
 }
 
+/* Accent colour picked in settings (green is the default above). */
+:root[data-accent='blue'] { --accent: #1f5fcc; --accent-soft: #dfe9fb; }
+:root[data-accent='purple'] { --accent: #7444c4; --accent-soft: #ece3fa; }
+:root[data-accent='orange'] { --accent: #c2560a; --accent-soft: #fbe7d6; }
+:root[data-accent='pink'] { --accent: #c22f6e; --accent-soft: #fae0eb; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light'])[data-accent='blue'] { --accent: #6ea2ff; --accent-ink: #061a3d; --accent-soft: #172846; }
+  :root:not([data-theme='light'])[data-accent='purple'] { --accent: #b48cff; --accent-ink: #1f0b45; --accent-soft: #2a1f42; }
+  :root:not([data-theme='light'])[data-accent='orange'] { --accent: #ff9b4f; --accent-ink: #331500; --accent-soft: #3a2414; }
+  :root:not([data-theme='light'])[data-accent='pink'] { --accent: #ff7fb4; --accent-ink: #3d0720; --accent-soft: #3d1a2a; }
+}
+:root[data-theme='dark'][data-accent='blue'] { --accent: #6ea2ff; --accent-ink: #061a3d; --accent-soft: #172846; }
+:root[data-theme='dark'][data-accent='purple'] { --accent: #b48cff; --accent-ink: #1f0b45; --accent-soft: #2a1f42; }
+:root[data-theme='dark'][data-accent='orange'] { --accent: #ff9b4f; --accent-ink: #331500; --accent-soft: #3a2414; }
+:root[data-theme='dark'][data-accent='pink'] { --accent: #ff7fb4; --accent-ink: #3d0720; --accent-soft: #3d1a2a; }
+
 *,
 *::before,
 *::after {

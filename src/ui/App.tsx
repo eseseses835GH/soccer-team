@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
 import { useStore } from '../state/store';
 import { Sheet, Toast } from './components';
@@ -49,6 +49,20 @@ export function App() {
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setToast(null), 2400);
   }, []);
+
+  const { theme, accent } = state.settings;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'auto') delete root.dataset.theme;
+    else root.dataset.theme = theme;
+    if (accent === 'green') delete root.dataset.accent;
+    else root.dataset.accent = accent;
+    // The phone's status bar colour follows the chosen theme too.
+    document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
+      const dark = theme === 'auto' ? m.media.includes('dark') : theme === 'dark';
+      m.content = dark ? '#0f100e' : '#f5f4ef';
+    });
+  }, [theme, accent]);
 
   useEffect(() => {
     const onPop = () => {

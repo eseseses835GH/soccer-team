@@ -34,6 +34,20 @@ export const BIBS = [
 export type BibId = (typeof BIBS)[number]['id'];
 const BIB_IDS = new Set<string>(BIBS.map((b) => b.id));
 
+/** 'auto' follows the phone's light/dark setting. */
+export type Theme = 'auto' | 'light' | 'dark';
+
+/** Main colour of buttons, ticks and the score. The shades live in styles.css (`data-accent`). */
+export const ACCENTS = [
+  { id: 'green', name: 'ירוק', swatch: '#0b7a43' },
+  { id: 'blue', name: 'כחול', swatch: '#1f5fcc' },
+  { id: 'purple', name: 'סגול', swatch: '#7444c4' },
+  { id: 'orange', name: 'כתום', swatch: '#c2560a' },
+  { id: 'pink', name: 'ורוד', swatch: '#c22f6e' },
+] as const;
+export type AccentId = (typeof ACCENTS)[number]['id'];
+const ACCENT_IDS = new Set<string>(ACCENTS.map((a) => a.id));
+
 export interface Settings {
   weights: Weights;
   leadershipThreshold: number;
@@ -43,6 +57,9 @@ export interface Settings {
   matchMinutes: number;
   /** Bib colours the group owns, in the order teams get them. */
   bibs: BibId[];
+  /** Look of the app on this phone (not taken from an imported backup). */
+  theme: Theme;
+  accent: AccentId;
 }
 
 export interface GameResult {
@@ -87,6 +104,8 @@ export const DEFAULT_SETTINGS: Settings = {
   gkSwitchGoals: 1,
   matchMinutes: 8,
   bibs: BIBS.map((b) => b.id),
+  theme: 'auto',
+  accent: 'green',
 };
 
 export const INITIAL_STATE: AppState = {
@@ -173,6 +192,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     gkSwitchGoals: Math.round(num(r.gkSwitchGoals, 1, 5, 1)),
     matchMinutes: Math.round(num(r.matchMinutes, 1, 60, DEFAULT_SETTINGS.matchMinutes)),
     bibs: bibs.length >= 2 ? [...new Set(bibs)] : DEFAULT_SETTINGS.bibs,
+    theme: r.theme === 'light' || r.theme === 'dark' ? r.theme : 'auto',
+    accent: typeof r.accent === 'string' && ACCENT_IDS.has(r.accent) ? r.accent : 'green',
   };
 }
 

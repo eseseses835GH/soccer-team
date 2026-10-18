@@ -27,6 +27,7 @@
 - **Settings:**
   - Rotating vs. fixed keepers, and switch every 1/2/3 goals.
   - Match length and bib colours (which you own, in order).
+  - Look: light, dark or follow the phone, and a main colour (green, blue, purple, orange, pink).
   - Keep-apart / keep-together pairs.
   - Backup link for a second organizer, backup file download.
   - Advanced weights and leadership threshold; sample squad; wipe.
@@ -37,7 +38,7 @@
   - PWA: manifest, icons, service worker. Heebo font.
 
 ## What was tested
-- **`npm test`: 55 Vitest tests pass.**
+- **`npm test`: 57 Vitest tests pass.**
   - Engine: optimality vs. brute force, sizes, constraints, leaders/keepers, determinism, re-roll, 22 players under 1 s.
   - Format plans: 10/11/12/13/14/15 players at 5-a-side, 9/10/11 at 4-a-side, the reduced 8→4v4 case.
   - Explicit sizes, and the goalkeeper rule turned off.
