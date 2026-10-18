@@ -1,14 +1,25 @@
 /**
  * "Winner stays" match night, as pure functions over a serialisable state:
  * two teams on the pitch, the rest queue outside. The loser goes to the back
- * of the queue and the next team comes in. Who moves over to complete a short
- * team is decided at the pitch, not here.
+ * of the queue and the next team comes in. A short team that comes on borrows
+ * players from the team that just lost, for that match only (see `borrowNeed`).
  */
 
 export interface Goal {
   team: number;
   scorerId?: string;
   at: number;
+}
+
+/**
+ * Players from the losing team who play the current match for a short team.
+ * They are not moved in the split: when the match ends they go back to their
+ * own team. `ids` empty = the step was skipped (decided at the pitch).
+ */
+export interface Borrow {
+  team: number;
+  from: number;
+  ids: string[];
 }
 
 export interface MatchRecord {
@@ -20,6 +31,8 @@ export interface MatchRecord {
   out: number | null;
   goals: Goal[];
   endedAt: number;
+  /** Who was borrowed for this match, if anyone. */
+  borrow?: Borrow;
 }
 
 export interface Clock {
@@ -43,6 +56,8 @@ export interface MatchState {
   history: MatchRecord[];
   /** Dominance hint the user dismissed: don't nag again for a while. */
   dismissed: { team: number; atMatch: number } | null;
+  /** Borrowers for the current match (null = not decided yet / not needed). */
+  borrow: Borrow | null;
 }
 
 export function startSession(numTeams: number): MatchState {
@@ -56,6 +71,7 @@ export function startSession(numTeams: number): MatchState {
     goals: [],
     history: [],
     dismissed: null,
+    borrow: null,
   };
 }
 
@@ -154,8 +170,58 @@ export function endMatch(m: MatchState, out: number, now: number): MatchState {
     pitchSince,
     clock: { running: false, startedAt: null, elapsedMs: 0 },
     goals: [],
-    history: [...m.history, { a, b, goalsA: ga, goalsB: gb, out: hasQueue ? out : null, goals: m.goals, endedAt: now }],
+    history: [
+      ...m.history,
+      {
+        a,
+        b,
+        goalsA: ga,
+        goalsB: gb,
+        out: hasQueue ? out : null,
+        goals: m.goals,
+        endedAt: now,
+        ...(m.borrow?.ids.length ? { borrow: m.borrow } : {}),
+      },
+    ],
+    // Borrowers go back to their own team.
+    borrow: null,
   };
+}
+
+export interface BorrowNeed {
+  /** The short team on the pitch. */
+  team: number;
+  /** The team that just left (borrowers come from it). */
+  from: number;
+  /** The team the short team faces. */
+  opponent: number;
+  need: number;
+}
+
+/**
+ * After a match, a short team on the pitch (it just came on, or it won and
+ * stays) completes itself from the team that just left. `sizes[t]` = players
+ * in team t. Null when nobody is short or there is no queue (2 teams).
+ */
+export function borrowNeed(m: MatchState, sizes: number[], teamSize: number): BorrowNeed | null {
+  const last = m.history[m.history.length - 1];
+  if (!last || last.out === null || m.onPitch.includes(last.out)) return null;
+  const from = last.out;
+  for (const team of m.onPitch) {
+    const need = Math.min(teamSize - (sizes[team] ?? 0), sizes[from] ?? 0);
+    if (need > 0) return { team, from, opponent: team === m.onPitch[0] ? m.onPitch[1] : m.onPitch[0], need };
+  }
+  return null;
+}
+
+/** Record who was borrowed for the current match (`ids` empty = skipped), or clear it with null. */
+export function setBorrow(m: MatchState, borrow: Borrow | null): MatchState {
+  return { ...m, borrow: borrow ? { ...borrow, ids: [...borrow.ids] } : null };
+}
+
+/** Players borrowed into team `t` for the current match. */
+export function borrowedInto(m: MatchState, t: number): string[] {
+  return m.borrow?.team === t ? m.borrow.ids : [];
 }
 
 /** A team added mid-session (late arrivals formed a new team) joins the back of the queue. */
@@ -279,5 +345,15 @@ export function sanitizeMatch(raw: unknown, numTeams: number): MatchState | null
     goals: Array.isArray(r.goals) ? r.goals.filter((g) => inRange(g?.team)) : [],
     history: Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)) : [],
     dismissed: r.dismissed && inRange(r.dismissed.team) ? r.dismissed : null,
+    borrow: sanitizeBorrow(r.borrow, numTeams, r.onPitch),
   };
+}
+
+/** Older saved states have no `borrow`; anything malformed is dropped (the step just shows again). */
+function sanitizeBorrow(raw: unknown, numTeams: number, onPitch: unknown[]): Borrow | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const b = raw as Partial<Borrow>;
+  const inRange = (t: unknown) => Number.isInteger(t) && (t as number) >= 0 && (t as number) < numTeams;
+  if (!inRange(b.team) || !inRange(b.from) || b.team === b.from || !onPitch.includes(b.team) || !Array.isArray(b.ids)) return null;
+  return { team: b.team!, from: b.from!, ids: [...new Set(b.ids.filter((id): id is string => typeof id === 'string'))] };
 }

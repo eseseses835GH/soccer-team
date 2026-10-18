@@ -67,6 +67,15 @@ for (const scheme of ['light', 'dark']) {
   await checkLayout('match');
   await page.getByRole('button', { name: 'סיום משחק' }).click();
   await shot('10-match-after', true);
+  // 14 players at 5-a-side: the short team came on and borrows from the losing team.
+  await page.locator('.borrow').scrollIntoViewIfNeeded();
+  await page.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+  await shot('10b-borrow');
+  await checkLayout('borrow');
+  await page.locator('.borrow-picks button:not(.sel)').first().click();
+  await shot('10c-borrow-other');
+  await page.locator('.borrow').getByRole('button', { name: 'אישור' }).click();
+  await shot('10d-borrow-done');
   await page.getByRole('button', { name: /לקבוצות/ }).click();
   await page.getByRole('button', { name: /^חזרה$/ }).click();
   await page.getByRole('button', { name: 'הגדרות' }).click();
