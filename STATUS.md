@@ -83,3 +83,55 @@
 3. **"Left early" button** on the teams and match screens: remove a player and suggest one swap.
 4. **History across evenings:** done (v3: evening summary, list of past evenings, all-time leaders). Next: use results to nudge levels, and sync the history between organizers.
 5. **Shared roster for two organizers** without a backend: re-import a backup link to merge changes. A real sync (Supabase) only if they actually need it.
+
+---
+
+# v3: groups, login and sync
+
+## What was built
+- **Groups:** each group (the neighbourhood, the base, the office) has its own roster, settings and evening.
+  - Switch, create, rename and delete from the group name in the top bar.
+  - Existing data becomes the first group, "הקבוצה שלי", on the first run after the update.
+- **Optional login:** Google, a one-time email code (the magic link in the same email works too), or email + password.
+  - The account area is in Settings.
+  - Without logging in, everything works as before, and the Supabase library isn't loaded at all.
+- **Sync between organizers' phones (Supabase):**
+  - "סנכרון בין טלפונים" uploads a group; "הזמנת מארגן" shares a `#join=` link valid for 14 days.
+  - Opening the link asks you to log in, then adds the group to the phone.
+  - Three-way merge with versioned, conditional pushes; realtime updates from other phones.
+  - Offline edits are pushed when back online; a status dot sits next to the group name.
+- **Server:** tables `groups`, `group_members`, `group_invites`, each with RLS, plus RPCs `create_group`, `create_invite`, `join_group`, `leave_group`.
+  - Applied to project `cieyeoyuwddobrxjcffw` (migrations in `supabase/migrations/`). The security advisor shows no findings.
+
+## What was tested
+- **`npm test`: 91 tests pass**, 34 of them new:
+  - Storage migration from `kochot:v1` and repair of a damaged index.
+  - Group index edits.
+  - The three-way merge: players, pairs, settings, history; edit vs delete; concurrent adds.
+  - Sync rounds against a fake server: pull-only, push, two offline phones, a lost version race and retry, rename, gone, network error.
+- **`npm run e2e`** (all earlier steps, plus):
+  - Create a second group and switch back.
+  - Upgrade from the old single key.
+  - No requests to Supabase while logged out.
+  - The backup-link step now stubs `navigator.share`, because newer headless Chrome exposes a share sheet that never resolves.
+- **`npm run screenshots`:** adds the groups sheet and the new-group sheet. Login sheets were also captured in light and dark, at 390 px.
+- **Against the real Supabase project**, with two throwaway confirmed users created by SQL and deleted afterwards:
+  - Phone A logs in with email + password from the UI, uploads a group, and creates an invite.
+  - Phone B opens the link, logs in and joins (14 players).
+  - B adds a player, and A receives it via realtime.
+  - A goes offline and adds a player while B adds another. Back online, both phones have all 17.
+  - Theme and attendance were not uploaded.
+- **RLS was checked in SQL** with two simulated users:
+  - A non-member sees 0 groups, members and invites, and updates 0 rows.
+  - The member sees the group after joining; a stale version updates 0 rows; leaving removes access.
+  - `anon` gets "permission denied" for tables and RPCs.
+
+## Not verified
+- **Real email delivery** (the code/magic-link email and signup confirmation), and Google login, which isn't configured yet.
+- **Login on a real phone over the LAN IP.** Plain http there means PKCE falls back to the "plain" method, which Supabase supports.
+
+## Next steps
+1. **Configure the Supabase dashboard:** Site URL, redirect URLs, the Google provider, and the email template with `{{ .Token }}` (see the report or DECISIONS).
+2. **A custom SMTP server** before real use: the built-in email sender is heavily rate-limited on the free plan.
+3. **"Players" role:** read-only access to teams and stats without ratings (needs a view or a separate doc without ratings).
+4. **Revoke invite links from the UI;** show the group's organizers.

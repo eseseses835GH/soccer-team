@@ -1,8 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
-import { useStore } from '../state/store';
+import { useGroups, useStore } from '../state/store';
+import { JOIN_HASH, STATUS_TEXT, useSync, type SyncStatus } from '../sync/SyncProvider';
+import { AccountSheet } from './AccountSheet';
 import { Sheet, Toast } from './components';
 import { EveningScreen, HistoryScreen } from './HistoryScreen';
+import { GroupsSheet } from './GroupsSheet';
 import { HomeScreen } from './HomeScreen';
 import { Icon } from './icons';
 import { MatchScreen } from './MatchScreen';
@@ -48,6 +51,9 @@ function initialRoute(hasResult: boolean, hasMatch: boolean): Route {
 
 export function App() {
   const { state, dispatch } = useStore();
+  const groups = useGroups();
+  const sync = useSync();
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [route, setRoute] = useState<Route>(() => initialRoute(!!state.result, !!state.match));
   const [param, setParam] = useState(() => parseHash().param);
   const [toast, setToast] = useState<string | null>(null);
@@ -62,6 +68,8 @@ export function App() {
     window.scrollTo({ top: 0 });
   }, []);
 
+  const startJoin = useRef(sync.startJoin);
+  startJoin.current = sync.startJoin;
   const notify = useCallback((msg: string) => {
     setToast(msg);
     window.clearTimeout(timer.current);
@@ -89,6 +97,13 @@ export function App() {
       setParam(h.param);
     };
     window.addEventListener('popstate', onPop);
+    // An organizer invite was opened: join (after logging in if needed).
+    if (location.hash.startsWith(JOIN_HASH)) {
+      const token = decodeURIComponent(location.hash.slice(JOIN_HASH.length));
+      history.replaceState(null, '', `${location.pathname}#home`);
+      setRoute('home');
+      if (token) startJoin.current(token);
+    }
     // A backup link was opened: offer to import it.
     if (location.hash.startsWith(IMPORT_HASH)) {
       decodeBackup(location.hash.slice(IMPORT_HASH.length)).then((b) => {
@@ -100,6 +115,18 @@ export function App() {
     }
     return () => window.removeEventListener('popstate', onPop);
   }, [notify]);
+
+  // Messages from sync (joined a group, logged out, errors…).
+  useEffect(() => {
+    if (sync.message) notify(sync.message.text);
+  }, [sync.message, notify]);
+
+  // Say hello when a login finishes.
+  const prevEmail = useRef(sync.email);
+  useEffect(() => {
+    if (prevEmail.current === false && sync.email) notify('התחברתם');
+    prevEmail.current = sync.email;
+  }, [sync.email, notify]);
 
   // Screens that need data fall back home.
   const evening = route === 'evening' ? state.history.find((e) => e.id === param) : undefined;
@@ -136,12 +163,21 @@ export function App() {
       <header className={`topbar ${safeRoute === 'home' ? 'is-home' : ''}`}>
         {safeRoute === 'home' ? (
           <>
-            <div className="brand">
+            <button type="button" className="brand group-btn" aria-label={`קבוצה: ${groups.current.name}. החלפת קבוצה`} onClick={() => setGroupsOpen(true)}>
               <span className="brand-mark" aria-hidden="true">
                 ⚽
               </span>
-              <span>כוחות</span>
-            </div>
+              <span className="brand-text">
+                <span className="brand-name">כוחות</span>
+                <span className="group-name">
+                  <span className="group-name-text">{groups.current.name}</span>
+                  {groups.current.synced && <SyncDot status={sync.status} />}
+                  <span className="chev" aria-hidden="true">
+                    ▾
+                  </span>
+                </span>
+              </span>
+            </button>
             <nav className="top-actions" aria-label="תפריט">
               {state.history.length > 0 && (
                 <button type="button" className="icon-btn" aria-label="ערבים קודמים" onClick={() => go('history')}>
@@ -191,7 +227,25 @@ export function App() {
           </div>
         </Sheet>
       )}
+      {groupsOpen && <GroupsSheet onClose={() => setGroupsOpen(false)} />}
+      {sync.loginReason && <AccountSheet reason={sync.loginReason} onClose={sync.closeLogin} />}
       <Toast message={toast} />
     </UiCtx.Provider>
   );
+}
+
+const DOT_TONE: Record<SyncStatus, string> = {
+  local: 'off',
+  synced: 'ok',
+  syncing: 'busy',
+  pending: 'busy',
+  offline: 'warn',
+  signedOut: 'warn',
+  error: 'bad',
+  gone: 'bad',
+};
+
+/** A small dot next to the group name: synced / syncing / offline / error. */
+function SyncDot({ status }: { status: SyncStatus }) {
+  return <span className={`sync-dot tone-${DOT_TONE[status]}`} role="img" aria-label={STATUS_TEXT[status]} title={STATUS_TEXT[status]} />;
 }

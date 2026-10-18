@@ -109,7 +109,8 @@ for (const scheme of ['light', 'dark']) {
   await checkLayout('evening');
   // An older evening, so the list and all-time view have something to compare.
   await page.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem('kochot:v1'));
+    const key = `kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`;
+    const s = JSON.parse(localStorage.getItem(key));
     const week = 7 * 864e5;
     const r = structuredClone(s.history[0]);
     r.id = 'ev-older';
@@ -117,7 +118,7 @@ for (const scheme of ['light', 'dark']) {
     r.endedAt -= week;
     r.matches = r.matches.slice(0, 3).map((m) => ({ ...m, goalsA: m.goalsB, goalsB: m.goalsA, goals: [], endedAt: m.endedAt - week }));
     s.history.push(r);
-    localStorage.setItem('kochot:v1', JSON.stringify(s));
+    localStorage.setItem(key, JSON.stringify(s));
   });
   await page.goto(base + '#history');
   await page.reload();
@@ -128,6 +129,15 @@ for (const scheme of ['light', 'dark']) {
   await shot('15-all-time', true);
   await checkLayout('all-time');
   await page.getByRole('button', { name: /^חזרה$/ }).click();
+  await page.waitForSelector('.toast:not(.show)'); // let the match toast fade
+  await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
+  await shot('12-groups-sheet');
+  await checkLayout('groups sheet');
+  await page.getByRole('button', { name: /קבוצה חדשה/ }).click();
+  await page.getByLabel('שם הקבוצה').fill('כדורגל בשכונה');
+  await shot('13-new-group');
+  await page.getByRole('button', { name: 'ביטול' }).click();
+  await page.getByRole('button', { name: 'סגירה' }).click();
   await page.getByRole('button', { name: 'הגדרות' }).click();
   await shot('11-settings', true);
   await checkLayout('settings');

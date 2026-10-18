@@ -33,7 +33,7 @@ for (const [n, lvl, cards] of [['אלון', '7', ['החיה']], ['Ben', '4', ['�
   await page.getByRole('button', { name: /^הוספה$/ }).click();
 }
 assert((await page.locator('.roster li').count()) === 3, 'quick add should create 3 players');
-const ben = await page.evaluate(() => JSON.parse(localStorage.getItem('kochot:v1')).players.find((p) => p.name === 'Ben'));
+const ben = await page.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).players.find((p) => p.name === 'Ben'));
 assert(JSON.stringify(ben.cards) === '["slow","scared"]', `Ben's cards ${JSON.stringify(ben.cards)}`);
 assert(ben.attrs.shooting === 6 && ben.attrs.stamina === 2 && ben.attrs.overall === 4, `Ben's ratings ${JSON.stringify(ben.attrs)}`);
 await page.getByPlaceholder('איך קוראים לו?').fill('גיא');
@@ -137,9 +137,10 @@ await page.getByRole('button', { name: 'דילוג' }).click();
 
 // 9. A new game day starts with empty attendance and offers "same as last time".
 await page.evaluate(() => {
-  const s = JSON.parse(localStorage.getItem('kochot:v1'));
+  const key = `kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`;
+  const s = JSON.parse(localStorage.getItem(key));
   s.dayAt = Date.now() - 13 * 3600 * 1000;
-  localStorage.setItem('kochot:v1', JSON.stringify(s));
+  localStorage.setItem(key, JSON.stringify(s));
 });
 await page.goto(base + '#home');
 await page.reload();
@@ -155,6 +156,8 @@ await page.getByRole('button', { name: 'הגדרות' }).click();
 // Capture what the app copies (headless clipboard reads are unreliable).
 // Desktop Chrome on macOS has navigator.share, so stub that path too.
 await page.evaluate(() => {
+  // Newer Chrome builds expose the Web Share API, whose sheet never resolves headless.
+  Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
   navigator.clipboard.writeText = async (t) => {
     window.__copied = t;
   };
@@ -219,6 +222,42 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   assert((await pg.locator('.borrow').count()) === 0, 'skip hides the step');
   console.log(`borrow: suggested ${suggested}, picked ${otherName}`);
 }
+
+// 11. Groups: a second group starts empty, switching back keeps the first one's roster.
+await page.goto(base + '#home');
+await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
+await page.getByRole('button', { name: /קבוצה חדשה/ }).click();
+await page.getByLabel('שם הקבוצה').fill('כדורגל בבסיס');
+await page.getByRole('button', { name: 'יצירה' }).click();
+assert(await page.getByRole('button', { name: /קבוצה: כדורגל בבסיס/ }).isVisible(), 'new group is open');
+assert(await page.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).isVisible(), 'new group starts empty');
+await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
+await page.getByRole('button', { name: /הקבוצה שלי/ }).click();
+await page.getByRole('button', { name: 'השחקנים' }).click();
+assert((await page.locator('.roster li').count()) === 23, 'first group keeps its 23 players');
+await back();
+
+// 12. Upgrade from the single-key storage (before groups): the data becomes "הקבוצה שלי".
+const old = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+old.on('pageerror', (e) => errors.push(e.message));
+await old.goto(base);
+await old.evaluate(() => {
+  localStorage.clear();
+  localStorage.setItem(
+    'kochot:v1',
+    JSON.stringify({ version: 2, players: [{ id: 'x1', name: 'ותיק', attrs: { overall: 7 }, canGK: false, cards: [] }], presentIds: ['x1'], dayAt: Date.now(), teamSize: 5, settings: {}, constraints: { together: [], apart: [] }, result: null, match: null }),
+  );
+});
+await old.reload();
+assert(await old.getByRole('button', { name: /קבוצה: הקבוצה שלי/ }).isVisible(), 'migrated group name');
+assert(await old.getByText('ותיק').isVisible(), 'migrated player shown');
+assert(!(await old.evaluate(() => localStorage.getItem('kochot:v1'))), 'old key moved');
+// No network to Supabase without an account.
+const sbCalls = [];
+old.on('request', (r) => /supabase/.test(r.url()) && sbCalls.push(r.url()));
+await old.reload();
+await old.waitForTimeout(300);
+assert(sbCalls.length === 0, `no Supabase calls when logged out: ${sbCalls}`);
 
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
