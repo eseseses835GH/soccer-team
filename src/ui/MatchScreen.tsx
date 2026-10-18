@@ -24,7 +24,9 @@ import { engineOptions, teamLook } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
 import { BorrowCard } from './BorrowCard';
+import { celebrateGoal, primeVoices, stopCelebration } from './celebrate';
 import { Sheet } from './components';
+import { GoalBurst } from './GoalBurst';
 import { Icon } from './icons';
 
 function fmt(ms: number): string {
@@ -87,6 +89,8 @@ export function MatchScreen() {
   const [scorerFor, setScorerFor] = useState<number | null>(null);
   const [drawAsk, setDrawAsk] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
+  useEffect(primeVoices, []);
   const buzzed = useRef<string>('');
 
   const running = !!m?.clock.running;
@@ -153,6 +157,15 @@ export function MatchScreen() {
   const goal = (t: number) => {
     set(addGoal(m, t, Date.now()));
     setScorerFor(t);
+    // Sound must start inside the tap (iOS); undoing a goal doesn't celebrate.
+    celebrateGoal(state.settings.goalSound, teamLook(state.settings, t).name);
+    setBurst({ id: Date.now(), team: t });
+  };
+  const sound = state.settings.goalSound !== 'off';
+  const toggleSound = () => {
+    if (sound) stopCelebration();
+    dispatch({ type: 'setSettings', settings: { ...state.settings, goalSound: sound ? 'off' : 'all' } });
+    notify(sound ? 'צליל הגול כבוי' : 'צליל הגול פועל');
   };
 
   const finish = (out: number) => {
@@ -178,6 +191,9 @@ export function MatchScreen() {
 
   return (
     <section className="match" aria-label="משחק">
+      <button type="button" className={`icon-btn sound-toggle ${sound ? 'on' : ''}`} aria-label={sound ? 'השתקת צליל הגול' : 'הפעלת צליל הגול'} onClick={toggleSound}>
+        <Icon name={sound ? 'sound' : 'mute'} size={20} />
+      </button>
       <div className="match-no">משחק {m.history.length + 1}</div>
       <div className={`clock ${left <= 0 ? 'over' : ''}`} role="timer" aria-live="off">
         {left <= 0 ? `+${fmt(left)}` : fmt(left)}
@@ -329,6 +345,8 @@ export function MatchScreen() {
           </button>
         </Sheet>
       )}
+
+      {burst && <GoalBurst key={burst.id} color={teamLook(state.settings, burst.team).color} onDone={() => setBurst(null)} />}
 
       {drawAsk && (
         <Sheet title="תיקו. מי יוצא?" onClose={() => setDrawAsk(false)}>
