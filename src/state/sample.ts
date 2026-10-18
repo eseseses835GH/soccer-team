@@ -1,33 +1,35 @@
-import type { Player } from '../engine';
+import { applyCards, type CardId } from './cards';
+import type { Player } from './model';
 
-// [name, overall, stamina, coordination, teamwork, leadership, shooting, dribbling, goalkeeping, canGK]
-type Row = [string, number, number, number, number, number, number, number, number, boolean];
+// [name, level, cards, can play in goal]
+type Row = [string, number, CardId[], boolean];
 
 const ROWS: Row[] = [
-  ['אבי', 8, 7, 8, 7, 8, 8, 7, 4, false],
-  ['בני', 6, 8, 6, 7, 5, 5, 6, 3, false],
-  ['גל', 7, 6, 7, 8, 6, 6, 7, 5, false],
-  ['דני', 5, 5, 5, 6, 4, 4, 5, 8, true],
-  ['הדר', 9, 8, 9, 7, 7, 9, 9, 3, false],
-  ['יוסי', 4, 4, 5, 6, 3, 4, 3, 6, true],
-  ['כפיר', 6, 7, 6, 5, 4, 7, 6, 4, false],
-  ['ליאור', 7, 9, 6, 8, 9, 5, 6, 4, false],
-  ['מתן', 3, 5, 4, 5, 2, 3, 3, 4, false],
-  ['נועם', 8, 6, 8, 6, 5, 8, 9, 2, false],
-  ['עומר', 5, 6, 5, 7, 6, 5, 4, 7, true],
-  ['רון', 6, 6, 7, 6, 5, 6, 6, 5, false],
-  ['שי', 4, 7, 4, 7, 4, 3, 4, 3, false],
-  ['תומר', 7, 7, 7, 6, 7, 7, 6, 5, false],
+  ['אבי', 8, ['captain'], false],
+  ['בני', 6, ['beast'], false],
+  ['גל', 7, [], false],
+  ['דני', 5, ['rock'], true],
+  ['הדר', 9, ['magician'], false],
+  ['יוסי', 4, [], true],
+  ['כפיר', 6, ['sniper'], false],
+  ['ליאור', 7, ['beast', 'captain'], false],
+  ['מתן', 3, ['noPass'], false],
+  ['נועם', 8, ['sniper'], false],
+  ['עומר', 5, ['rock'], true],
+  ['רון', 6, [], false],
+  ['שי', 4, ['beast'], false],
+  ['תומר', 7, ['noPass'], false],
 ];
 
 export function sampleSquad(): Player[] {
-  return ROWS.map(([name, overall, stamina, coordination, teamwork, leadership, shooting, dribbling, goalkeeping, canGK], i) => ({
+  return ROWS.map(([name, level, cards, canGK], i) => ({
     id: `sample-${i + 1}`,
     name,
-    attrs: { overall, stamina, coordination, teamwork, leadership, shooting, dribbling, goalkeeping },
+    attrs: applyCards(level, cards),
     canGK,
+    cards,
   }));
 }
 
-/** By default, 10 of the 14 "showed up" so the demo is a 5v5. */
-export const SAMPLE_PRESENT = ['sample-1', 'sample-2', 'sample-3', 'sample-4', 'sample-5', 'sample-7', 'sample-8', 'sample-10', 'sample-11', 'sample-12'];
+/** 14 "showed up" in the demo so it shows the 5 · 5 · 4 waiting-team case. */
+export const SAMPLE_PRESENT = ROWS.map((_, i) => `sample-${i + 1}`);

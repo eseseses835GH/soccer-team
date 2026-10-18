@@ -28,11 +28,12 @@ export function presentPlayers(state: AppState) {
   return state.players.filter((p) => set.has(p.id));
 }
 
-/** True if the shown teams no longer match today's attendance / team count. */
+/** True if the teams on screen no longer match today's attendance or team size. */
 export function isResultStale(state: AppState): boolean {
   const r = state.result;
   if (!r) return false;
-  if (r.numTeams !== state.numTeams) return true;
+  if (r.teamSize !== state.teamSize) return true;
+  const inResult = new Set([...r.playerIds, ...r.subIds]);
   const present = new Set(state.presentIds);
-  return r.playerIds.length !== present.size || r.playerIds.some((id) => !present.has(id));
+  return inResult.size !== present.size || [...inResult].some((id) => !present.has(id));
 }
