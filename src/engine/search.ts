@@ -12,6 +12,8 @@ export interface SearchOptions {
   timeBudgetMs?: number;
   /** Local search: max number of restarts (deterministic stop). */
   maxRestarts?: number;
+  /** Explicit team sizes (default: as equal as possible). */
+  sizes?: number[];
   /** Injectable clock (tests). */
   now?: () => number;
 }
@@ -217,10 +219,11 @@ export function search(
     timeBudgetMs: sopts.timeBudgetMs ?? 250,
     maxRestarts: sopts.maxRestarts ?? 2000,
     now: sopts.now ?? nowDefault,
+    sizes: sopts.sizes as number[],
   };
   if (k < 1) throw new Error('need at least one team');
   if (players.length < k) throw new Error('not enough players');
-  const pr = buildProblem(players, k, options, constraints);
+  const pr = buildProblem(players, k, options, constraints, sopts.sizes);
   const pool = new Pool(opts.poolSize);
   const rng = createRng(sopts.seed);
   let method: SearchResult['method'];

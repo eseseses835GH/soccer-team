@@ -1,12 +1,12 @@
 export const ATTR_KEYS = [
   'overall',
   'stamina',
-  'coordination',
+  'passing',
+  'dribbling',
+  'shooting',
+  'defense',
   'teamwork',
   'leadership',
-  'shooting',
-  'dribbling',
-  'goalkeeping',
 ] as const;
 
 export type AttrKey = (typeof ATTR_KEYS)[number];
@@ -31,7 +31,7 @@ export interface EngineOptions {
   weights: Weights;
   /** A player with leadership >= threshold counts as a "leader". */
   leadershipThreshold: number;
-  /** Penalty per team missing a goalkeeper (when enough exist). */
+  /** Penalty per team missing a goalkeeper (when enough exist). 0 disables the rule. */
   gkPenalty: number;
   /** Penalty per team missing a leader (when enough exist). */
   leaderPenalty: number;
@@ -44,12 +44,12 @@ export interface EngineOptions {
 export const DEFAULT_WEIGHTS: Weights = {
   overall: 3,
   stamina: 1,
-  coordination: 1,
+  passing: 1,
+  dribbling: 1,
+  shooting: 1,
+  defense: 1,
   teamwork: 1,
   leadership: 1,
-  shooting: 1,
-  dribbling: 1,
-  goalkeeping: 1,
 };
 
 export const DEFAULT_OPTIONS: EngineOptions = {
@@ -76,8 +76,6 @@ export interface TeamStats {
   strength: number;
   goalkeepers: number;
   leaders: number;
-  /** Goalkeeping rating of the team's best keeper (declared keepers first). */
-  bestKeeper: number;
 }
 
 export interface Evaluation {

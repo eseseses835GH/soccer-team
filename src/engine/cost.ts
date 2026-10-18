@@ -12,7 +12,6 @@ import {
 import { teamSizes } from './sizes';
 
 const NA = ATTR_KEYS.length;
-const GK_IDX = ATTR_KEYS.indexOf('goalkeeping');
 
 /**
  * Pre-processed problem: flat numeric arrays so the hot loop in the search
@@ -42,8 +41,12 @@ export function buildProblem(
   k: number,
   options: EngineOptions,
   constraints: Constraints = { together: [], apart: [] },
+  sizes?: number[],
 ): Problem {
   const n = players.length;
+  if (sizes && (sizes.length !== k || sizes.reduce((a, b) => a + b, 0) !== n)) {
+    throw new Error('sizes must have k entries summing to the number of players');
+  }
   const vals = new Float64Array(n * NA);
   const canGK = new Uint8Array(n);
   const isLeader = new Uint8Array(n);
@@ -77,7 +80,7 @@ export function buildProblem(
     leaderCount: isLeader.reduce((s, v) => s + v, 0),
     together: mapPairs(constraints.together),
     apart: mapPairs(constraints.apart),
-    targetSizes: teamSizes(n, k),
+    targetSizes: sizes ? [...sizes].sort((a, b) => b - a) : teamSizes(n, k),
     groupMean,
     options,
   };
@@ -91,7 +94,6 @@ function clampRating(v: number | undefined): number {
 interface Aggregates {
   sizes: number[];
   sums: Float64Array; // k * NA
-  bestGK: Float64Array; // k
   gks: number[];
   leaders: number[];
 }
@@ -102,7 +104,6 @@ function aggregate(pr: Problem, asg: Assignment): Aggregates {
   const gks = new Array<number>(k).fill(0);
   const leaders = new Array<number>(k).fill(0);
   const sums = new Float64Array(k * NA);
-  const bestGK = new Float64Array(k);
   for (let i = 0; i < n; i++) {
     const t = asg[i];
     sizes[t]++;
@@ -111,13 +112,8 @@ function aggregate(pr: Problem, asg: Assignment): Aggregates {
     const row = i * NA;
     const off = t * NA;
     for (let a = 0; a < NA; a++) sums[off + a] += vals[row + a];
-    // The keeper's rating that matters is the team's best one (only one
-    // player stands in goal). Prefer declared goalkeepers.
-    const g = vals[row + GK_IDX] + (pr.canGK[i] ? 100 : 0);
-    if (g > bestGK[t]) bestGK[t] = g;
   }
-  for (let t = 0; t < k; t++) if (bestGK[t] >= 100) bestGK[t] -= 100;
-  return { sizes, sums, bestGK, gks, leaders };
+  return { sizes, sums, gks, leaders };
 }
 
 /**
@@ -127,8 +123,8 @@ function aggregate(pr: Problem, asg: Assignment): Aggregates {
  *
  * Comparing per-player averages (rather than raw sums) keeps odd splits
  * (6 vs 5) meaningful: it equals padding the short team with one "average"
- * phantom player. For goalkeeping we compare the best keeper of each team.
- * For two teams this is exactly the weighted gap between the teams.
+ * phantom player — which is exactly the pickup rule "the short team borrows
+ * one from the losing team". For two teams this is exactly the weighted gap between the teams.
  */
 function balanceCost(pr: Problem, ag: Aggregates): number {
   const { k, weights } = pr;
@@ -137,16 +133,10 @@ function balanceCost(pr: Problem, ag: Aggregates): number {
     const w = weights[a];
     if (w === 0) continue;
     let dev = 0;
-    if (a === GK_IDX) {
-      let mean = 0;
-      for (let t = 0; t < k; t++) mean += ag.bestGK[t] / k;
-      for (let t = 0; t < k; t++) dev += Math.abs(ag.bestGK[t] - mean);
-    } else {
-      const m = pr.groupMean[a];
-      for (let t = 0; t < k; t++) {
-        const avg = ag.sizes[t] ? ag.sums[t * NA + a] / ag.sizes[t] : 0;
-        dev += Math.abs(avg - m);
-      }
+    const m = pr.groupMean[a];
+    for (let t = 0; t < k; t++) {
+      const avg = ag.sizes[t] ? ag.sums[t * NA + a] / ag.sizes[t] : 0;
+      dev += Math.abs(avg - m);
     }
     total += w * dev;
   }
@@ -171,7 +161,7 @@ export function cost(pr: Problem, asg: Assignment): number {
   const o = pr.options;
   let c = balanceCost(pr, ag);
   c += o.sizePenalty * sizeDeviation(pr, ag.sizes);
-  c += o.gkPenalty * missingBeyondUnavoidable(ag.gks, pr.gkCount);
+  if (o.gkPenalty) c += o.gkPenalty * missingBeyondUnavoidable(ag.gks, pr.gkCount);
   c += o.leaderPenalty * missingBeyondUnavoidable(ag.leaders, pr.leaderCount);
   for (const [a, b] of pr.together) if (asg[a] !== asg[b]) c += o.constraintPenalty;
   for (const [a, b] of pr.apart) if (asg[a] === asg[b]) c += o.constraintPenalty;
@@ -190,8 +180,9 @@ export function evaluate(
   k: number,
   options: EngineOptions,
   constraints: Constraints = { together: [], apart: [] },
+  sizes?: number[],
 ): Evaluation {
-  const pr = buildProblem(players, k, options, constraints);
+  const pr = buildProblem(players, k, options, constraints, sizes);
   const ag = aggregate(pr, asg);
   const o = options;
   const teams: TeamStats[] = Array.from({ length: k }, (_, t) => {
@@ -201,7 +192,7 @@ export function evaluate(
       totals[key] = ag.sums[t * NA + a];
       strength += pr.weights[a] * ag.sums[t * NA + a];
     });
-    return { size: ag.sizes[t], totals, strength, goalkeepers: ag.gks[t], leaders: ag.leaders[t], bestKeeper: ag.bestGK[t] };
+    return { size: ag.sizes[t], totals, strength, goalkeepers: ag.gks[t], leaders: ag.leaders[t] };
   });
   const byId = (i: number) => players[i].id;
   const together = pr.together.filter(([a, b]) => asg[a] !== asg[b]).map(([a, b]) => [byId(a), byId(b)] as Pair);
@@ -225,4 +216,4 @@ export function evaluate(
 }
 
 // Exposed for tests / UI.
-export { GK_IDX, NA };
+export { NA };
