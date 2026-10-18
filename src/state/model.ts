@@ -22,14 +22,14 @@ export interface Player extends EnginePlayer {
 export type GkMode = 'rotate' | 'fixed';
 
 export const BIBS = [
-  { id: 'red', name: 'אדומים', color: 'var(--bib-red)' },
-  { id: 'blue', name: 'כחולים', color: 'var(--bib-blue)' },
-  { id: 'yellow', name: 'צהובים', color: 'var(--bib-yellow)' },
-  { id: 'green', name: 'ירוקים', color: 'var(--bib-green)' },
-  { id: 'orange', name: 'כתומים', color: 'var(--bib-orange)' },
-  { id: 'white', name: 'לבנים', color: 'var(--bib-white)' },
-  { id: 'black', name: 'שחורים', color: 'var(--bib-black)' },
-  { id: 'purple', name: 'סגולים', color: 'var(--bib-purple)' },
+  { id: 'red', emoji: '🔴', name: 'אדומים', color: 'var(--bib-red)' },
+  { id: 'blue', emoji: '🔵', name: 'כחולים', color: 'var(--bib-blue)' },
+  { id: 'yellow', emoji: '🟡', name: 'צהובים', color: 'var(--bib-yellow)' },
+  { id: 'green', emoji: '🟢', name: 'ירוקים', color: 'var(--bib-green)' },
+  { id: 'orange', emoji: '🟠', name: 'כתומים', color: 'var(--bib-orange)' },
+  { id: 'white', emoji: '⚪', name: 'לבנים', color: 'var(--bib-white)' },
+  { id: 'black', emoji: '⚫', name: 'שחורים', color: 'var(--bib-black)' },
+  { id: 'purple', emoji: '🟣', name: 'סגולים', color: 'var(--bib-purple)' },
 ] as const;
 export type BibId = (typeof BIBS)[number]['id'];
 const BIB_IDS = new Set<string>(BIBS.map((b) => b.id));
@@ -129,10 +129,16 @@ export function newId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export function teamLook(settings: Settings, t: number): { name: string; color: string } {
+export interface TeamLook {
+  name: string;
+  emoji: string;
+  color: string;
+}
+
+export function teamLook(settings: Settings, t: number): TeamLook {
   const id = settings.bibs[t];
   const bib = BIBS.find((b) => b.id === id);
-  return bib ? { name: bib.name, color: bib.color } : { name: `קבוצה ${t + 1}`, color: 'var(--bib-none)' };
+  return bib ? { name: bib.name, emoji: bib.emoji, color: bib.color } : { name: `קבוצה ${t + 1}`, emoji: '⚪', color: 'var(--bib-none)' };
 }
 
 const num = (v: unknown, lo: number, hi: number, dflt: number) => {

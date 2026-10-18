@@ -30,7 +30,7 @@ function getWorker(): Worker | null {
 
 /** Run the search off the main thread when possible, inline otherwise. */
 export async function balance(req: Omit<BalanceRequest, 'id'>): Promise<SearchResult> {
-  const runInline = () => search(req.players, req.k, req.options, req.constraints, { seed: req.seed });
+  const runInline = () => search(req.players, req.k, req.options, req.constraints, { seed: req.seed, sizes: req.sizes });
   const w = getWorker();
   if (!w) return runInline();
   const id = nextId++;

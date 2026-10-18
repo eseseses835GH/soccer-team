@@ -1,22 +1,41 @@
-import { TEAMS } from './i18n';
+import { goalsEvery } from './i18n';
 
-/** Right-to-left mark: pins direction of each line in WhatsApp even when a name is in Latin letters. */
+/** Right-to-left mark: pins the direction of each line in WhatsApp even when a name is in Latin letters. */
 const RLM = '‏';
 
 export interface ShareTeam {
+  name: string;
+  emoji: string;
   names: string[];
+  /** Keeper rotation (names), first starts in goal. */
+  keepers?: string[];
+  /** How many players this team borrows from the losing team. */
+  borrows?: number;
 }
 
-export function buildShareText(teams: ShareTeam[], score: number, date = new Date()): string {
+export interface ShareInput {
+  teams: ShareTeam[];
+  subs?: string[];
+  score: number;
+  gkSwitchGoals?: number;
+  date?: Date;
+}
+
+export function buildShareText({ teams, subs = [], score, gkSwitchGoals, date = new Date() }: ShareInput): string {
   const d = date.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
   const lines: string[] = [`${RLM}⚽ הכוחות להיום – ${d}`, ''];
-  teams.forEach((t, i) => {
-    const look = TEAMS[i] ?? { emoji: '⚪', name: `קבוצה ${i + 1}` };
-    lines.push(`${RLM}${look.emoji} *${look.name}* (${t.names.length})`);
+  teams.forEach((t) => {
+    const extra = t.borrows ? ` · משלימים ${t.borrows} מהמפסידה` : '';
+    lines.push(`${RLM}${t.emoji} *${t.name}* (${t.names.length}${extra})`);
     t.names.forEach((n, j) => lines.push(`${RLM}${j + 1}. ${n}${RLM}`));
+    if (t.keepers?.length) {
+      const every = gkSwitchGoals ? ` (מתחלפים ${goalsEvery(gkSwitchGoals)})` : '';
+      lines.push(`${RLM}🧤 בשער: ${t.keepers.join(' ← ')}${every}${RLM}`);
+    }
     lines.push('');
   });
-  lines.push(`${RLM}מאזן: ${score}/100`);
+  if (subs.length) lines.push(`${RLM}🔁 מחליפים: ${subs.join(', ')}${RLM}`, '');
+  lines.push(`${RLM}מדד איזון: ${score}/100`);
   return lines.join('\n');
 }
 
@@ -24,11 +43,11 @@ export function whatsappUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
-/** Native share sheet if available. Returns false if not supported or user cancelled. */
-export async function nativeShare(text: string): Promise<boolean> {
+/** Native share sheet if available. Returns false if not supported or cancelled. */
+export async function nativeShare(data: { text?: string; url?: string; title?: string }): Promise<boolean> {
   try {
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      await navigator.share({ text });
+      await navigator.share(data);
       return true;
     }
   } catch {
@@ -59,5 +78,21 @@ export async function copyText(text: string): Promise<boolean> {
     return ok;
   } catch {
     return false;
+  }
+}
+
+/** Save text as a file (backup / template). */
+export function downloadText(filename: string, text: string, type = 'text/plain'): void {
+  try {
+    const url = URL.createObjectURL(new Blob([text], { type: `${type};charset=utf-8` }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    /* ignore */
   }
 }

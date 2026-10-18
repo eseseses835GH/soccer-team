@@ -1,257 +1,411 @@
 import { useMemo, useState } from 'react';
-import { ATTR_KEYS, createRng, evaluate, pickReroll, randomSeed, type Player } from '../engine';
-import { ATTR_SHORT, TEAMS, playersCount } from '../i18n';
-import { engineOptions } from '../state/model';
-import { isResultStale, presentPlayers, useStore } from '../state/store';
+import { ATTR_KEYS, evaluate, randomSeed, scoreFromCost, suggestSwaps, type SwapSuggestion } from '../engine';
+import { ATTR_LABELS, goalsEvery } from '../i18n';
+import { startSession } from '../match/match';
+import { applyCards } from '../state/cards';
+import { lateJoin } from '../state/late';
+import { engineOptions, newId, teamLook, type AppState, type GameResult, type Player } from '../state/model';
+import { isResultStale, useStore } from '../state/store';
 import { buildShareText, copyText, nativeShare, whatsappUrl } from '../share';
-import { balance } from '../worker/balancer';
 import { useUi } from './App';
-import { EmptyState, ScoreMeter } from './components';
+import { CardBadges, Empty, LevelPicker, ScoreMeter, Sheet } from './components';
 import { Icon } from './icons';
+import { rerollTeams, splitTeams } from './split';
+
+type Sel = { kind: 'team'; i: number } | { kind: 'sub'; id: string } | null;
+
+function teamCounts(r: GameResult): number[] {
+  const c = new Array<number>(r.numTeams).fill(0);
+  r.assignment.forEach((t) => c[t]++);
+  return c;
+}
+
+/** Live evaluation of a result against current ratings and settings. */
+export function evaluateResult(state: AppState, r: GameResult, assignment = r.assignment) {
+  const byId = new Map(state.players.map((p) => [p.id, p]));
+  const players = r.playerIds.map((id) => byId.get(id)).filter((p): p is Player => !!p);
+  if (players.length !== r.playerIds.length) return null;
+  const counts = new Array<number>(r.numTeams).fill(0);
+  assignment.forEach((t) => counts[t]++);
+  return {
+    players,
+    ev: evaluate(players, assignment, r.numTeams, engineOptions(state.settings), state.constraints, [...counts].sort((a, b) => b - a)),
+  };
+}
+
+export function teamsForShare(state: AppState, r: GameResult, score: number) {
+  const byId = new Map(state.players.map((p) => [p.id, p]));
+  const counts = teamCounts(r);
+  const name = (id: string) => byId.get(id)?.name ?? '?';
+  return buildShareText({
+    teams: Array.from({ length: r.numTeams }, (_, t) => {
+      const look = teamLook(state.settings, t);
+      const order = r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t);
+      return {
+        name: look.name,
+        emoji: look.emoji,
+        names: order.map(name),
+        keepers: order.map(name),
+        borrows: t >= 2 && counts[t] < r.teamSize ? r.teamSize - counts[t] : 0,
+      };
+    }),
+    subs: r.subIds.map(name),
+    score,
+    gkSwitchGoals: state.settings.gkMode === 'rotate' ? state.settings.gkSwitchGoals : undefined,
+  });
+}
 
 export function TeamsScreen() {
   const { state, dispatch } = useStore();
   const { go, notify } = useUi();
-  const [selected, setSelected] = useState<number | null>(null);
+  const [sel, setSel] = useState<Sel>(null);
   const [busy, setBusy] = useState(false);
-  const result = state.result;
+  const [late, setLate] = useState(false);
+  const [suggestion, setSuggestion] = useState<SwapSuggestion | null>(null);
+  const r = state.result;
+  const data = useMemo(() => (r ? evaluateResult(state, r) : null), [state, r]);
 
-  const byId = useMemo(() => new Map(state.players.map((p) => [p.id, p])), [state.players]);
-  const players = useMemo(
-    () => (result ? result.playerIds.map((id) => byId.get(id)).filter((p): p is Player => !!p) : []),
-    [result, byId],
-  );
-  const options = engineOptions(state.settings);
-  const ev = useMemo(
-    () =>
-      result && players.length === result.playerIds.length
-        ? evaluate(players, result.assignment, result.numTeams, options, state.constraints)
-        : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [result, players, state.settings, state.constraints],
-  );
-
-  if (!result || !ev) {
+  if (!r || !data) {
     return (
-      <EmptyState icon="🎽" title="עוד לא חולקו קבוצות">
-        <p>מסמנים מי הגיע ולוחצים על ״חלוקה לקבוצות״.</p>
-        <button type="button" className="btn btn-primary" onClick={() => go('game')}>
-          למסך המשחק
+      <Empty icon="🎽" title="עוד לא חולקו קבוצות">
+        <button type="button" className="btn btn-primary" onClick={() => go('home')}>
+          למסך הראשי
         </button>
-      </EmptyState>
+      </Empty>
     );
   }
 
-  const k = result.numTeams;
-  const teams = Array.from({ length: k }, (_, t) =>
-    result.assignment
-      .map((team, i) => ({ team, i }))
-      .filter((x) => x.team === t)
-      .map((x) => ({ i: x.i, p: players[x.i] }))
-      .sort((a, b) => b.p.attrs.overall - a.p.attrs.overall),
-  );
-  const weightSum = ATTR_KEYS.reduce((s, a) => s + options.weights[a], 0) || 1;
+  const { players, ev } = data;
+  const byId = new Map(state.players.map((p) => [p.id, p]));
+  const k = r.numTeams;
+  const counts = teamCounts(r);
+  const indexOf = new Map(r.playerIds.map((id, i) => [id, i]));
   const stale = isResultStale(state);
-  const edited = result.assignment.some((t, i) => t !== result.generated[i]);
+  const edited = r.assignment.some((t, i) => t !== r.generated[i]);
+  const animKey = `${r.createdAt}-${r.shown.length}`;
   const nameOf = (id: string) => byId.get(id)?.name ?? '?';
+  const rotate = state.settings.gkMode === 'rotate';
 
-  const tap = (i: number) => {
-    if (selected === null) return setSelected(i);
-    if (selected === i) return setSelected(null);
-    if (result.assignment[selected] === result.assignment[i]) return setSelected(i);
-    const a = players[selected].name;
-    const b = players[i].name;
-    dispatch({ type: 'swap', i: selected, j: i });
-    setSelected(null);
-    notify(`${a} ⇄ ${b}`);
+  const tapMember = (i: number) => {
+    if (sel?.kind === 'sub') {
+      const a = nameOf(sel.id);
+      dispatch({ type: 'swapSub', subId: sel.id, i });
+      setSel(null);
+      return notify(`${a} נכנס במקום ${players[i].name}`);
+    }
+    if (!sel) return setSel({ kind: 'team', i });
+    if (sel.i === i) return setSel(null);
+    if (r.assignment[sel.i] === r.assignment[i]) return setSel({ kind: 'team', i });
+    dispatch({ type: 'swap', i: sel.i, j: i });
+    notify(`${players[sel.i].name} ⇄ ${players[i].name}`);
+    setSel(null);
+  };
+  const tapSub = (id: string) => {
+    if (sel?.kind === 'team') {
+      const out = players[sel.i].name;
+      dispatch({ type: 'swapSub', subId: id, i: sel.i });
+      setSel(null);
+      return notify(`${nameOf(id)} נכנס במקום ${out}`);
+    }
+    setSel(sel?.kind === 'sub' && sel.id === id ? null : { kind: 'sub', id });
   };
 
-  const reroll = () => {
-    setSelected(null);
-    if (result.pool.length < 2) return notify('אין חלוקה אחרת מאוזנת באותה מידה');
-    const next = pickReroll(result.pool, result.shown, createRng(randomSeed()));
-    dispatch({ type: 'showSolution', assignment: next.assignment });
-  };
-
-  const regenerate = async () => {
-    const present = presentPlayers(state);
-    if (present.length < state.numTeams * 2) return go('game');
+  const reroll = async () => {
+    setSel(null);
     setBusy(true);
     try {
-      const res = await balance({ players: present, k: state.numTeams, options, constraints: state.constraints, seed: randomSeed() });
-      dispatch({ type: 'setResult', playerIds: present.map((p) => p.id), numTeams: state.numTeams, best: res.best, pool: res.pool });
-      setSelected(null);
+      if ((await rerollTeams(state, dispatch)) === 'none') notify('אין חלוקה אחרת מאוזנת באותה מידה');
     } finally {
       setBusy(false);
     }
   };
 
-  const shareText = () => buildShareText(teams.map((t) => ({ names: t.map((x) => x.p.name) })), ev.score);
-  const share = async () => {
-    const text = shareText();
-    if (await nativeShare(text)) return;
-    window.open(whatsappUrl(text), '_blank', 'noopener');
+  const resplit = async () => {
+    setBusy(true);
+    try {
+      if (!(await splitTeams(state, dispatch))) go('home');
+      setSel(null);
+    } finally {
+      setBusy(false);
+    }
   };
-  const copy = async () => notify((await copyText(shareText())) ? 'הועתק ✔' : 'ההעתקה נכשלה');
 
-  const unavoidableGK = ev.teams.filter((t) => t.goalkeepers === 0).length;
+  const text = () => teamsForShare(state, r, ev.score);
+  const share = async () => {
+    const t = text();
+    if (await nativeShare({ text: t })) return;
+    window.open(whatsappUrl(t), '_blank', 'noopener');
+  };
+  const copy = async () => notify((await copyText(text())) ? 'הועתק' : 'ההעתקה נכשלה');
+
+  const startMatch = () => {
+    if (!state.match) dispatch({ type: 'setMatch', match: startSession(k), now: Date.now() });
+    go('match');
+  };
+
+  const onLate = (player: Player, isNew: boolean) => {
+    const j = lateJoin(r, player.id, randomSeed());
+    dispatch({ type: 'lateJoin', player: isNew ? player : undefined, id: player.id, result: j.result, now: Date.now() });
+    setLate(false);
+    const look = j.team !== null ? teamLook(state.settings, j.team) : null;
+    if (j.outcome === 'bench') notify(`${player.name} מחכה בחוץ כמחליף`);
+    else if (j.outcome === 'newTeam') notify(`נפתחה קבוצה חדשה: ה${look!.name}`);
+    else if (j.outcome === 'waiting') notify(`${player.name} הצטרף ל${look!.name}`);
+    else {
+      notify(`${player.name} השלים את ה${look!.name}`);
+      const roster = isNew ? [...state.players, player] : state.players;
+      const map = new Map(roster.map((p) => [p.id, p]));
+      const ps = j.result.playerIds.map((id) => map.get(id)!);
+      const c = new Array<number>(j.result.numTeams).fill(0);
+      j.result.assignment.forEach((t) => c[t]++);
+      const s = suggestSwaps(ps, j.result.assignment, j.result.numTeams, engineOptions(state.settings), state.constraints, c.sort((a, b) => b - a));
+      if (s) setSuggestion(s);
+    }
+  };
+
+  const violations = [
+    ...ev.violations.together.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים לשחק יחד`),
+    ...ev.violations.apart.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים להיות בנפרד`),
+    ...(ev.penalties.goalkeeper > 0 ? ['יש קבוצה בלי שוער קבוע, למרות שיש מספיק'] : []),
+  ];
 
   return (
-    <section aria-labelledby="teams-h">
-      <div className="section-head">
-        <h2 id="teams-h">הקבוצות</h2>
-        <span className="muted">{playersCount(players.length)}</span>
-      </div>
-
+    <section className="teams" aria-label="הקבוצות">
       {stale && (
-        <div className="banner" role="status">
-          <span>הנוכחות או מספר הקבוצות השתנו מאז החלוקה.</span>
-          <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={regenerate}>
+        <div className="notice">
+          <span>הנוכחות או גודל הקבוצה השתנו מאז החלוקה.</span>
+          <button type="button" className="btn btn-small" disabled={busy} onClick={resplit}>
             חלוקה מחדש
           </button>
         </div>
       )}
 
-      <ScoreMeter score={ev.score} />
+      <ScoreMeter score={ev.score} animateKey={animKey} />
 
-      {(ev.violations.together.length > 0 || ev.violations.apart.length > 0 || ev.penalties.goalkeeper > 0 || ev.penalties.leadership > 0) && (
-        <ul className="warnings" role="status">
-          {ev.violations.together.map(([a, b]) => (
-            <li key={`t${a}${b}`}>
-              ⚠️ {nameOf(a)} ו{nameOf(b)} אמורים לשחק יחד
-            </li>
+      {violations.length > 0 && (
+        <ul className="notice list" role="status">
+          {violations.map((v) => (
+            <li key={v}>{v}</li>
           ))}
-          {ev.violations.apart.map(([a, b]) => (
-            <li key={`a${a}${b}`}>
-              ⚠️ {nameOf(a)} ו{nameOf(b)} אמורים להיות בנפרד
-            </li>
-          ))}
-          {ev.penalties.goalkeeper > 0 && <li>⚠️ יש קבוצה בלי שוער, למרות שיש מספיק שוערים</li>}
-          {ev.penalties.leadership > 0 && <li>⚠️ יש קבוצה בלי מנהיג, למרות שיש מספיק</li>}
         </ul>
       )}
 
-      <p className="hint swap-hint">
-        {selected === null ? 'להחלפה: נוגעים בשחקן, ואז בשחקן מקבוצה אחרת.' : `נבחר: ${players[selected].name} · בחרו שחקן מקבוצה אחרת`}
+      <p className="hint center" aria-live="polite">
+        {sel === null
+          ? 'רוצים לשנות? נוגעים בשחקן ואז בשחקן מקבוצה אחרת'
+          : sel.kind === 'team'
+            ? `${players[sel.i].name} נבחר · עכשיו שחקן מקבוצה אחרת`
+            : `${nameOf(sel.id)} נבחר · במקום מי הוא נכנס?`}
       </p>
 
-      <div className={`teams-grid teams-${k}`}>
-        {teams.map((members, t) => {
-          const look = TEAMS[t];
-          const st = ev.teams[t];
-          const avg = st.size ? st.strength / (st.size * weightSum) : 0;
+      <div className="team-grid" key={animKey}>
+        {Array.from({ length: k }, (_, t) => {
+          const look = teamLook(state.settings, t);
+          const order = (r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t)).filter(
+            (id) => r.assignment[indexOf.get(id) ?? -1] === t,
+          );
+          const short = counts[t] < r.teamSize && t >= 2;
           return (
-            <article key={t} className={`team-card ${look.cls}`} aria-label={`קבוצת ה${look.name}`}>
+            <article key={t} className={`team ${t >= 2 ? 'waiting' : ''}`} style={{ '--team': look.color } as React.CSSProperties} aria-label={`ה${look.name}`}>
               <header>
-                <h3>
-                  <span className="team-dot" aria-hidden="true" />
-                  {look.name}
-                </h3>
-                <span className="team-meta">
-                  {st.size} · ממוצע {avg.toFixed(1)}
+                <h2>{look.name}</h2>
+                <span className="team-sub">
+                  {t < 2 ? 'פותחים' : `בתור #${t - 1}`}
+                  {short && ` · משלימים ${r.teamSize - counts[t]}`}
                 </span>
               </header>
-              <ul>
-                {members.map(({ i, p }) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      className={`member ${selected === i ? 'selected' : ''} ${
-                        selected !== null && result.assignment[selected] !== t ? 'target' : ''
-                      }`}
-                      aria-pressed={selected === i}
-                      onClick={() => tap(i)}
-                    >
-                      <span className="player-name">{p.name}</span>
-                      {p.canGK && (
-                        <span className="mini" title="שוער">
-                          🧤
+              <ol>
+                {order.map((id, slot) => {
+                  const i = indexOf.get(id)!;
+                  const p = byId.get(id)!;
+                  const isSel = sel?.kind === 'team' && sel.i === i;
+                  const isTarget = sel !== null && !(sel.kind === 'team' && r.assignment[sel.i] === t);
+                  return (
+                    <li key={id} style={{ '--i': slot + t * 2 } as React.CSSProperties}>
+                      <button type="button" className={`member ${isSel ? 'sel' : ''} ${isTarget ? 'target' : ''}`} aria-pressed={isSel} onClick={() => tapMember(i)}>
+                        <span className="slot" aria-label={slot === 0 ? 'מתחיל בשער' : undefined}>
+                          {slot === 0 && (rotate || p.canGK) ? '🧤' : rotate ? slot + 1 : ''}
                         </span>
-                      )}
-                      {p.attrs.leadership >= options.leadershipThreshold && (
-                        <span className="mini" title="מנהיג">
-                          ©️
-                        </span>
-                      )}
-                      <span className="rating-badge small">{p.attrs.overall}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                        <span className="name">{p.name}</span>
+                        <CardBadges cards={p.cards} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
             </article>
           );
         })}
       </div>
+      <p className="hint center small">
+        {rotate ? `🧤 סדר השוערים לפי המספרים · מתחלפים ${goalsEvery(state.settings.gkSwitchGoals)}` : '🧤 השוער הקבוע של כל קבוצה'}
+      </p>
 
-      <div className="actions">
-        <button type="button" className="btn btn-outline btn-big" onClick={reroll}>
-          <Icon name="dice" /> הגרלה מחדש
+      {r.subIds.length > 0 && (
+        <div className="bench">
+          <span className="label">מחליפים</span>
+          {r.subIds.map((id) => (
+            <button key={id} type="button" className={`member chip ${sel?.kind === 'sub' && sel.id === id ? 'sel' : ''}`} onClick={() => tapSub(id)}>
+              {nameOf(id)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="dock">
+        <button type="button" className="btn btn-hero btn-block" onClick={startMatch}>
+          <Icon name="timer" /> {state.match ? 'חזרה למשחק' : 'התחלת משחק'}
         </button>
-        <button type="button" className="btn btn-whatsapp btn-big" onClick={share}>
-          <Icon name="share" /> שיתוף
-        </button>
-        <a className="btn btn-secondary" href={whatsappUrl(shareText())} target="_blank" rel="noopener noreferrer">
-          וואטסאפ
-        </a>
-        <button type="button" className="btn btn-secondary" onClick={copy}>
-          <Icon name="copy" size={18} /> העתקה
-        </button>
-        {edited && (
-          <button type="button" className="btn btn-secondary" onClick={() => dispatch({ type: 'resetSwaps' })}>
-            <Icon name="undo" size={18} /> ביטול החלפות
+        <div className="row-2">
+          <button type="button" className="btn btn-wa" onClick={share}>
+            <Icon name="share" size={20} /> שיתוף
           </button>
-        )}
+          <button type="button" className="btn btn-quiet" onClick={reroll} disabled={busy}>
+            <Icon name="dice" size={20} /> הגרלה מחדש
+          </button>
+        </div>
+        <div className="row-links">
+          <button type="button" className="text-btn" onClick={() => setLate(true)}>
+            <Icon name="plus" size={18} /> הגיע מאוחר
+          </button>
+          <button type="button" className="text-btn" onClick={copy}>
+            <Icon name="copy" size={18} /> העתקה
+          </button>
+          {edited && (
+            <button type="button" className="text-btn" onClick={() => dispatch({ type: 'resetSwaps' })}>
+              <Icon name="undo" size={18} /> ביטול החלפות
+            </button>
+          )}
+        </div>
       </div>
 
-      <details className="card totals">
-        <summary>השוואת תכונות (סכומים)</summary>
+      <details className="fold">
+        <summary>פירוט האיזון</summary>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th scope="col">תכונה</th>
-                {teams.map((_, t) => (
+                <th scope="col">ממוצע</th>
+                {Array.from({ length: k }, (_, t) => (
                   <th scope="col" key={t}>
-                    {TEAMS[t].emoji} {TEAMS[t].name}
+                    {teamLook(state.settings, t).name}
                   </th>
                 ))}
-                <th scope="col">פער</th>
               </tr>
             </thead>
             <tbody>
-              {ATTR_KEYS.map((a) => {
-                const vals = ev.teams.map((s) => (a === 'goalkeeping' ? s.bestKeeper : s.totals[a]));
-                const gap = Math.max(...vals) - Math.min(...vals);
-                return (
-                  <tr key={a}>
-                    <th scope="row">{ATTR_SHORT[a]}</th>
-                    {vals.map((v, t) => (
-                      <td key={t}>{v}</td>
-                    ))}
-                    <td className="gap">{gap}</td>
-                  </tr>
-                );
-              })}
-              <tr>
-                <th scope="row">שוערים</th>
-                {ev.teams.map((s, t) => (
-                  <td key={t}>{s.goalkeepers}</td>
-                ))}
-                <td />
-              </tr>
-              <tr>
-                <th scope="row">מנהיגים</th>
-                {ev.teams.map((s, t) => (
-                  <td key={t}>{s.leaders}</td>
-                ))}
-                <td />
-              </tr>
+              {ATTR_KEYS.map((a) => (
+                <tr key={a}>
+                  <th scope="row">{ATTR_LABELS[a]}</th>
+                  {ev.teams.map((s, t) => (
+                    <td key={t}>{s.size ? (s.totals[a] / s.size).toFixed(1) : '–'}</td>
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        <p className="hint">* בשורת ״שוער״ מוצג דירוג השוער הטוב בכל קבוצה, כי רק אחד עומד בשער.</p>
-        {unavoidableGK > 0 && ev.penalties.goalkeeper === 0 && <p className="hint">אין מספיק שוערים לכל הקבוצות.</p>}
+        <p className="hint small">משווים ממוצע לשחקן, כדי שקבוצה קצרה שמשלימה מהמפסידה תהיה הוגנת.</p>
       </details>
+
+      {late && <LateSheet onClose={() => setLate(false)} onPick={onLate} />}
+      {suggestion && (
+        <SuggestSheet
+          suggestion={suggestion}
+          names={r.playerIds}
+          nameOf={nameOf}
+          onClose={() => setSuggestion(null)}
+          onApply={() => {
+            dispatch({ type: 'applyAssignment', assignment: suggestion.assignment, swaps: suggestion.swaps });
+            setSuggestion(null);
+            notify('בוצע');
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function LateSheet({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, isNew: boolean) => void }) {
+  const { state } = useStore();
+  const [name, setName] = useState('');
+  const [level, setLevel] = useState(5);
+  const inGame = new Set([...(state.result?.playerIds ?? []), ...(state.result?.subIds ?? [])]);
+  const others = state.players.filter((p) => !inGame.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  const taken = state.players.some((p) => p.name.trim() === name.trim());
+  return (
+    <Sheet title="מי הגיע?" onClose={onClose}>
+      <p className="lead">הוא מצטרף לקבוצה שבחוץ או מחכה כמחליף. לא מערבבים את כולם מחדש.</p>
+      {others.length > 0 && (
+        <ul className="pick-list">
+          {others.map((p) => (
+            <li key={p.id}>
+              <button type="button" onClick={() => onPick(p, false)}>
+                <span className="name">{p.name}</span>
+                <CardBadges cards={p.cards} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="late-new"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!name.trim() || taken) return;
+          onPick({ id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [] }, true);
+        }}
+      >
+        <label className="label" htmlFor="late-name">
+          מישהו חדש
+        </label>
+        <input id="late-name" className="input" placeholder="שם" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
+        {taken && <p className="field-error">כבר יש שחקן בשם הזה, בחרו אותו מהרשימה</p>}
+        <span className="label">רמה</span>
+        <LevelPicker value={level} onChange={setLevel} />
+        <button type="submit" className="btn btn-primary btn-block" disabled={!name.trim() || taken}>
+          הצטרף
+        </button>
+      </form>
+    </Sheet>
+  );
+}
+
+function SuggestSheet({
+  suggestion,
+  names,
+  nameOf,
+  onClose,
+  onApply,
+}: {
+  suggestion: SwapSuggestion;
+  names: string[];
+  nameOf: (id: string) => string;
+  onClose: () => void;
+  onApply: () => void;
+}) {
+  const before = scoreFromCost(suggestion.before);
+  const after = scoreFromCost(suggestion.after);
+  return (
+    <Sheet title="הקבוצה שבחוץ התמלאה" onClose={onClose}>
+      <p className="lead">
+        אפשר לשפר את האיזון מ-<strong>{before}</strong> ל-<strong>{after}</strong> עם {suggestion.swaps.length === 1 ? 'החלפה אחת' : 'שתי החלפות'}:
+      </p>
+      <ul className="swap-list">
+        {suggestion.swaps.map(([i, j]) => (
+          <li key={`${i}-${j}`}>
+            {nameOf(names[i])} ⇄ {nameOf(names[j])}
+          </li>
+        ))}
+      </ul>
+      <div className="stack">
+        <button type="button" className="btn btn-primary btn-block" onClick={onApply}>
+          להחליף
+        </button>
+        <button type="button" className="btn btn-quiet btn-block" onClick={onClose}>
+          להשאיר ככה
+        </button>
+      </div>
+    </Sheet>
   );
 }

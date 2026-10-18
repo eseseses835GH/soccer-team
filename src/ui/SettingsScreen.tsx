@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { ATTR_KEYS, type Constraints } from '../engine';
 import { ATTR_LABELS } from '../i18n';
+import { IMPORT_HASH, encodeBackup, makeBackup } from '../state/io';
+import { BIBS, type BibId } from '../state/model';
 import { useStore } from '../state/store';
+import { copyText, downloadText, nativeShare } from '../share';
 import { useUi } from './App';
-import { RatingSlider } from './components';
+import { RatingSlider, Segmented, Stepper } from './components';
+import { Icon } from './icons';
 
 export function SettingsScreen() {
   const { state, dispatch } = useStore();
@@ -11,43 +15,118 @@ export function SettingsScreen() {
   const { settings, constraints, players } = state;
   const [a, setA] = useState('');
   const [b, setB] = useState('');
-  const [kind, setKind] = useState<keyof Constraints>('together');
+  const [kind, setKind] = useState<keyof Constraints>('apart');
   const [confirmClear, setConfirmClear] = useState(false);
+  const set = (patch: Partial<typeof settings>) => dispatch({ type: 'setSettings', settings: { ...settings, ...patch } });
 
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? '?';
   const sorted = [...players].sort((x, y) => x.name.localeCompare(y.name, 'he'));
 
+  const toggleBib = (id: BibId) => {
+    const has = settings.bibs.includes(id);
+    if (has && settings.bibs.length <= 2) return notify('צריך לפחות שני צבעים');
+    set({ bibs: has ? settings.bibs.filter((x) => x !== id) : [...settings.bibs, id] });
+  };
+
   const addPair = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!a || !b) return notify('בחרו שני שחקנים');
-    if (a === b) return notify('צריך שני שחקנים שונים');
+    if (!a || !b || a === b) return notify('בחרו שני שחקנים שונים');
     dispatch({ type: 'addConstraint', kind, pair: [a, b] });
     setA('');
     setB('');
-    notify('האילוץ נוסף');
+  };
+
+  const backup = () => makeBackup(players, constraints, settings);
+  const sendLink = async () => {
+    const url = `${location.origin}${location.pathname}${IMPORT_HASH}${await encodeBackup(backup())}`;
+    if (await nativeShare({ title: 'הסגל של כוחות', url })) return;
+    notify((await copyText(url)) ? 'הקישור הועתק' : 'ההעתקה נכשלה');
   };
 
   return (
-    <section aria-labelledby="settings-h">
-      <div className="section-head">
-        <h2 id="settings-h">הגדרות</h2>
+    <section className="settings" aria-label="הגדרות">
+      <div className="group">
+        <h2>שוערים</h2>
+        <Segmented
+          label="שוערים"
+          value={settings.gkMode}
+          onChange={(gkMode) => set({ gkMode })}
+          options={[
+            { value: 'rotate', label: 'מתחלפים' },
+            { value: 'fixed', label: 'שוער קבוע' },
+          ]}
+        />
+        {settings.gkMode === 'rotate' ? (
+          <>
+            <p className="hint">כל קבוצה מקבלת סדר שוערים מוגרל. מתחלפים לפי מספר הגולים שספגו.</p>
+            <div className="field-row">
+              <span>מתחלפים כל</span>
+              <Segmented
+                label="מתחלפים כל"
+                value={settings.gkSwitchGoals}
+                onChange={(gkSwitchGoals) => set({ gkSwitchGoals })}
+                options={[
+                  { value: 1, label: 'גול' },
+                  { value: 2, label: '2 גולים' },
+                  { value: 3, label: '3' },
+                ]}
+              />
+            </div>
+          </>
+        ) : (
+          <p className="hint">מסמנים בכרטיס השחקן ״שוער קבוע״, ואם יש מספיק, כל קבוצה מקבלת אחד.</p>
+        )}
       </div>
 
-      <div className="card">
-        <h3>אילוצים</h3>
-        <p className="hint">״יחד״ – תמיד באותה קבוצה (למשל מגיעים ביחד). ״בנפרד״ – אף פעם לא באותה קבוצה.</p>
+      <div className="group">
+        <h2>משחק</h2>
+        <div className="field-row">
+          <span>אורך משחק</span>
+          <Stepper label="אורך משחק בדקות" value={settings.matchMinutes} min={1} max={60} onChange={(matchMinutes) => set({ matchMinutes })} suffix="דק׳" />
+        </div>
+      </div>
+
+      <div className="group">
+        <h2>גופיות</h2>
+        <p className="hint">מסמנים את הצבעים שיש לכם. הקבוצות מקבלות אותם לפי הסדר שסימנתם.</p>
+        <div className="bibs">
+          {BIBS.map((bib) => {
+            const idx = settings.bibs.indexOf(bib.id);
+            return (
+              <button
+                key={bib.id}
+                type="button"
+                className={`bib ${idx >= 0 ? 'on' : ''}`}
+                aria-pressed={idx >= 0}
+                onClick={() => toggleBib(bib.id)}
+                style={{ '--team': bib.color } as React.CSSProperties}
+              >
+                <span className="swatch" aria-hidden="true" />
+                {bib.name}
+                {idx >= 0 && <span className="order">{idx + 1}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="group">
+        <h2>זוגות</h2>
+        <p className="hint">״בנפרד״ – אף פעם לא באותה קבוצה (למשל שני האחים). ״יחד״ – תמיד ביחד (למשל באים באותו אוטו).</p>
         {players.length < 2 ? (
-          <p className="muted">צריך לפחות שני שחקנים כדי להוסיף אילוץ.</p>
+          <p className="muted">צריך לפחות שני שחקנים.</p>
         ) : (
           <form className="pair-form" onSubmit={addPair}>
-            <div className="segmented" role="radiogroup" aria-label="סוג אילוץ">
-              {(['together', 'apart'] as const).map((k) => (
-                <button key={k} type="button" role="radio" aria-checked={kind === k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
-                  {k === 'together' ? '🤝 יחד' : '↔️ בנפרד'}
-                </button>
-              ))}
-            </div>
-            <div className="row">
+            <Segmented
+              label="סוג"
+              value={kind}
+              onChange={setKind}
+              options={[
+                { value: 'apart', label: 'בנפרד' },
+                { value: 'together', label: 'יחד' },
+              ]}
+            />
+            <div className="row-2">
               <select className="input" aria-label="שחקן ראשון" value={a} onChange={(e) => setA(e.target.value)}>
                 <option value="">שחקן…</option>
                 {sorted.map((p) => (
@@ -67,25 +146,22 @@ export function SettingsScreen() {
                   ))}
               </select>
             </div>
-            <button type="submit" className="btn btn-primary btn-block">
-              הוספת אילוץ
+            <button type="submit" className="btn btn-quiet btn-block">
+              הוספת זוג
             </button>
           </form>
         )}
-        {(['together', 'apart'] as const).map((k) =>
+        {(['apart', 'together'] as const).map((k) =>
           constraints[k].length ? (
-            <ul key={k} className="pair-list" aria-label={k === 'together' ? 'יחד' : 'בנפרד'}>
+            <ul key={k} className="pairs">
               {constraints[k].map(([x, y], i) => (
                 <li key={`${x}-${y}`}>
                   <span>
-                    {k === 'together' ? '🤝' : '↔️'} {nameOf(x)} {k === 'together' ? 'עם' : 'בלי'} {nameOf(y)}
+                    {nameOf(x)} {k === 'together' ? 'יחד עם' : 'בנפרד מ'}
+                    {k === 'together' ? ' ' : ''}
+                    {nameOf(y)}
                   </span>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label={`הסרת האילוץ ${nameOf(x)} ו${nameOf(y)}`}
-                    onClick={() => dispatch({ type: 'removeConstraint', kind: k, index: i })}
-                  >
+                  <button type="button" className="icon-btn" aria-label={`הסרה: ${nameOf(x)} ו${nameOf(y)}`} onClick={() => dispatch({ type: 'removeConstraint', kind: k, index: i })}>
                     ✕
                   </button>
                 </li>
@@ -95,8 +171,27 @@ export function SettingsScreen() {
         )}
       </div>
 
-      <div className="card">
-        <h3>משקל התכונות באיזון</h3>
+      <div className="group">
+        <h2>גיבוי ושיתוף הסגל</h2>
+        <p className="hint">הכול נשמר רק בטלפון הזה. כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים.</p>
+        <div className="stack">
+          <button type="button" className="btn btn-quiet btn-block" disabled={!players.length} onClick={sendLink}>
+            <Icon name="link" size={20} /> שליחת קישור למארגן נוסף
+          </button>
+          <button
+            type="button"
+            className="btn btn-quiet btn-block"
+            disabled={!players.length}
+            onClick={() => downloadText(`kochot-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(backup(), null, 1), 'application/json')}
+          >
+            <Icon name="download" size={20} /> הורדת קובץ גיבוי
+          </button>
+        </div>
+        <p className="hint small">שחזור מקובץ: במסך השחקנים, ״ייבוא רשימה״.</p>
+      </div>
+
+      <details className="group fold">
+        <summary>מתקדם: משקלים באיזון</summary>
         <p className="hint">כמה כל תכונה חשובה כשמשווים בין הקבוצות. 0 = להתעלם.</p>
         <div className="sliders">
           {ATTR_KEYS.map((k) => (
@@ -107,34 +202,21 @@ export function SettingsScreen() {
               max={5}
               step={0.5}
               value={settings.weights[k]}
-              onChange={(v) => dispatch({ type: 'setSettings', settings: { ...settings, weights: { ...settings.weights, [k]: v } } })}
+              onChange={(v) => set({ weights: { ...settings.weights, [k]: v } })}
             />
           ))}
         </div>
-        <h3>מנהיגות</h3>
-        <p className="hint">שחקן עם מנהיגות מהרמה הזו ומעלה נחשב ״מנהיג״. כל קבוצה תקבל מנהיג אם אפשר.</p>
-        <RatingSlider
-          label="סף מנהיג"
-          value={settings.leadershipThreshold}
-          onChange={(v) => dispatch({ type: 'setSettings', settings: { ...settings, leadershipThreshold: v } })}
-        />
-        <button type="button" className="btn btn-secondary btn-block" onClick={() => dispatch({ type: 'resetSettings' })}>
-          איפוס לברירת המחדל
+        <RatingSlider label="סף ״מנהיג״" value={settings.leadershipThreshold} onChange={(leadershipThreshold) => set({ leadershipThreshold })} />
+        <p className="hint small">כל קבוצה תקבל מנהיג (מנהיגות מהרמה הזו ומעלה), אם יש מספיק.</p>
+        <button type="button" className="btn btn-quiet btn-block" onClick={() => dispatch({ type: 'resetWeights' })}>
+          חזרה לברירת המחדל
         </button>
-      </div>
+      </details>
 
-      <div className="card">
-        <h3>נתונים</h3>
-        <p className="hint">הכול נשמר רק בדפדפן הזה, בלי הרשמה ובלי שרת.</p>
+      <div className="group">
+        <h2>נתונים</h2>
         <div className="stack">
-          <button
-            type="button"
-            className="btn btn-secondary btn-block"
-            onClick={() => {
-              dispatch({ type: 'loadSample' });
-              notify('סגל לדוגמה נטען');
-            }}
-          >
+          <button type="button" className="btn btn-quiet btn-block" onClick={() => dispatch({ type: 'loadSample', now: Date.now() })}>
             טעינת סגל לדוגמה
           </button>
           {confirmClear ? (
@@ -144,25 +226,17 @@ export function SettingsScreen() {
               onClick={() => {
                 dispatch({ type: 'clearAll' });
                 setConfirmClear(false);
-                notify('כל הנתונים נמחקו');
+                notify('הכול נמחק');
               }}
             >
               בטוח? למחוק הכול
             </button>
           ) : (
-            <button type="button" className="btn btn-ghost-danger btn-block" onClick={() => setConfirmClear(true)}>
+            <button type="button" className="btn btn-quiet danger btn-block" onClick={() => setConfirmClear(true)}>
               מחיקת כל הנתונים
             </button>
           )}
         </div>
-      </div>
-
-      <div className="card about">
-        <h3>איך זה עובד?</h3>
-        <p>
-          כל שחקן הוא אוסף דירוגים. המערכת בודקת את כל החלוקות האפשריות (או מחפשת חכם כשיש הרבה שחקנים) ובוחרת את
-          זו שבה הממוצעים של הקבוצות הכי קרובים, תוך דאגה לשוער ולמנהיג בכל קבוצה ולאילוצים שהגדרתם.
-        </p>
       </div>
     </section>
   );

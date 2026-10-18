@@ -1,5 +1,5 @@
 // Visual smoke test: drives the built app at a 390px mobile viewport and saves screenshots.
-// Usage: npm run build && npx vite preview --port 4173 & node scripts/screenshots.mjs [outDir]
+// Usage: npm run build && npx vite preview --port 4173 & npm run screenshots -- [outDir]
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
@@ -23,44 +23,57 @@ for (const scheme of ['light', 'dark']) {
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${scheme}: ${e.message}`));
-  page.on('console', (m) => m.type() === 'error' && errors.push(`${scheme} console: ${m.text()}`));
-  const shot = (name) => page.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: true });
+  page.on('console', (m) => m.type() === 'error' && !/fonts\.g/.test(m.text()) && errors.push(`${scheme} console: ${m.text()}`));
+  const shot = async (name, full = false) => {
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: full });
+  };
+  const checkLayout = async (where) => {
+    const sw = await page.evaluate(() => document.documentElement.scrollWidth);
+    if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${where}: ${sw}px`);
+  };
 
   await page.goto(base);
   await shot('01-empty');
-  await page.getByRole('button', { name: 'טעינת סגל לדוגמה' }).first().click();
-  await shot('02-players');
+  await page.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await shot('02-home');
+  await shot('02b-home-full', true);
+  await checkLayout('home');
+  await page.getByRole('button', { name: 'השחקנים' }).click();
+  await shot('03-players');
+  await checkLayout('players');
   await page.getByRole('button', { name: /אבי/ }).click();
-  await shot('03-edit-sheet');
+  await shot('04-player-sheet');
   await page.getByRole('button', { name: 'סגירה' }).click();
-  await page.getByRole('navigation').getByRole('button', { name: /המשחק/ }).click();
-  await shot('04-game');
-  await page.getByRole('button', { name: /חלוקה לקבוצות/ }).click();
-  await page.waitForSelector('.team-card');
+  await page.getByRole('button', { name: /^חזרה$/ }).click();
+  await page.getByRole('button', { name: 'עושים כוחות' }).click();
+  await page.waitForSelector('.team');
   await shot('05-teams');
-  const members = page.locator('.member');
-  await members.first().click();
+  await shot('05b-teams-full', true);
+  await checkLayout('teams');
+  await page.locator('.team').first().locator('.member').nth(1).click();
   await shot('06-swap-selected');
-  await page.locator('.team-card').nth(1).locator('.member').first().click();
-  await page.locator('details.totals summary').click();
-  await shot('07-teams-swapped-totals');
-  await page.getByRole('button', { name: /הגרלה מחדש/ }).click();
-  await shot('08-reroll');
-  await page.getByRole('navigation').getByRole('button', { name: /המשחק/ }).click();
-  await page.getByRole('button', { name: 'הוסף', exact: true }).click();
-  await page.getByRole('button', { name: /חלוקה לקבוצות/ }).click();
-  await page.waitForSelector('.teams-3');
-  await shot('09-three-teams');
-  await page.getByRole('navigation').getByRole('button', { name: /הגדרות/ }).click();
-  await shot('10-settings');
-  // Layout sanity: nothing should overflow horizontally at 390px.
-  for (const tab of ['שחקנים', 'המשחק', 'קבוצות', 'הגדרות']) {
-    await page.getByRole('navigation').getByRole('button', { name: new RegExp(tab) }).click();
-    const sw = await page.evaluate(() => document.documentElement.scrollWidth);
-    if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${tab}: ${sw}px`);
-    const dir = await page.evaluate(() => getComputedStyle(document.body).direction);
-    if (dir !== 'rtl') errors.push(`${scheme}: direction is ${dir}`);
-  }
+  await page.locator('.team').nth(1).locator('.member').nth(1).click();
+  await page.getByRole('button', { name: /הגיע מאוחר/ }).click();
+  await shot('07-late-sheet');
+  await page.getByRole('button', { name: 'סגירה' }).click();
+  await page.getByRole('button', { name: /התחלת משחק/ }).click();
+  await page.waitForSelector('.clock');
+  await page.getByRole('button', { name: /התחלה/ }).click();
+  await page.getByRole('button', { name: '+ גול' }).first().click();
+  await shot('08-scorer-sheet');
+  await page.locator('.sheet .pick-list button').first().click();
+  await shot('09-match');
+  await checkLayout('match');
+  await page.getByRole('button', { name: 'סיום משחק' }).click();
+  await shot('10-match-after', true);
+  await page.getByRole('button', { name: /לקבוצות/ }).click();
+  await page.getByRole('button', { name: /^חזרה$/ }).click();
+  await page.getByRole('button', { name: 'הגדרות' }).click();
+  await shot('11-settings', true);
+  await checkLayout('settings');
+  const dir = await page.evaluate(() => getComputedStyle(document.body).direction);
+  if (dir !== 'rtl') errors.push(`${scheme}: direction is ${dir}`);
   await ctx.close();
 }
 await browser.close();
