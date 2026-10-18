@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
 import { useStore } from '../state/store';
 import { Sheet, Toast } from './components';
+import { EveningScreen, HistoryScreen } from './HistoryScreen';
 import { HomeScreen } from './HomeScreen';
 import { Icon } from './icons';
 import { MatchScreen } from './MatchScreen';
@@ -9,24 +10,38 @@ import { PlayersScreen } from './PlayersScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
 
-export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings';
-const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings'];
-const TITLES: Record<Route, string> = { home: '', teams: 'הקבוצות', match: 'משחק', players: 'השחקנים', settings: 'הגדרות' };
+export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening';
+const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening'];
+const TITLES: Record<Route, string> = {
+  home: '',
+  teams: 'הקבוצות',
+  match: 'משחק',
+  players: 'השחקנים',
+  settings: 'הגדרות',
+  history: 'ערבים קודמים',
+  evening: 'סיכום הערב',
+};
 /** Where "back" goes from each screen. */
-const PARENT: Record<Route, Route> = { home: 'home', teams: 'home', match: 'teams', players: 'home', settings: 'home' };
+const PARENT: Record<Route, Route> = { home: 'home', teams: 'home', match: 'teams', players: 'home', settings: 'home', history: 'home', evening: 'history' };
 
 const isRoute = (s: string): s is Route => (ROUTES as string[]).includes(s);
 
+/** `#evening/<id>`: a route plus an optional parameter. */
+function parseHash(): { route: Route | null; param: string } {
+  const [name, ...rest] = location.hash.slice(1).split('/');
+  return { route: isRoute(name) ? name : null, param: decodeURIComponent(rest.join('/')) };
+}
+
 interface Ui {
-  go: (r: Route) => void;
+  go: (r: Route, param?: string) => void;
   notify: (msg: string) => void;
 }
 const UiCtx = createContext<Ui>({ go: () => {}, notify: () => {} });
 export const useUi = () => useContext(UiCtx);
 
 function initialRoute(hasResult: boolean, hasMatch: boolean): Route {
-  const h = location.hash.slice(1);
-  if (isRoute(h)) return h;
+  const { route } = parseHash();
+  if (route) return route;
   if (hasMatch) return 'match';
   return hasResult ? 'teams' : 'home';
 }
@@ -34,13 +49,16 @@ function initialRoute(hasResult: boolean, hasMatch: boolean): Route {
 export function App() {
   const { state, dispatch } = useStore();
   const [route, setRoute] = useState<Route>(() => initialRoute(!!state.result, !!state.match));
+  const [param, setParam] = useState(() => parseHash().param);
   const [toast, setToast] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<Backup | null>(null);
   const timer = useRef<number>(undefined);
 
-  const go = useCallback((r: Route) => {
+  const go = useCallback((r: Route, p = '') => {
     setRoute(r);
-    if (location.hash.slice(1) !== r) history.pushState(null, '', `#${r}`);
+    setParam(p);
+    const hash = p ? `${r}/${encodeURIComponent(p)}` : r;
+    if (location.hash.slice(1) !== hash) history.pushState(null, '', `#${hash}`);
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -66,8 +84,9 @@ export function App() {
 
   useEffect(() => {
     const onPop = () => {
-      const h = location.hash.slice(1);
-      setRoute(isRoute(h) ? h : 'home');
+      const h = parseHash();
+      setRoute(h.route ?? 'home');
+      setParam(h.param);
     };
     window.addEventListener('popstate', onPop);
     // A backup link was opened: offer to import it.
@@ -83,7 +102,15 @@ export function App() {
   }, [notify]);
 
   // Screens that need data fall back home.
-  const safeRoute: Route = (route === 'teams' && !state.result) || (route === 'match' && !state.match) ? (state.result ? 'teams' : 'home') : route;
+  const evening = route === 'evening' ? state.history.find((e) => e.id === param) : undefined;
+  const safeRoute: Route =
+    (route === 'teams' && !state.result) || (route === 'match' && !state.match)
+      ? state.result
+        ? 'teams'
+        : 'home'
+      : route === 'evening' && !evening
+        ? 'history'
+        : route;
 
   const doImport = () => {
     if (!incoming) return;
@@ -116,6 +143,11 @@ export function App() {
               <span>כוחות</span>
             </div>
             <nav className="top-actions" aria-label="תפריט">
+              {state.history.length > 0 && (
+                <button type="button" className="icon-btn" aria-label="ערבים קודמים" onClick={() => go('history')}>
+                  <Icon name="history" />
+                </button>
+              )}
               <button type="button" className="icon-btn" aria-label="השחקנים" onClick={() => go('players')}>
                 <Icon name="users" />
               </button>
@@ -141,6 +173,8 @@ export function App() {
         {safeRoute === 'match' && <MatchScreen />}
         {safeRoute === 'players' && <PlayersScreen />}
         {safeRoute === 'settings' && <SettingsScreen />}
+        {safeRoute === 'history' && <HistoryScreen />}
+        {safeRoute === 'evening' && evening && <EveningScreen record={evening} />}
       </main>
       {incoming && (
         <Sheet title="ייבוא סגל" onClose={() => setIncoming(null)}>

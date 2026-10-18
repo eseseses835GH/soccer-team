@@ -1,6 +1,7 @@
 import { CARDS, type CardId, applyCards } from './cards';
 import { newId, sanitizePlayer, sanitizeSettings, type Player, type Settings } from './model';
 import type { Constraints } from '../engine';
+import { sanitizeHistory, type EveningRecord } from './history';
 
 // ---------- plain-text / CSV roster ----------
 
@@ -74,10 +75,12 @@ export interface Backup {
   players: Player[];
   constraints: Constraints;
   settings: Settings;
+  /** Past evenings. In the backup file only: the link leaves them out to stay short. */
+  history?: EveningRecord[];
 }
 
-export function makeBackup(players: Player[], constraints: Constraints, settings: Settings, now = Date.now()): Backup {
-  return { app: 'kochot', v: 2, exportedAt: now, players, constraints, settings };
+export function makeBackup(players: Player[], constraints: Constraints, settings: Settings, now = Date.now(), history?: EveningRecord[]): Backup {
+  return { app: 'kochot', v: 2, exportedAt: now, players, constraints, settings, ...(history?.length ? { history } : {}) };
 }
 
 export function parseBackup(raw: unknown): Backup | null {
@@ -97,6 +100,7 @@ export function parseBackup(raw: unknown): Backup | null {
       apart: Array.isArray(r.constraints?.apart) ? r.constraints.apart.filter(ok) : [],
     },
     settings: sanitizeSettings(r.settings),
+    ...(r.history ? { history: sanitizeHistory(r.history) } : {}),
   };
 }
 

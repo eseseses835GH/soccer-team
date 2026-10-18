@@ -19,6 +19,7 @@ import {
   undoGoal,
   type MatchState,
 } from '../match/match';
+import { eveningId, hasEveningData } from '../state/history';
 import { engineOptions, teamLook } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
@@ -336,14 +337,17 @@ export function MatchScreen() {
 
       {confirmEnd && (
         <Sheet title="לסיים את הערב?" onClose={() => setConfirmEnd(false)}>
-          <p className="lead">הטבלה והגולים יימחקו. הקבוצות נשארות.</p>
+          <p className="lead">{hasEveningData(m, Date.now()) ? 'הסיכום נשמר בערבים הקודמים. הקבוצות נשארות.' : 'עוד לא נגמר אף משחק, אז אין מה לשמור. הקבוצות נשארות.'}</p>
           <div className="stack">
             <button
               type="button"
               className="btn btn-danger btn-block"
               onClick={() => {
-                dispatch({ type: 'setMatch', match: null, now: Date.now() });
-                go('teams');
+                const id = eveningId(r);
+                const saved = hasEveningData(m, Date.now());
+                dispatch({ type: 'endEvening', id, now: Date.now() });
+                if (saved) go('evening', id);
+                else go('teams');
               }}
             >
               סיום הערב

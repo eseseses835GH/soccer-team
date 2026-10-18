@@ -1398,3 +1398,211 @@ thead th {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- evening summary and history ---------- */
+.ev-hero {
+  padding-block: 10px 6px;
+  border-inline-start: 6px solid var(--team, var(--line));
+  padding-inline-start: 14px;
+}
+.ev-date {
+  color: var(--ink-3);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ev-hero h1 {
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-block: 4px 2px;
+}
+.ev-champ-sub {
+  color: var(--ink-2);
+}
+.ev-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0 8px;
+}
+.ev-stats > div {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  padding: 12px 6px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ev-stats dt {
+  color: var(--ink-3);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.ev-stats dd {
+  margin: 0;
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.ev-highlights {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.ev-highlights li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-block: 12px;
+  border-block-end: 1px solid var(--line);
+  animation: rise-in 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: calc(0.25s + var(--i, 0) * 90ms);
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.ev-icon {
+  inline-size: 44px;
+  block-size: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sunk);
+  font-size: 1.35rem;
+}
+.ev-hl-text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.ev-hl-text small {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.ev-hl-text strong {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.ev-hl-text .muted {
+  font-size: 0.88rem;
+}
+.ev-score {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ev-team {
+  white-space: nowrap;
+}
+.ev-goals {
+  display: inline-flex;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.ev-h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-block: 26px 4px;
+}
+.ev-matches,
+.ev-rosters,
+.ev-list,
+.board ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ev-matches li,
+.board li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 48px;
+  padding-block: 6px;
+  border-block-end: 1px solid var(--line);
+}
+.ev-match-body {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+}
+.ev-no {
+  inline-size: 1.6em;
+  flex: none;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.ev-rosters li {
+  padding-block: 8px;
+  border-block-end: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.ev-rosters strong {
+  color: var(--ink);
+}
+.history .segmented {
+  margin-block: 8px 6px;
+}
+.ev-list li {
+  border-block-end: 1px solid var(--line);
+}
+.ev-list button {
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 68px;
+  padding: 8px 2px;
+  border: 0;
+  background: none;
+  text-align: start;
+}
+.ev-row-dot {
+  inline-size: 12px;
+  block-size: 12px;
+  flex: none;
+  border-radius: 50%;
+}
+.ev-row-text {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ev-row-text .name {
+  font-weight: 700;
+}
+.ev-chev {
+  color: var(--ink-3);
+  display: grid;
+  transform: scaleX(-1);
+}
+.board .name {
+  flex: 1;
+  font-weight: 600;
+}
+.board-val {
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.board .ev-no.first {
+  color: var(--accent);
+  font-weight: 800;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ev-highlights li {
+    animation: none;
+  }
+}

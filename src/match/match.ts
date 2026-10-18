@@ -20,6 +20,10 @@ export interface MatchRecord {
   out: number | null;
   goals: Goal[];
   endedAt: number;
+  /** Clock time of the match. */
+  ms?: number;
+  /** Who played for a and b (filled in by the reducer, which knows the rosters). */
+  sides?: [string[], string[]];
 }
 
 export interface Clock {
@@ -154,7 +158,7 @@ export function endMatch(m: MatchState, out: number, now: number): MatchState {
     pitchSince,
     clock: { running: false, startedAt: null, elapsedMs: 0 },
     goals: [],
-    history: [...m.history, { a, b, goalsA: ga, goalsB: gb, out: hasQueue ? out : null, goals: m.goals, endedAt: now }],
+    history: [...m.history, { a, b, goalsA: ga, goalsB: gb, out: hasQueue ? out : null, goals: m.goals, endedAt: now, ms: elapsedMs(m.clock, now) }],
   };
 }
 

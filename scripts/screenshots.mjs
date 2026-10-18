@@ -67,7 +67,48 @@ for (const scheme of ['light', 'dark']) {
   await checkLayout('match');
   await page.getByRole('button', { name: 'סיום משחק' }).click();
   await shot('10-match-after', true);
-  await page.getByRole('button', { name: /לקבוצות/ }).click();
+  // A few more matches with goals, then end the evening: summary and history.
+  const playMatch = async (goals) => {
+    for (const [side, pick] of goals) {
+      await page.getByRole('button', { name: '+ גול' }).nth(side).click();
+      if (pick === null) await page.getByRole('button', { name: 'דילוג' }).click();
+      else await page.locator('.sheet .pick-list button').nth(pick).click();
+    }
+    await page.getByRole('button', { name: 'סיום משחק' }).click();
+  };
+  await playMatch([[0, 0], [0, 1], [1, 0]]);
+  await playMatch([[0, 0], [0, 0], [0, null], [1, 3]]);
+  await playMatch([[1, 2], [0, 0], [1, 2]]);
+  await playMatch([[0, 4], [1, 1], [1, 1]]);
+  await page.waitForTimeout(2600); // let the "who's next" toast fade
+  await page.getByRole('button', { name: 'סיום הערב' }).click();
+  await shot('12-end-evening-sheet');
+  await page.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
+  await page.waitForSelector('.evening');
+  await shot('13-evening');
+  await page.locator('.evening details').evaluateAll((ds) => ds.forEach((d) => (d.open = true)));
+  await shot('13b-evening-full', true);
+  await checkLayout('evening');
+  // An older evening, so the list and all-time view have something to compare.
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('kochot:v1'));
+    const week = 7 * 864e5;
+    const r = structuredClone(s.history[0]);
+    r.id = 'ev-older';
+    r.startedAt -= week;
+    r.endedAt -= week;
+    r.matches = r.matches.slice(0, 3).map((m) => ({ ...m, goalsA: m.goalsB, goalsB: m.goalsA, goals: [], endedAt: m.endedAt - week }));
+    s.history.push(r);
+    localStorage.setItem('kochot:v1', JSON.stringify(s));
+  });
+  await page.goto(base + '#history');
+  await page.reload();
+  await page.waitForSelector('.ev-list');
+  await shot('14-history');
+  await checkLayout('history');
+  await page.getByRole('radio', { name: 'כל הזמנים' }).click();
+  await shot('15-all-time', true);
+  await checkLayout('all-time');
   await page.getByRole('button', { name: /^חזרה$/ }).click();
   await page.getByRole('button', { name: 'הגדרות' }).click();
   await shot('11-settings', true);

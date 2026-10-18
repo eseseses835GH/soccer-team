@@ -204,7 +204,7 @@ export function SettingsScreen() {
 
       <div className="group">
         <h2>גיבוי ושיתוף הסגל</h2>
-        <p className="hint">הכול נשמר רק בטלפון הזה. כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים.</p>
+        <p className="hint">הכול נשמר רק בטלפון הזה. כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים. הקובץ שומר גם את היסטוריית הערבים.</p>
         <div className="stack">
           <button type="button" className="btn btn-quiet btn-block" disabled={!players.length} onClick={sendLink}>
             <Icon name="link" size={20} /> שליחת קישור למארגן נוסף
@@ -213,7 +213,7 @@ export function SettingsScreen() {
             type="button"
             className="btn btn-quiet btn-block"
             disabled={!players.length}
-            onClick={() => downloadText(`kochot-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(backup(), null, 1), 'application/json')}
+            onClick={() => downloadText(`kochot-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(makeBackup(players, constraints, settings, Date.now(), state.history), null, 1), 'application/json')}
           >
             <Icon name="download" size={20} /> הורדת קובץ גיבוי
           </button>
