@@ -1045,14 +1045,20 @@ input[type='range']::-moz-range-thumb {
 .fold summary::-webkit-details-marker {
   display: none;
 }
+/* A drawn chevron: down when closed, up when open. `>` so an open outer fold doesn't flip a nested one. */
 .fold summary::after {
-  content: '⌄';
-  margin-inline-start: auto;
-  font-size: 1.2rem;
+  content: '';
+  inline-size: 8px;
+  block-size: 8px;
+  margin-inline: auto 8px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-2px) rotate(45deg);
   transition: transform 0.15s;
+  flex: none;
 }
-.fold[open] summary::after {
-  transform: rotate(180deg);
+.fold[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
 }
 .table-wrap {
   overflow-x: auto;
@@ -1376,8 +1382,9 @@ thead th {
 }
 .swipe-content {
   position: relative;
+  overflow: hidden;
   background: var(--bg);
-  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+  transition: inline-size 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 .swipe-row.dragging .swipe-content {
   transition: none;
@@ -2153,4 +2160,102 @@ thead th {
 }
 .pens-note {
   color: var(--ink-2);
+}
+
+/* ---------- players: select mode, swipe tip (v5) ---------- */
+.swipe-row {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.swipe-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 6px;
+  padding-block: 6px;
+  padding-inline: 12px 4px;
+  border-radius: 12px;
+  background: var(--sunk);
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.swipe-tip span {
+  flex: 1;
+}
+.swipe-tip .icon-btn {
+  inline-size: 36px;
+  block-size: 36px;
+  color: var(--ink-3);
+}
+/* The first row peeks at its delete action once, next to the tip. */
+.swipe-row.nudge .swipe-action {
+  visibility: visible;
+}
+.swipe-row.nudge .swipe-content {
+  animation: swipe-nudge 1.4s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+@keyframes swipe-nudge {
+  0%,
+  100% {
+    inline-size: 100%;
+  }
+  30%,
+  65% {
+    inline-size: calc(100% - 56px);
+  }
+}
+.select-tick {
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  flex: none;
+  display: grid;
+  place-items: center;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+.roster .selected .select-tick {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.roster .selected .select-tick::after {
+  content: '';
+  inline-size: 6px;
+  block-size: 11px;
+  border: solid var(--bg);
+  border-width: 0 2.5px 2.5px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+.players.is-selecting {
+  padding-block-end: 96px;
+}
+.select-bar {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 15;
+  max-inline-size: 560px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  border-block-start: 1px solid var(--line);
+  background: var(--bg);
+}
+.select-count {
+  flex: 1;
+  font-weight: 700;
+}
+.confirm-names {
+  margin: 0 0 8px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }

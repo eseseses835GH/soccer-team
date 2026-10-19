@@ -25,7 +25,7 @@ function swallowNextClick() {
 }
 
 /**
- * A list row (`<li>`) that slides sideways to reveal a red delete action.
+ * A list row (`<li>`) whose trailing edge slides in to reveal a red delete action.
  *
  * Direction follows the page direction, like iOS and WhatsApp: the action sits on the
  * trailing edge. In RTL you drag the row to the right and "מחיקה" appears on the left;
@@ -34,7 +34,23 @@ function swallowNextClick() {
  * ask for confirmation. Vertical scrolling is never captured (`touch-action: pan-y`,
  * and a swipe starts only after a clearly horizontal move).
  */
-export function SwipeRow({ children, actionLabel, onDelete, className }: { children: ReactNode; actionLabel: string; onDelete: () => void; className?: string }) {
+export function SwipeRow({
+  children,
+  actionLabel,
+  onDelete,
+  className,
+  disabled,
+  nudge,
+}: {
+  children: ReactNode;
+  actionLabel: string;
+  onDelete: () => void;
+  className?: string;
+  /** No swiping (e.g. while selecting several rows); an open row closes. */
+  disabled?: boolean;
+  /** Peek at the action once (a hint); skipped while the row is moved or open. */
+  nudge?: boolean;
+}) {
   const rowRef = useRef<HTMLLIElement>(null);
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -42,6 +58,10 @@ export function SwipeRow({ children, actionLabel, onDelete, className }: { child
   const open = offset > 0 && !dragging;
 
   const close = () => setOffset(0);
+
+  useEffect(() => {
+    if (disabled) setOffset(0);
+  }, [disabled]);
 
   // Opening registers this row as the open one; tapping elsewhere or scrolling closes it.
   useEffect(() => {
@@ -67,7 +87,7 @@ export function SwipeRow({ children, actionLabel, onDelete, className }: { child
   }, [open]);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (disabled || !e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const rtl = getComputedStyle(e.currentTarget).direction === 'rtl';
     g.current = { id: e.pointerId, x: e.clientX, y: e.clientY, base: offset, mode: 'pending', sign: rtl ? 1 : -1, suppressClick: false };
   };
@@ -86,6 +106,7 @@ export function SwipeRow({ children, actionLabel, onDelete, className }: { child
       s.mode = 'drag';
       s.x = e.clientX; // start from here, so the row doesn't jump by the slop
       e.currentTarget.setPointerCapture?.(e.pointerId);
+      window.getSelection()?.removeAllRanges(); // a mouse drag may have started selecting text
       setDragging(true);
       return;
     }
@@ -124,11 +145,10 @@ export function SwipeRow({ children, actionLabel, onDelete, className }: { child
     e.stopPropagation();
   };
 
-  const tx = offset * g.current.sign;
   return (
     <li
       ref={rowRef}
-      className={`swipe-row ${dragging ? 'dragging' : ''} ${offset > 0 ? 'revealed' : ''} ${className ?? ''}`}
+      className={`swipe-row ${dragging ? 'dragging' : ''} ${offset > 0 ? 'revealed' : ''} ${nudge && !offset && !dragging ? 'nudge' : ''} ${className ?? ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finish}
@@ -146,7 +166,8 @@ export function SwipeRow({ children, actionLabel, onDelete, className }: { child
       >
         מחיקה
       </button>
-      <div className="swipe-content" style={offset ? { transform: `translateX(${tx}px)` } : undefined}>
+      {/* The content's trailing edge follows the finger and the row shrinks, so the name stays in place and readable. */}
+      <div className="swipe-content" style={{ inlineSize: `calc(100% - ${offset}px)` }}>
         {children}
       </div>
     </li>

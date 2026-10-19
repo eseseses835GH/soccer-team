@@ -158,3 +158,6 @@
 
 - A level match can be decided on penalties ("מי ניצחה בפנדלים?", optional shoot-out score); the winner stays, the loser is queued. Counts as a win/loss everywhere, never as goals (DECISIONS → Penalties (v5)).
 - Tested: unit (queue rotation, standings/streak/dominance, 2 teams, sanitize garbage and old records, history stats/all-time/merge); e2e step 7c (0–0 → pens 3–2 → winner stays, loser at the back, summary and match list show it); screenshots `11a`/`11b` and `13b` (light + dark).
+# v5: multi-delete, swipe tip, fold arrows
+- **Built:** select mode on the players list with one confirmation and one `deletePlayers` reducer action; a one-time swipe tip with a nudge of the first row; the swiped row keeps the name in place; fold chevrons fixed (a nested fold was flipped by its open parent).
+- **Tested:** reducer (several players at once: teams cancelled, pairs and attendance cleaned, the evening archived once; players outside the teams keep them; a deleted sub cancels them). e2e: mouse-drag swipe (name stays put), tip dismiss survives reload, select mode (tap selects, no swipe, count, confirmation lists names, deletes, leaves select mode, select all + cancel), nested fold chevrons differ. Screenshots `03-players-tip`, `03e`/`03f` folds, `03g` select mode, `03h` multi confirm, `05c` teams fold open, `11b` settings fold open (light + dark).

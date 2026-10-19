@@ -40,6 +40,9 @@ for (const scheme of ['light', 'dark']) {
   await shot('02b-home-full', true);
   await checkLayout('home');
   await page.getByRole('button', { name: 'השחקנים' }).click();
+  await page.locator('.swipe-tip').scrollIntoViewIfNeeded();
+  await shot('03-players-tip');
+  await page.evaluate(() => scrollTo(0, 0));
   await shot('03-players');
   await checkLayout('players');
   // Quick add: level and positions up front; cards and sliders folded.
@@ -52,6 +55,13 @@ for (const scheme of ['light', 'dark']) {
   await shot('03b-add-more', true);
   await page.getByText('דירוג מפורט מתקדם').click();
   await shot('03c-add-detailed', true);
+  // Folds: "more" open with "detailed" closed, then both open (chevrons down / up).
+  await page.getByText('דירוג מפורט מתקדם').click();
+  await page.locator('form.add details.more > summary').scrollIntoViewIfNeeded();
+  await shot('03e-folds-outer-open');
+  await page.getByText('דירוג מפורט מתקדם').click();
+  await page.locator('form.add details.more > summary').scrollIntoViewIfNeeded();
+  await shot('03f-folds-both-open');
   await checkLayout('quick add with detailed rating');
   await page.getByText('דירוג מפורט מתקדם').click();
   await page.getByText('עוד על השחקן').click();
@@ -75,11 +85,26 @@ for (const scheme of ['light', 'dark']) {
   await row.locator('.swipe-action').tap();
   await shot('03d-swipe-confirm');
   await page.getByRole('button', { name: 'ביטול' }).click();
+  // Select mode: three picked, the bar, then the one confirmation (cancelled).
+  await page.getByRole('button', { name: 'בחירה', exact: true }).click();
+  for (const i of [1, 2, 5]) await page.locator('.roster li').nth(i).locator('.swipe-content > button').click();
+  await page.locator('.roster li').nth(2).scrollIntoViewIfNeeded();
+  await shot('03g-select-mode');
+  await checkLayout('select mode');
+  await page.locator('.select-bar').getByRole('button', { name: 'מחיקה' }).click();
+  await shot('03h-multi-confirm');
+  await page.locator('.sheet').getByRole('button', { name: 'ביטול' }).click();
+  await page.locator('.select-bar').getByRole('button', { name: 'ביטול' }).click();
   await page.getByRole('button', { name: /^חזרה$/ }).click();
   await page.getByRole('button', { name: 'עושים כוחות' }).click();
   await page.waitForSelector('.team');
   await shot('05-teams');
   await shot('05b-teams-full', true);
+  await page.getByText('פירוט האיזון').click();
+  await page.locator('details.fold[open] > summary').first().scrollIntoViewIfNeeded();
+  await shot('05c-teams-fold-open');
+  await page.locator('details.fold[open] > summary').first().click();
+  await page.evaluate(() => scrollTo(0, 0));
   await checkLayout('teams');
   await page.locator('.team').first().locator('.member').nth(1).click();
   await shot('06-swap-selected');
@@ -177,6 +202,9 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: 'סגירה' }).click();
   await page.getByRole('button', { name: 'הגדרות' }).click();
   await shot('11-settings', true);
+  await page.locator('details.group.fold > summary').click();
+  await page.locator('details.group.fold > summary').scrollIntoViewIfNeeded();
+  await shot('11b-settings-advanced-open');
   await checkLayout('settings');
   const dir = await page.evaluate(() => getComputedStyle(document.body).direction);
   if (dir !== 'rtl') errors.push(`${scheme}: direction is ${dir}`);

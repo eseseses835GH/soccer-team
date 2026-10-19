@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ATTR_KEYS, type Attributes, type Position } from '../engine';
 import { playersCount } from '../i18n';
 import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
 import { ROSTER_TEMPLATE, parseBackup, parseRoster, type ParsedRoster } from '../state/io';
 import { newId, type Player } from '../state/model';
 import { withPositions } from '../state/positions';
+import { loadJSON, saveJSON } from '../state/storage';
 import { useStore } from '../state/store';
 import { downloadText } from '../share';
 import { useUi } from './App';
@@ -14,6 +15,8 @@ import { Icon } from './icons';
 import { SwipeRow, closeSwipeRows } from './SwipeRow';
 
 const MAX_NAME = 24;
+/** Per phone: the "swipe to delete" tip was dismissed (or the user already swiped). */
+const SWIPE_TIP_KEY = 'kochot:swipe-tip-seen';
 /** What "level" means, so everyone rates on the same scale. */
 const LEVEL_HINT = '1 = רק התחיל לשחק · 5 = באמצע החבורה · 10 = הכי טוב אצלנו';
 
@@ -83,8 +86,38 @@ export function PlayersScreen() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Player | null>(null);
   const [importing, setImporting] = useState(false);
-  const [deleting, setDeleting] = useState<Player | null>(null);
+  const [deleting, setDeleting] = useState<Player[] | null>(null);
+  // Select mode: tap rows to pick several players, then delete them in one go.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [tipSeen, setTipSeen] = useState(() => !!loadJSON<boolean>(SWIPE_TIP_KEY));
+  const [nudge, setNudge] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const showTip = !tipSeen && !selecting && state.players.length >= 2;
+
+  const hideTip = () => {
+    setTipSeen(true);
+    saveJSON(SWIPE_TIP_KEY, true);
+  };
+
+  // With the tip, the first row peeks at its delete action once.
+  useEffect(() => {
+    if (!showTip) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const start = setTimeout(() => setNudge(true), 600);
+    const stop = setTimeout(() => setNudge(false), 600 + 1400);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(stop);
+      setNudge(false);
+    };
+  }, [showTip]);
+
+  const stopSelecting = () => {
+    setSelecting(false);
+    setSelected([]);
+  };
+  const toggleSelected = (id: string) => setSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
   // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
   const setProfile = (l: number, c: CardId[]) => {
@@ -113,9 +146,11 @@ export function PlayersScreen() {
 
   const fixedKeepers = state.settings.gkMode === 'fixed';
   const sorted = [...state.players].sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  const picked = sorted.filter((p) => selected.includes(p.id));
+  const allSelected = sorted.length > 0 && picked.length === sorted.length;
 
   return (
-    <section className="players" aria-label="השחקנים">
+    <section className={`players ${selecting ? 'is-selecting' : ''}`} aria-label="השחקנים">
       <form className="add" onSubmit={add} noValidate>
         <label className="label" htmlFor="add-name">
           שחקן חדש
@@ -157,10 +192,32 @@ export function PlayersScreen() {
 
       <div className="section-title">
         <h2>{playersCount(state.players.length)}</h2>
-        <button type="button" className="text-btn" onClick={() => setImporting(true)}>
-          <Icon name="upload" size={18} /> ייבוא רשימה
-        </button>
+        {selecting ? (
+          <button type="button" className="text-btn" onClick={() => setSelected(allSelected ? [] : sorted.map((p) => p.id))}>
+            {allSelected ? 'ביטול הבחירה' : 'בחירת הכול'}
+          </button>
+        ) : (
+          <div className="title-actions">
+            {state.players.length > 0 && (
+              <button type="button" className="text-btn" onClick={() => setSelecting(true)}>
+                בחירה
+              </button>
+            )}
+            <button type="button" className="text-btn" onClick={() => setImporting(true)}>
+              <Icon name="upload" size={18} /> ייבוא רשימה
+            </button>
+          </div>
+        )}
       </div>
+
+      {showTip && (
+        <p className="swipe-tip">
+          <span>טיפ: החליקו שחקן ימינה כדי למחוק, או ״בחירה״ כדי למחוק כמה בבת אחת.</span>
+          <button type="button" className="icon-btn" aria-label="סגירת הטיפ" onClick={hideTip}>
+            ✕
+          </button>
+        </p>
+      )}
 
       {state.players.length === 0 ? (
         <div className="empty small">
@@ -170,20 +227,52 @@ export function PlayersScreen() {
           </button>
         </div>
       ) : (
-        <ul className="roster">
-          {sorted.map((p) => (
-            <SwipeRow key={p.id} actionLabel={`מחיקת ${p.name}`} onDelete={() => setDeleting(p)}>
-              <button type="button" onClick={() => setEditing(p)}>
-                <span className="name">{p.name}</span>
-                <PositionBadges player={p} />
-                <CardBadges cards={p.cards} all />
-                <span className="level" aria-label={`רמה ${p.attrs.overall}`}>
-                  {p.attrs.overall}
-                </span>
-              </button>
-            </SwipeRow>
-          ))}
+        <ul className={`roster ${selecting ? 'selecting' : ''}`}>
+          {sorted.map((p, i) => {
+            const on = selected.includes(p.id);
+            return (
+              <SwipeRow
+                key={p.id}
+                actionLabel={`מחיקת ${p.name}`}
+                disabled={selecting}
+                nudge={nudge && i === 0}
+                className={on ? 'selected' : undefined}
+                onDelete={() => {
+                  hideTip();
+                  setDeleting([p]);
+                }}
+              >
+                <button
+                  type="button"
+                  aria-pressed={selecting ? on : undefined}
+                  onClick={() => (selecting ? toggleSelected(p.id) : setEditing(p))}
+                >
+                  {selecting && <span className="select-tick" aria-hidden="true" />}
+                  <span className="name">{p.name}</span>
+                  <PositionBadges player={p} />
+                  <CardBadges cards={p.cards} all />
+                  <span className="level" aria-label={`רמה ${p.attrs.overall}`}>
+                    {p.attrs.overall}
+                  </span>
+                </button>
+              </SwipeRow>
+            );
+          })}
         </ul>
+      )}
+
+      {selecting && (
+        <div className="select-bar" role="toolbar" aria-label="פעולות על השחקנים שנבחרו">
+          <span className="select-count" aria-live="polite">
+            {picked.length ? `נבחרו ${picked.length}` : 'בחרו שחקנים'}
+          </span>
+          <button type="button" className="btn btn-danger btn-small" disabled={!picked.length} onClick={() => setDeleting(picked)}>
+            מחיקה
+          </button>
+          <button type="button" className="btn btn-quiet btn-small" onClick={stopSelecting}>
+            ביטול
+          </button>
+        </div>
       )}
 
       {editing && (
@@ -199,21 +288,22 @@ export function PlayersScreen() {
           }}
           onDelete={(p) => {
             setEditing(null);
-            setDeleting(p);
+            setDeleting([p]);
           }}
         />
       )}
       {deleting && (
         <DeletePlayerSheet
-          player={deleting}
+          players={deleting}
           onCancel={() => {
             setDeleting(null);
             closeSwipeRows();
           }}
           onConfirm={() => {
-            dispatch({ type: 'deletePlayer', id: deleting.id });
-            notify(`${deleting.name} נמחק`);
+            dispatch({ type: 'deletePlayers', ids: deleting.map((p) => p.id) });
+            notify(deleting.length > 1 ? `${deleting.length} שחקנים נמחקו` : `${deleting[0].name} נמחק`);
             setDeleting(null);
+            stopSelecting();
           }}
         />
       )}
