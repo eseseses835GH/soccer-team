@@ -780,7 +780,7 @@ input[type='range']::-moz-range-thumb {
   font-size: 0.92rem;
 }
 .home {
-  padding-block-end: 140px;
+  padding-block-end: 180px;
 }
 .cta-dock {
   position: fixed;
@@ -2300,4 +2300,14 @@ thead th {
 }
 .sheet .toggle {
   margin-block: 12px;
+}
+
+/* ---------- home: back to the evening ---------- */
+.dock-secondary {
+  display: block;
+  margin: 10px auto 0;
+  font-weight: 600;
+}
+.cta-dock > .dock-secondary:first-of-type:not(:last-child) {
+  margin: 0 auto 10px;
 }

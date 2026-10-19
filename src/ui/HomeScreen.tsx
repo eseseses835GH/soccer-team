@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { MIN_TEAM_SIZE, planFormat, type FormatPlan } from '../engine';
 import { presentPlayers, useStore } from '../state/store';
 import { useUi } from './App';
-import { CardBadges, Empty } from './components';
+import { CardBadges, Empty, Sheet } from './components';
 import { splitTeams } from './split';
 
 const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
@@ -28,6 +28,7 @@ export function HomeScreen() {
   const { go, notify } = useUi();
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
+  const [confirmResplit, setConfirmResplit] = useState(false);
 
   const present = presentPlayers(state);
   const plan = planFormat(present.length, state.teamSize);
@@ -41,8 +42,14 @@ export function HomeScreen() {
 
   const lastAvailable = state.lastPresentIds.length > 0 && state.presentIds.length === 0;
 
+  // An evening is on: the main action is getting back to it, and a new split asks first
+  // (it ends the evening; what was played is kept in the history).
+  const live = state.match;
+  const played = live ? live.history.length : 0;
+
   const go2 = async () => {
     if (!plan || busy) return;
+    setConfirmResplit(false);
     setBusy(true);
     try {
       if (await splitTeams(state, dispatch)) go('teams');
@@ -141,10 +148,53 @@ export function HomeScreen() {
         <p className={`plan ${plan ? '' : 'warn'}`} aria-live="polite">
           {planSentence(present.length, plan, state.teamSize)}
         </p>
-        <button type="button" className="btn btn-hero btn-block" disabled={!plan || busy} onClick={go2}>
-          {busy ? 'מערבבים…' : 'עושים כוחות'}
-        </button>
+        {live ? (
+          <>
+            <button type="button" className="btn btn-hero btn-block" onClick={() => go('match')}>
+              חזרה למשחק · משחק {played + 1}
+            </button>
+            <button type="button" className="text-btn dock-secondary" disabled={!plan || busy} onClick={() => setConfirmResplit(true)}>
+              {busy ? 'מערבבים…' : 'חלוקה מחדש'}
+            </button>
+          </>
+        ) : (
+          <>
+            {state.result && (
+              <button type="button" className="text-btn dock-secondary" onClick={() => go('teams')}>
+                חזרה לקבוצות
+              </button>
+            )}
+            <button type="button" className="btn btn-hero btn-block" disabled={!plan || busy} onClick={go2}>
+              {busy ? 'מערבבים…' : 'עושים כוחות'}
+            </button>
+          </>
+        )}
       </div>
+
+      {confirmResplit && (
+        <Sheet title="לחלק מחדש?" onClose={() => setConfirmResplit(false)}>
+          <p className="hint">
+            {played
+              ? `הערב הנוכחי (${played === 1 ? 'משחק אחד' : `${played} משחקים`}) יישמר בערבים הקודמים, והמשחקים יתחילו מהתחלה עם קבוצות חדשות.`
+              : 'הקבוצות של עכשיו יוחלפו בקבוצות חדשות, והמשחק יתחיל מהתחלה.'}
+          </p>
+          <div className="stack">
+            <button type="button" className="btn btn-primary btn-block" onClick={go2}>
+              חלוקה מחדש
+            </button>
+            <button
+              type="button"
+              className="btn btn-quiet btn-block"
+              onClick={() => {
+                setConfirmResplit(false);
+                go('match');
+              }}
+            >
+              ביטול, חוזרים למשחק
+            </button>
+          </div>
+        </Sheet>
+      )}
     </section>
   );
 }
