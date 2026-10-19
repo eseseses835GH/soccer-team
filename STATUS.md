@@ -153,3 +153,7 @@
 
 ## Not verified
 - Mixed versions during sync (see DECISIONS v4): a phone on the previous version that edits a player drops his positions.
+
+# v5: multi-delete, swipe tip, fold arrows
+- **Built:** select mode on the players list with one confirmation and one `deletePlayers` reducer action; a one-time swipe tip with a nudge of the first row; the swiped row keeps the name in place; fold chevrons fixed (a nested fold was flipped by its open parent).
+- **Tested:** reducer (several players at once: teams cancelled, pairs and attendance cleaned, the evening archived once; players outside the teams keep them; a deleted sub cancels them). e2e: mouse-drag swipe (name stays put), tip dismiss survives reload, select mode (tap selects, no swipe, count, confirmation lists names, deletes, leaves select mode, select all + cancel), nested fold chevrons differ. Screenshots `03-players-tip`, `03e`/`03f` folds, `03g` select mode, `03h` multi confirm, `05c` teams fold open, `11b` settings fold open (light + dark).

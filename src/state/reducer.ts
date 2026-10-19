@@ -8,6 +8,8 @@ export type Action =
   | { type: 'addPlayer'; player: Player; present?: boolean }
   | { type: 'updatePlayer'; player: Player }
   | { type: 'deletePlayer'; id: string }
+  /** Delete several players in one step, so the history and sync see a single change. */
+  | { type: 'deletePlayers'; ids: string[] }
   | { type: 'togglePresent'; id: string; now: number }
   | { type: 'setPresent'; ids: string[]; now: number }
   | { type: 'setTeamSize'; size: number }
@@ -83,6 +85,24 @@ export function reducer(state: AppState, action: Action): AppState {
   return next;
 }
 
+/** Remove players with their attendance and pairs; today's teams go if any of them was in them. */
+function deletePlayers(state: AppState, ids: string[]): AppState {
+  const gone = new Set(ids);
+  if (!state.players.some((p) => gone.has(p.id))) return state;
+  const keep = (pr: Pair) => !gone.has(pr[0]) && !gone.has(pr[1]);
+  const r = state.result;
+  const inResult = !!r && [...r.playerIds, ...r.subIds].some((id) => gone.has(id));
+  return {
+    ...state,
+    players: state.players.filter((p) => !gone.has(p.id)),
+    presentIds: state.presentIds.filter((x) => !gone.has(x)),
+    lastPresentIds: state.lastPresentIds.filter((x) => !gone.has(x)),
+    constraints: { together: state.constraints.together.filter(keep), apart: state.constraints.apart.filter(keep) },
+    result: inResult ? null : state.result,
+    match: inResult ? null : state.match,
+  };
+}
+
 function baseReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'addPlayer':
@@ -93,20 +113,10 @@ function baseReducer(state: AppState, action: Action): AppState {
       };
     case 'updatePlayer':
       return { ...state, players: state.players.map((p) => (p.id === action.player.id ? action.player : p)) };
-    case 'deletePlayer': {
-      const id = action.id;
-      const keep = (pr: Pair) => pr[0] !== id && pr[1] !== id;
-      const inResult = state.result && (state.result.playerIds.includes(id) || state.result.subIds.includes(id));
-      return {
-        ...state,
-        players: state.players.filter((p) => p.id !== id),
-        presentIds: state.presentIds.filter((x) => x !== id),
-        lastPresentIds: state.lastPresentIds.filter((x) => x !== id),
-        constraints: { together: state.constraints.together.filter(keep), apart: state.constraints.apart.filter(keep) },
-        result: inResult ? null : state.result,
-        match: inResult ? null : state.match,
-      };
-    }
+    case 'deletePlayer':
+      return deletePlayers(state, [action.id]);
+    case 'deletePlayers':
+      return deletePlayers(state, action.ids);
     case 'togglePresent':
       return {
         ...state,

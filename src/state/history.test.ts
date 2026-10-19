@@ -164,6 +164,43 @@ describe('saving evenings', () => {
     expect(t.history[0].players.find((x) => x.id === 'a')?.name).toBe('Pa');
   });
 
+  it('deleting several players at once archives the evening once and cleans everything', () => {
+    let s = play(baseState(), [[0, 'a']]);
+    s = reducer(s, { type: 'addConstraint', kind: 'together', pair: ['a', 'c'] });
+    s = reducer(s, { type: 'addConstraint', kind: 'apart', pair: ['b', 'd'] });
+    s = reducer(s, { type: 'addConstraint', kind: 'apart', pair: ['c', 'e'] });
+    s = { ...s, lastPresentIds: ['a', 'b', 'c'] };
+    s = reducer(s, { type: 'deletePlayers', ids: ['a', 'b'] });
+    expect(s.players.map((x) => x.id)).toEqual(['c', 'd', 'e', 'f', 's']);
+    expect(s.presentIds).toEqual(['c', 'd', 'e', 'f', 's']);
+    expect(s.lastPresentIds).toEqual(['c']);
+    expect(s.constraints).toEqual({ together: [], apart: [['c', 'e']] });
+    expect(s.result).toBeNull();
+    expect(s.match).toBeNull();
+    expect(s.history).toHaveLength(1);
+    expect(s.history[0].matches).toHaveLength(1);
+    expect(s.history[0].players.find((x) => x.id === 'a')?.name).toBe('Pa');
+  });
+
+  it("deleting only players outside today's teams keeps the teams and the match", () => {
+    let s = play(baseState(), [[0, 'a']]);
+    s = { ...s, players: [...s.players, p('x'), p('y')] };
+    const before = s;
+    s = reducer(s, { type: 'deletePlayers', ids: ['x', 'y'] });
+    expect(s.players).toHaveLength(7);
+    expect(s.result).toBe(before.result);
+    expect(s.match).toBe(before.match);
+    expect(s.history).toEqual([]);
+    // Unknown ids change nothing.
+    expect(reducer(s, { type: 'deletePlayers', ids: ['nobody'] })).toBe(s);
+  });
+
+  it('deleting a sub cancels the teams too', () => {
+    const s = reducer(baseState(), { type: 'deletePlayers', ids: ['s'] });
+    expect(s.result).toBeNull();
+    expect(s.history).toEqual([]); // nothing was played yet
+  });
+
   it('nothing is saved for a session without matches; wiping clears the history', () => {
     let s = reducer(baseState(), { type: 'endEvening', id: 'x', now: T0 });
     expect(s.history).toEqual([]);

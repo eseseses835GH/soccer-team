@@ -341,6 +341,81 @@ assert(await mob.getByText('הוא בכוחות של היום').isVisible(), 'co
 await mob.getByRole('button', { name: 'ביטול' }).tap();
 }
 
+// 14. Desktop mouse: the one-time swipe tip, a mouse-drag swipe that keeps the name readable, and multi-select delete.
+{
+  const pc = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  pc.on('pageerror', (e) => errors.push(e.message));
+  await pc.goto(base);
+  await pc.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await pc.getByRole('button', { name: 'השחקנים' }).click();
+  const tip = pc.locator('.swipe-tip');
+  assert(await tip.isVisible(), 'swipe tip shown the first time');
+  const rows = pc.locator('.roster li');
+  const total = await rows.count();
+  // Mouse drag toward the right reveals the action; the name stays where it was.
+  const row = rows.nth(1);
+  await row.scrollIntoViewIfNeeded();
+  const rb = await row.boundingBox();
+  const nameBefore = await row.locator('.name').boundingBox();
+  await pc.mouse.move(rb.x + 60, rb.y + rb.height / 2);
+  await pc.mouse.down();
+  for (let i = 1; i <= 12; i++) await pc.mouse.move(rb.x + 60 + i * 10, rb.y + rb.height / 2 + 1);
+  await pc.mouse.up();
+  await pc.waitForTimeout(350);
+  assert((await pc.locator('.swipe-row.revealed').count()) === 1, 'mouse drag reveals the delete action');
+  assert(!(await pc.locator('.sheet').count()), 'mouse drag does not open the edit sheet');
+  const nameAfter = await row.locator('.name').boundingBox();
+  assert(Math.abs(nameAfter.x + nameAfter.width - (nameBefore.x + nameBefore.width)) < 2 && nameAfter.x + nameAfter.width <= rb.x + rb.width + 1, 'the name stays in place when the row opens');
+  const act = await row.locator('.swipe-action').boundingBox();
+  assert(act.x <= rb.x + 1 && act.width >= 80, 'the action shows on the left');
+  // A click elsewhere closes it; dismissing the tip is remembered.
+  await pc.locator('.section-title h2').click();
+  await pc.waitForTimeout(300);
+  assert((await pc.locator('.swipe-row.revealed').count()) === 0, 'a click outside closes the row');
+  await tip.getByRole('button', { name: 'סגירת הטיפ' }).click();
+  await pc.reload();
+  assert((await pc.locator('.swipe-tip').count()) === 0, 'dismissed tip stays hidden after a reload');
+  // Select mode: rows toggle, swiping is off, the bar counts, one confirmation deletes them all.
+  await pc.getByRole('button', { name: 'בחירה', exact: true }).click();
+  // A mouse drag doesn't open the row in select mode (letting go on it is a click, which selects it).
+  const r0 = await rows.nth(0).boundingBox();
+  await pc.mouse.move(r0.x + 60, r0.y + r0.height / 2);
+  await pc.mouse.down();
+  for (let i = 1; i <= 12; i++) await pc.mouse.move(r0.x + 60 + i * 10, r0.y + r0.height / 2);
+  await pc.mouse.up();
+  await pc.waitForTimeout(300);
+  assert((await pc.locator('.swipe-row.revealed').count()) === 0, 'no swiping in select mode');
+  if (!(await rows.nth(0).locator('button[aria-pressed="true"]').count())) await rows.nth(0).locator('.swipe-content > button').click();
+  const names = [await rows.nth(0).locator('.name').textContent()];
+  for (const i of [2, 4]) {
+    names.push(await rows.nth(i).locator('.name').textContent());
+    await rows.nth(i).locator('.swipe-content > button').click();
+  }
+  assert(!(await pc.locator('.sheet').count()), 'a tap in select mode selects instead of editing');
+  assert((await pc.locator('.select-count').innerText()) === 'נבחרו 3', 'bar counts the selection');
+  assert((await rows.nth(0).locator('button[aria-pressed="true"]').count()) === 1, 'selected row is pressed');
+  await pc.locator('.select-bar').getByRole('button', { name: 'מחיקה' }).click();
+  const dlg = pc.getByRole('dialog', { name: 'למחוק 3 שחקנים?' });
+  assert(await dlg.isVisible(), 'multi-delete confirmation');
+  const listed = await dlg.locator('.confirm-names').innerText();
+  assert(names.every((n) => listed.includes(n)), `confirmation lists the names: ${listed}`);
+  await dlg.getByRole('button', { name: 'מחיקת 3 שחקנים' }).click();
+  assert((await rows.count()) === total - 3, 'three players deleted');
+  assert((await pc.locator('.select-bar').count()) === 0, 'select mode ends after deleting');
+  assert(await pc.getByText('3 שחקנים נמחקו').isVisible(), 'toast after multi-delete');
+  // "בחירת הכול" then cancel leaves everyone.
+  await pc.getByRole('button', { name: 'בחירה', exact: true }).click();
+  await pc.getByRole('button', { name: 'בחירת הכול' }).click();
+  assert((await pc.locator('.select-count').innerText()) === `נבחרו ${total - 3}`, 'select all');
+  await pc.locator('.select-bar').getByRole('button', { name: 'ביטול' }).click();
+  assert((await rows.count()) === total - 3 && (await pc.locator('.select-bar').count()) === 0, 'cancel keeps everyone');
+  // Folds: the nested "דירוג מפורט מתקדם" chevron points down while "עוד על השחקן" is open.
+  await pc.getByText('עוד על השחקן').click();
+  await pc.waitForTimeout(300); // the chevron turns with a short transition
+  const rot = (sel) => pc.locator(sel).evaluate((el) => getComputedStyle(el, '::after').transform);
+  assert((await rot('form.add details.more > summary')) !== (await rot('form.add details.detailed > summary')), 'open and closed folds have different chevrons');
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {
