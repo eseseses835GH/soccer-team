@@ -259,6 +259,73 @@ await old.reload();
 await old.waitForTimeout(300);
 assert(sbCalls.length === 0, `no Supabase calls when logged out: ${sbCalls}`);
 
+// 13. Swipe to delete on a touch phone: a real touch drag reveals "מחיקה", which asks first.
+{
+const mob = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'he-IL' })).newPage();
+mob.on('pageerror', (e) => errors.push(e.message));
+await mob.goto(base);
+await mob.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+await mob.getByRole('button', { name: 'השחקנים' }).click();
+const cdp = await mob.context().newCDPSession(mob);
+const touchDrag = async (x0, y0, x1, y1, steps = 12) => {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + ((x1 - x0) * i) / steps, y: y0 + ((y1 - y0) * i) / steps }] });
+    await mob.waitForTimeout(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await mob.waitForTimeout(300);
+};
+const rowOf = (n) => mob.locator('.roster li').filter({ has: mob.locator('.name', { hasText: new RegExp(`^${n}$`) }) });
+const rosterCount = () => mob.locator('.roster li').count();
+const before = await rosterCount();
+// A vertical scroll over the list doesn't open a row.
+await rowOf('אבי').scrollIntoViewIfNeeded();
+const vbox = await mob.locator('.roster').boundingBox();
+const y0 = await mob.evaluate(() => scrollY);
+await touchDrag(200, Math.min(700, vbox.y + vbox.height - 20), 214, 300);
+assert((await mob.locator('.swipe-row.revealed').count()) === 0, 'vertical scroll opened a row');
+assert((await mob.evaluate(() => scrollY)) !== y0, 'vertical drag scrolled the page');
+// Swipe toward the right (RTL trailing edge on the left): the red action shows.
+const avi = rowOf('אבי');
+await avi.scrollIntoViewIfNeeded();
+let box = await avi.boundingBox();
+await touchDrag(box.x + 120, box.y + box.height / 2, box.x + 240, box.y + box.height / 2 + 4);
+assert((await avi.locator('.swipe-action').isVisible()) && (await mob.locator('.swipe-row.revealed').count()) === 1, 'swipe reveals the delete action');
+assert(!(await mob.locator('.sheet').count()), 'swiping does not open the edit sheet');
+const actionBox = await avi.locator('.swipe-action').boundingBox();
+assert(actionBox.x < box.x + 20, 'delete action is on the left (trailing edge in RTL)');
+await mob.getByRole('button', { name: 'מחיקת אבי' }).tap();
+assert(await mob.getByRole('dialog', { name: 'למחוק את אבי?' }).isVisible(), 'confirmation dialog');
+await mob.locator('.sheet').getByRole('button', { name: 'מחיקה', exact: true }).tap();
+assert((await rosterCount()) === before - 1 && !(await rowOf('אבי').count()), 'אבי deleted after confirming');
+// A full swipe asks right away; cancelling keeps the player and closes the row.
+const second = mob.locator('.roster li').nth(2);
+const secondName = await second.locator('.name').textContent();
+box = await second.boundingBox();
+await touchDrag(box.x + 40, box.y + box.height / 2, box.x + 360, box.y + box.height / 2);
+assert(await mob.getByRole('dialog', { name: `למחוק את ${secondName}?` }).isVisible(), 'full swipe asks to confirm');
+await mob.getByRole('button', { name: 'ביטול' }).tap();
+await mob.waitForTimeout(300);
+assert((await rosterCount()) === before - 1 && (await mob.locator('.swipe-row.revealed').count()) === 0, 'cancel keeps the player and closes the row');
+// Tapping a row still opens the edit sheet, and its delete asks too.
+await second.locator('button.swipe-content, .swipe-content button').first().tap();
+assert(await mob.getByRole('dialog', { name: secondName }).isVisible(), 'tap opens the edit sheet');
+await mob.locator('.sheet').getByRole('button', { name: 'מחיקה', exact: true }).tap();
+assert(await mob.getByRole('dialog', { name: `למחוק את ${secondName}?` }).isVisible(), 'edit sheet delete asks to confirm');
+await mob.getByRole('button', { name: 'ביטול' }).tap();
+assert((await rosterCount()) === before - 1, 'cancel from the edit sheet keeps the player');
+// With teams made, the confirmation says the teams go too.
+await mob.getByRole('button', { name: /^חזרה$/ }).tap();
+await mob.getByRole('button', { name: 'עושים כוחות' }).tap();
+await mob.waitForSelector('.team');
+await mob.goto(base + '#players');
+await mob.getByRole('button', { name: /^בני/ }).tap();
+await mob.locator('.sheet').getByRole('button', { name: 'מחיקה', exact: true }).tap();
+assert(await mob.getByText('הוא בכוחות של היום').isVisible(), 'confirmation mentions today\'s teams');
+await mob.getByRole('button', { name: 'ביטול' }).tap();
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {

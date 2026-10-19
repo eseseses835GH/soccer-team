@@ -26,6 +26,7 @@
   - Quick add: name, level 1–10 (with a one-line scale hint), up to 3 of 12 player cards in two rows (6 strengths, 6 weaknesses).
   - Optional "דירוג מפורט" (detailed rating) sliders, folded in quick add and open in the edit sheet.
   - **List import:** paste text or upload CSV/TXT/JSON, preview before adding, downloadable template (`docs/roster-template.csv`).
+  - **Swipe to delete (v4):** drag a row to the right to reveal a red "מחיקה"; it (and the edit sheet's delete) asks "למחוק את …?" first. Covered by `npm run e2e` (real touch swipe, vertical scroll, cancel, confirm).
 - **Settings:**
   - Rotating vs. fixed keepers, and switch every 1/2/3 goals.
   - Match length and bib colours (which you own, in order).

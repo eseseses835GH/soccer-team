@@ -8,7 +8,9 @@ import { useStore } from '../state/store';
 import { downloadText } from '../share';
 import { useUi } from './App';
 import { AttrSliders, CardBadges, CardPicker, LevelPicker, Sheet, Toggle } from './components';
+import { DeletePlayerSheet } from './DeletePlayerSheet';
 import { Icon } from './icons';
+import { SwipeRow, closeSwipeRows } from './SwipeRow';
 
 const MAX_NAME = 24;
 /** What "level" means, so everyone rates on the same scale. */
@@ -42,6 +44,7 @@ export function PlayersScreen() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Player | null>(null);
   const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState<Player | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
   // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
@@ -120,7 +123,7 @@ export function PlayersScreen() {
       ) : (
         <ul className="roster">
           {sorted.map((p) => (
-            <li key={p.id}>
+            <SwipeRow key={p.id} actionLabel={`מחיקת ${p.name}`} onDelete={() => setDeleting(p)}>
               <button type="button" onClick={() => setEditing(p)}>
                 <span className="name">{p.name}</span>
                 <CardBadges cards={p.cards} all />
@@ -128,7 +131,7 @@ export function PlayersScreen() {
                   {p.attrs.overall}
                 </span>
               </button>
-            </li>
+            </SwipeRow>
           ))}
         </ul>
       )}
@@ -145,9 +148,22 @@ export function PlayersScreen() {
             setEditing(null);
           }}
           onDelete={(p) => {
-            dispatch({ type: 'deletePlayer', id: p.id });
-            notify(`${p.name} נמחק`);
             setEditing(null);
+            setDeleting(p);
+          }}
+        />
+      )}
+      {deleting && (
+        <DeletePlayerSheet
+          player={deleting}
+          onCancel={() => {
+            setDeleting(null);
+            closeSwipeRows();
+          }}
+          onConfirm={() => {
+            dispatch({ type: 'deletePlayer', id: deleting.id });
+            notify(`${deleting.name} נמחק`);
+            setDeleting(null);
           }}
         />
       )}
@@ -173,7 +189,6 @@ function PlayerSheet({
 }) {
   const [draft, setDraft] = useState<Player>(player);
   const [error, setError] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
   const setProfile = (level: number, cards: CardId[]) => setDraft((d) => ({ ...d, cards, attrs: applyCards(level, cards) }));
 
@@ -217,15 +232,9 @@ function PlayerSheet({
           <button type="submit" className="btn btn-primary btn-block">
             שמירה
           </button>
-          {confirmDelete ? (
-            <button type="button" className="btn btn-danger btn-block" onClick={() => onDelete(player)}>
-              בטוח? מחיקה סופית
-            </button>
-          ) : (
-            <button type="button" className="btn btn-quiet danger btn-block" onClick={() => setConfirmDelete(true)}>
-              מחיקה
-            </button>
-          )}
+          <button type="button" className="btn btn-quiet danger btn-block" onClick={() => onDelete(player)}>
+            מחיקה
+          </button>
         </div>
       </form>
     </Sheet>

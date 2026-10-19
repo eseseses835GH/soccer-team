@@ -54,6 +54,19 @@ for (const scheme of ['light', 'dark']) {
   await shot('04b-player-sheet-sliders');
   await checkLayout('player sheet');
   await page.getByRole('button', { name: 'סגירה' }).click();
+  // Swipe a row (real touch drag) to reveal "מחיקה", then the confirmation.
+  const cdp = await ctx.newCDPSession(page);
+  const row = page.locator('.roster li').nth(3);
+  await row.scrollIntoViewIfNeeded();
+  const rb = await row.boundingBox();
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: rb.x + 100, y: rb.y + rb.height / 2 }] });
+  for (let i = 1; i <= 10; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: rb.x + 100 + i * 12, y: rb.y + rb.height / 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await shot('03c-swipe-revealed');
+  await checkLayout('swiped row');
+  await row.locator('.swipe-action').tap();
+  await shot('03d-swipe-confirm');
+  await page.getByRole('button', { name: 'ביטול' }).click();
   await page.getByRole('button', { name: /^חזרה$/ }).click();
   await page.getByRole('button', { name: 'עושים כוחות' }).click();
   await page.waitForSelector('.team');

@@ -1335,6 +1335,44 @@ thead th {
   text-align: start;
   font-weight: 600;
 }
+/* Swipe a roster row toward the trailing edge to reveal "מחיקה" (SwipeRow). */
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.swipe-content {
+  position: relative;
+  background: var(--bg);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.swipe-row.dragging .swipe-content {
+  transition: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.roster .swipe-action {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  justify-content: center;
+  padding: 0;
+  background: var(--danger);
+  color: var(--surface);
+  font-weight: 700;
+  visibility: hidden;
+}
+.swipe-row.revealed .swipe-action {
+  visibility: visible;
+}
+.confirm-notes {
+  margin: 0 0 18px;
+  padding-inline-start: 18px;
+  color: var(--ink-2);
+}
+.confirm-notes li + li {
+  margin-block-start: 4px;
+}
 .level {
   inline-size: 32px;
   block-size: 32px;
