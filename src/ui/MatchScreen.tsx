@@ -25,33 +25,14 @@ import { engineOptions, teamLook } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
 import { BorrowCard } from './BorrowCard';
-import { celebrateGoal, primeVoices, stopCelebration } from './celebrate';
 import { Sheet } from './components';
 import { GoalBurst } from './GoalBurst';
 import { Icon } from './icons';
+import { celebrateGoal, playWhistle, stopSounds, unlockAudio, unlockOnNextTap } from './sounds';
 
 function fmt(ms: number): string {
   const s = Math.floor(Math.abs(ms) / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function beep() {
-  try {
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new Ctx();
-    [0, 0.35, 0.7].forEach((at) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.frequency.value = 880;
-      g.gain.setValueAtTime(0.25, ctx.currentTime + at);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + at + 0.3);
-      o.connect(g).connect(ctx.destination);
-      o.start(ctx.currentTime + at);
-      o.stop(ctx.currentTime + at + 0.3);
-    });
-  } catch {
-    /* no audio */
-  }
 }
 
 /** Keep the screen on while the clock runs (where supported). */
@@ -91,8 +72,11 @@ export function MatchScreen() {
   const [drawAsk, setDrawAsk] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
-  useEffect(primeVoices, []);
+  // After a reload the time-up whistle has no tap of its own: unlock audio on any tap first.
+  useEffect(unlockOnNextTap, []);
   const buzzed = useRef<string>('');
+  /** The match whose full-time whistle already sounded (time-up or the end tap): never twice. */
+  const whistled = useRef<string>('');
 
   const running = !!m?.clock.running;
   useWakeLock(running);
@@ -116,9 +100,10 @@ export function MatchScreen() {
       } catch {
         /* ignore */
       }
-      beep();
+      // No tap here: if the phone hasn't unlocked audio, the vibration has to do (and the end tap whistles).
+      if (playWhistle(state.settings.goalSound, 'end', false)) whistled.current = matchKey;
     }
-  }, [running, left, matchKey]);
+  }, [running, left, matchKey, state.settings.goalSound]);
 
   // A team that keeps winning: offer one swap that weakens it.
   const dom = m && r ? dominantTeam(m, r.numTeams) : null;
@@ -159,14 +144,22 @@ export function MatchScreen() {
     set(addGoal(m, t, Date.now()));
     setScorerFor(t);
     // Sound must start inside the tap (iOS); undoing a goal doesn't celebrate.
-    celebrateGoal(state.settings.goalSound, teamLook(state.settings, t).name);
+    celebrateGoal(state.settings.goalSound);
     setBurst({ id: Date.now(), team: t });
   };
   const sound = state.settings.goalSound !== 'off';
   const toggleSound = () => {
-    if (sound) stopCelebration();
-    dispatch({ type: 'setSettings', settings: { ...state.settings, goalSound: sound ? 'off' : 'all' } });
-    notify(sound ? 'צליל הגול כבוי' : 'צליל הגול פועל');
+    if (sound) stopSounds();
+    dispatch({ type: 'setSettings', settings: { ...state.settings, goalSound: sound ? 'off' : 'on' } });
+    notify(sound ? 'הצלילים כבויים' : 'הצלילים פועלים');
+  };
+  const startStop = () => {
+    if (running) return set(pauseClock(m, Date.now()));
+    // Kick-off whistle only for a fresh match, not when resuming after a pause. The tap also
+    // unlocks audio for the time-up whistle later.
+    if (elapsed === 0) playWhistle(state.settings.goalSound, 'start');
+    else unlockAudio();
+    set(startClock(m, Date.now()));
   };
 
   const finish = (out: number) => {
@@ -180,6 +173,10 @@ export function MatchScreen() {
     } else notify('המשחק נשמר');
   };
   const end = () => {
+    if (whistled.current !== matchKey) {
+      whistled.current = matchKey;
+      playWhistle(state.settings.goalSound, 'end');
+    }
     const loser = loserOf(m);
     if (loser !== null) return finish(loser);
     if (!m.queue.length) return finish(a);
@@ -192,7 +189,7 @@ export function MatchScreen() {
 
   return (
     <section className="match" aria-label="משחק">
-      <button type="button" className={`icon-btn sound-toggle ${sound ? 'on' : ''}`} aria-label={sound ? 'השתקת צליל הגול' : 'הפעלת צליל הגול'} onClick={toggleSound}>
+      <button type="button" className={`icon-btn sound-toggle ${sound ? 'on' : ''}`} aria-label={sound ? 'השתקת הצלילים' : 'הפעלת הצלילים'} onClick={toggleSound}>
         <Icon name={sound ? 'sound' : 'mute'} size={20} />
       </button>
       <div className="match-no">משחק {m.history.length + 1}</div>
@@ -200,7 +197,7 @@ export function MatchScreen() {
         {left <= 0 ? `+${fmt(left)}` : fmt(left)}
       </div>
       <div className="clock-ctrl">
-        <button type="button" className="btn btn-primary" onClick={() => set(running ? pauseClock(m, Date.now()) : startClock(m, Date.now()))}>
+        <button type="button" className="btn btn-primary" onClick={startStop}>
           <Icon name={running ? 'pause' : 'play'} size={20} /> {running ? 'עצירה' : elapsed > 0 ? 'המשך' : 'התחלה'}
         </button>
         {elapsed > 0 && (

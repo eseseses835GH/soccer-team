@@ -216,3 +216,18 @@ This supersedes the v2 line "Who moves over from the losing team is decided at t
 - **Pointer events,** so a mouse drag works too. Snapping uses a short CSS transition, which the global `prefers-reduced-motion` rule turns off.
 - **No undo toast.** Deleting can also cancel today's teams and pairs, and a plain re-insert wouldn't bring those back, so an "undo" would be misleading. The confirmation is the safety net. The toast still says "<name> נמחק".
 - `SwipeRow` (`src/ui/SwipeRow.tsx`) is a generic `<li>` wrapper, so other lists can reuse it. The sheet is `src/ui/DeletePlayerSheet.tsx`.
+
+## Whistles and air horn (v4)
+*Supersedes the crowd roar, the announcer and the three-way sound setting in "Goal celebration" above; the GoalBurst animation is unchanged.*
+- **User feedback:** "a starting whistle, and at the end too; goal without the weird AI voice, an air horn". The user chose **air horn only** for goals. `speechSynthesis` and the crowd roar are gone completely (the bundle no longer mentions speech).
+- **All sounds are synthesized with Web Audio in `src/ui/sounds.ts`** (replaces `celebrate.ts`), no audio files:
+  - **Air horn (goal):** two blasts, short (0.3 s) then long (1.15 s). Three reeds at ~372/466/557 Hz (a slightly sour chord, like a handheld stadium horn), each two detuned sawtooths plus a square. Pitch scoops up from −14% at each onset and sags 3% at the end; a shared 5 Hz pressure wobble; asymmetric soft saturation, high-pass, a bell resonance at 1.35 kHz and a "blare" peak at 2.9 kHz, low-pass at 5.2 kHz.
+  - **Referee pea whistle:** ~3.0–3.15 kHz sine with weak 2nd/3rd harmonics; the "pea" is a ~28 Hz triangle (its rate wandering ±4 Hz) driving ±110 Hz of FM and deep tremolo, plus slow filtered-noise drift; breath noise band-passed at the whistle pitch and a little hiss; 8 ms attack with an upward pitch flick, quick release with a small drop.
+  - **Patterns:** kick-off = short-long; full time = short-short-long.
+  - **Levels:** each sound goes through a master gain and a gentle limiter. Offline renders peak at about −1.7 dBFS (`npm run render-sounds` fails outside −12…−1 dBFS).
+- **When they play:**
+  - **Kick-off whistle** on "התחלה" only when the match clock is at 0 (a fresh match, or after the clock was reset). "המשך" after a pause is silent.
+  - **Full-time whistle** once per match: when the countdown hits zero (together with the existing vibration, which replaces the old beep), or when "סיום משחק" is tapped if it hasn't sounded yet. A draw sheet that is cancelled and re-opened doesn't whistle again.
+  - **Goal:** vibration + horn on "+ גול" (undo stays silent). A new sound fades out the one playing.
+- **iOS / autoplay:** the shared AudioContext is created/resumed inside taps (start, resume, goal, end), and the match screen also unlocks it on the first tap anywhere (for a screen opened after a reload). The time-up whistle has no tap of its own, so it plays only if the context is already running; otherwise only the vibration fires and the "סיום משחק" tap blows the whistle instead. *(my call: a suspended context would otherwise hold the whistle and blurt it out on some later tap.)*
+- **Setting `goalSound` is now `'on' | 'off'`**, labelled "צלילים: פועל / כבוי" in Settings → משחק, and covers horn + whistles. Old values migrate in `sanitizeSettings`: `'all'`/`'crowd'` → on, `'off'` → off. Still per phone (`LOCAL_SETTINGS`), so importing or syncing never changes it. The speaker icon on the match screen mutes/unmutes all match sounds ("השתקת הצלילים" / "הפעלת הצלילים").

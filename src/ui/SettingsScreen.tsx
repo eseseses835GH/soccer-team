@@ -87,18 +87,17 @@ export function SettingsScreen() {
           <span>אורך משחק</span>
           <Stepper label="אורך משחק בדקות" value={settings.matchMinutes} min={1} max={60} onChange={(matchMinutes) => set({ matchMinutes })} suffix="דק׳" />
         </div>
-        <p className="hint">צליל כשמבקיעים גול:</p>
+        <p className="hint">צלילים:</p>
         <Segmented
-          label="צליל גול"
+          label="צלילים"
           value={settings.goalSound}
           onChange={(goalSound) => set({ goalSound })}
           options={[
-            { value: 'all', label: 'קהל וקריין' },
-            { value: 'crowd', label: 'רק קהל' },
-            { value: 'off', label: 'בלי צליל' },
+            { value: 'on', label: 'פועל' },
+            { value: 'off', label: 'כבוי' },
           ]}
         />
-        <p className="hint small">שאגת קהל, צופר, וקריין שצועק ״גול!״ בקול העברי של הטלפון (אם יש). אפשר להשתיק גם ממסך המשחק.</p>
+        <p className="hint small">שריקת שופט בפתיחה ובסיום, וצופר כשמבקיעים גול. אפשר להשתיק גם ממסך המשחק.</p>
       </div>
 
       <div className="group">
