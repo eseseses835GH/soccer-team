@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { scoreFromCost, suggestWeakeningSwap } from '../engine';
 import {
   addGoal,
+  adjustMatchLength,
   borrowedInto,
   defaultOutOnDraw,
   dismissDominance,
@@ -10,10 +11,15 @@ import {
   endMatch,
   keeperIndex,
   loserOf,
+  matchLength,
+  MAX_MINUTES,
+  MIN_MINUTES,
+  MINUTE,
   pauseClock,
   resetClock,
   score,
   setLastScorer,
+  setMatchLength,
   standings,
   startClock,
   topScorers,
@@ -21,14 +27,17 @@ import {
   type MatchState,
 } from '../match/match';
 import { eveningId, hasEveningData } from '../state/history';
-import { engineOptions, teamLook } from '../state/model';
+import { defaultMatchMs, engineOptions, teamLook } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
 import { BorrowCard } from './BorrowCard';
-import { Sheet } from './components';
+import { Sheet, Stepper, Toggle } from './components';
 import { GoalBurst } from './GoalBurst';
 import { Icon } from './icons';
 import { celebrateGoal, playWhistle, stopSounds, unlockAudio, unlockOnNextTap } from './sounds';
+
+/** Quick picks in the match length sheet, in minutes. */
+const QUICK_MINUTES = [5, 6, 7, 8, 10, 12];
 
 function fmt(ms: number): string {
   const s = Math.floor(Math.abs(ms) / 1000);
@@ -72,8 +81,11 @@ export function MatchScreen() {
   const [drawAsk, setDrawAsk] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
+  const [lengthOpen, setLengthOpen] = useState(false);
+  const soundOn = useRef(true);
+  soundOn.current = state.settings.goalSound !== 'off';
   // After a reload the time-up whistle has no tap of its own: unlock audio on any tap first.
-  useEffect(unlockOnNextTap, []);
+  useEffect(() => unlockOnNextTap(() => soundOn.current), []);
   const buzzed = useRef<string>('');
   /** The match whose full-time whistle already sounded (time-up or the end tap): never twice. */
   const whistled = useRef<string>('');
@@ -88,12 +100,22 @@ export function MatchScreen() {
 
   const byId = useMemo(() => new Map(state.players.map((p) => [p.id, p])), [state.players]);
 
-  const limit = state.settings.matchMinutes * 60_000;
+  // This match's length (null = no time limit): the settings' length unless changed for this match.
+  const dflt = defaultMatchMs(state.settings);
+  const limit = m ? matchLength(m, dflt) : dflt;
   const elapsed = m ? elapsedMs(m.clock, running ? now : Date.now()) : 0;
-  const left = limit - elapsed;
+  const left = limit === null ? null : limit - elapsed;
+  const over = left !== null && left <= 0;
   const matchKey = `${m?.history.length ?? 0}`;
   useEffect(() => {
-    if (running && left <= 0 && buzzed.current !== matchKey) {
+    if (left === null) return;
+    // Time left again (the length was extended past the clock, or the clock was reset): the new
+    // finish whistles again when it comes.
+    if (left > 0) {
+      if (buzzed.current === matchKey) buzzed.current = '';
+      return;
+    }
+    if (running && buzzed.current !== matchKey) {
       buzzed.current = matchKey;
       try {
         navigator.vibrate?.([300, 120, 300]);
@@ -155,12 +177,24 @@ export function MatchScreen() {
   };
   const startStop = () => {
     if (running) return set(pauseClock(m, Date.now()));
+    // The clock starts first, so nothing in the sound code can ever keep it from starting.
+    set(startClock(m, Date.now()));
     // Kick-off whistle only for a fresh match, not when resuming after a pause. The tap also
     // unlocks audio for the time-up whistle later.
     if (elapsed === 0) playWhistle(state.settings.goalSound, 'start');
-    else unlockAudio();
-    set(startClock(m, Date.now()));
+    else unlockAudio(sound);
   };
+  /** A length picked in the sheet: this match, and the default for the next ones. */
+  const pickLength = (minutes: number | null) => {
+    set(setMatchLength(m, minutes === null ? null : minutes * MINUTE));
+    const settings = minutes === null ? { ...state.settings, matchNoLimit: true } : { ...state.settings, matchMinutes: minutes, matchNoLimit: false };
+    if (settings.matchMinutes !== state.settings.matchMinutes || settings.matchNoLimit !== state.settings.matchNoLimit) dispatch({ type: 'setSettings', settings });
+  };
+  const limitMin = limit === null ? null : Math.round(limit / MINUTE);
+  /** Added (or removed) time in this match only, against the default length. */
+  const added = limitMin !== null && !state.settings.matchNoLimit ? limitMin - state.settings.matchMinutes : 0;
+  const addedText = `${added > 0 ? '+' : '−'}${Math.abs(added)}`;
+  const lengthLabel = limitMin === null ? 'בלי הגבלת זמן' : `${limitMin} דק׳${added ? ` (${addedText})` : ''}`;
 
   const finish = (out: number) => {
     const outLook = teamLook(state.settings, out);
@@ -193,9 +227,18 @@ export function MatchScreen() {
         <Icon name={sound ? 'sound' : 'mute'} size={20} />
       </button>
       <div className="match-no">משחק {m.history.length + 1}</div>
-      <div className={`clock ${left <= 0 ? 'over' : ''}`} role="timer" aria-live="off">
-        {left <= 0 ? `+${fmt(left)}` : fmt(left)}
+      {/* Tapping the clock opens the length sheet too; the chip below is the accessible control. */}
+      <div className={`clock ${over ? 'over' : ''}`} role="timer" aria-live="off" onClick={() => setLengthOpen(true)}>
+        {left === null ? fmt(elapsed) : over ? `+${fmt(left)}` : fmt(left)}
       </div>
+      <button type="button" className="length-chip" onClick={() => setLengthOpen(true)} aria-label={`אורך המשחק: ${lengthLabel}. שינוי`}>
+        ⏱ {limitMin === null ? lengthLabel : `${limitMin} דק׳`}
+        {limitMin !== null && added !== 0 && (
+          <span className="len-added" dir="ltr">
+            {addedText}
+          </span>
+        )}
+      </button>
       <div className="clock-ctrl">
         <button type="button" className="btn btn-primary" onClick={startStop}>
           <Icon name={running ? 'pause' : 'play'} size={20} /> {running ? 'עצירה' : elapsed > 0 ? 'המשך' : 'התחלה'}
@@ -206,6 +249,49 @@ export function MatchScreen() {
           </button>
         )}
       </div>
+
+      {lengthOpen && (
+        <Sheet title="אורך המשחק" onClose={() => setLengthOpen(false)}>
+          <p className="lead len-now" aria-live="polite">
+            {elapsed > 0 ? `עברו ${fmt(elapsed)}` : 'המשחק עוד לא התחיל'}
+            {left !== null && (over ? ' · הזמן נגמר' : ` · נשארו ${fmt(left)}`)}
+          </p>
+          {limitMin !== null && (
+            <>
+              <div className="size-pills len-pills" role="radiogroup" aria-label="דקות">
+                {QUICK_MINUTES.map((n) => (
+                  <button key={n} type="button" role="radio" aria-checked={limitMin === n} className={limitMin === n ? 'on' : ''} onClick={() => pickLength(n)}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="field-row">
+                <span>דקות</span>
+                <Stepper label="אורך משחק בדקות" value={limitMin} min={MIN_MINUTES} max={MAX_MINUTES} onChange={pickLength} suffix="דק׳" />
+              </div>
+              <p className="hint small">נשמר גם למשחקים הבאים.</p>
+              <p className="len-sub">תוספת זמן, רק למשחק הזה:</p>
+              <div className="row-2">
+                <button type="button" className="btn btn-quiet" disabled={limitMin >= MAX_MINUTES} onClick={() => set(adjustMatchLength(m, MINUTE, dflt))} aria-label="+1 דק׳">
+                  <span dir="ltr">+1</span> דק׳
+                </button>
+                <button type="button" className="btn btn-quiet" disabled={limitMin <= MIN_MINUTES} onClick={() => set(adjustMatchLength(m, -MINUTE, dflt))} aria-label="−1 דק׳">
+                  <span dir="ltr">−1</span> דק׳
+                </button>
+              </div>
+            </>
+          )}
+          <Toggle
+            label="בלי טיימר"
+            hint="השעון סופר קדימה ולא שורק בסוף הזמן. למשחקים עד מספר גולים."
+            checked={limitMin === null}
+            onChange={(off) => pickLength(off ? null : state.settings.matchMinutes)}
+          />
+          <button type="button" className="btn btn-primary btn-block" onClick={() => setLengthOpen(false)}>
+            אישור
+          </button>
+        </Sheet>
+      )}
 
       <div className="pitch">
         {[a, b].map((t, side) => {

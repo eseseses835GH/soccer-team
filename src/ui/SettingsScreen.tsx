@@ -7,7 +7,7 @@ import { useGroups, useStore } from '../state/store';
 import { STATUS_TEXT, useSync } from '../sync/SyncProvider';
 import { copyText, downloadText, nativeShare } from '../share';
 import { useUi } from './App';
-import { RatingSlider, Segmented, Stepper } from './components';
+import { RatingSlider, Segmented, Stepper, Toggle } from './components';
 import { Icon } from './icons';
 
 export function SettingsScreen() {
@@ -87,6 +87,12 @@ export function SettingsScreen() {
           <span>אורך משחק</span>
           <Stepper label="אורך משחק בדקות" value={settings.matchMinutes} min={1} max={60} onChange={(matchMinutes) => set({ matchMinutes })} suffix="דק׳" />
         </div>
+        <Toggle
+          label="בלי טיימר"
+          hint="השעון סופר קדימה ולא שורק בסוף הזמן. אפשר לשנות גם מהשעון במסך המשחק."
+          checked={settings.matchNoLimit}
+          onChange={(matchNoLimit) => set({ matchNoLimit })}
+        />
         <p className="hint">צלילים:</p>
         <Segmented
           label="צלילים"

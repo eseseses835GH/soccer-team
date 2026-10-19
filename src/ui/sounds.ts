@@ -10,9 +10,28 @@ type Ctx = BaseAudioContext;
 let ctx: AudioContext | null = null;
 let current: { out: GainNode; ends: number } | null = null;
 
-/** The shared AudioContext, created/resumed on demand. Call from a user gesture. */
-export function unlockAudio(): AudioContext | null {
+/**
+ * iPhone: Web Audio is muted by the silent switch by default, and phones at the pitch are often
+ * on silent. The Audio Session API (Safari 16.4+) can declare the page's sound as 'playback'
+ * (like a video), which plays even in silent mode. Elsewhere this does nothing.
+ */
+function playThroughSilentSwitch() {
   try {
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session && session.type !== 'playback') session.type = 'playback';
+  } catch {
+    /* not supported */
+  }
+}
+
+/**
+ * The shared AudioContext, created/resumed on demand. Call from a user gesture. `playback` =
+ * sounds are on, so claim the 'playback' audio session (with sounds off we leave the phone's
+ * audio alone: that session category can pause music playing in another app).
+ */
+export function unlockAudio(playback = true): AudioContext | null {
+  try {
+    if (playback) playThroughSilentSwitch();
     if (!ctx) {
       const C = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!C) return null;
@@ -34,9 +53,9 @@ export function unlockAudio(): AudioContext | null {
  * Unlock audio on the next tap anywhere (for a match screen opened after a reload, where the
  * first sound might be the time-up whistle, which has no tap of its own). Returns a cleanup.
  */
-export function unlockOnNextTap(): () => void {
+export function unlockOnNextTap(soundOn: () => boolean = () => true): () => void {
   const on = () => {
-    unlockAudio();
+    unlockAudio(soundOn());
     if (ctx?.state === 'running') off();
   };
   const off = () => {
@@ -222,7 +241,7 @@ export function whistle(c: Ctx, dest: AudioNode, t0: number, kind: WhistleKind):
   }
   // The pea: amplitude chop (tremolo) goes after the envelope.
   const chop = c.createGain();
-  chop.gain.value = 0.62;
+  chop.gain.value = 0.68;
   env.connect(chop).connect(dest);
 
   // Pea modulators: a ~28 Hz rattle plus a slower irregular one (filtered noise).
@@ -241,9 +260,9 @@ export function whistle(c: Ctx, dest: AudioNode, t0: number, kind: WhistleKind):
   roughLp.type = 'lowpass';
   roughLp.frequency.value = 45;
   rough.connect(roughLp);
-  // Tremolo: ±0.38 around 0.62 → the tone dips to a quarter at the bottom of each rattle.
+  // Tremolo: ±0.32 around 0.68 → the tone dips to about a third at the bottom of each rattle.
   const tremDepth = c.createGain();
-  tremDepth.gain.value = 0.38;
+  tremDepth.gain.value = 0.32;
   pea.connect(tremDepth).connect(chop.gain);
   for (const n of [pea, peaJitter]) {
     n.start(t0);
@@ -310,8 +329,14 @@ export function whistle(c: Ctx, dest: AudioNode, t0: number, kind: WhistleKind):
 const HORN_LEVEL = 1;
 const WHISTLE_LEVEL = 1.2;
 
+/** Bumped by every new sound and by stopSounds, so a sound still waiting for resume() is dropped. */
+let pending = 0;
+/** A sound waiting for a suspended context longer than this is dropped (it would come too late). */
+const RESUME_WAIT_MS = 1500;
+
 /** Stop whatever is playing (quick fade, no click). */
 export function stopSounds() {
+  pending++;
   if (ctx && current && current.ends > ctx.currentTime) {
     const g = current.out.gain;
     g.cancelScheduledValues(ctx.currentTime);
@@ -321,13 +346,36 @@ export function stopSounds() {
   current = null;
 }
 
+/**
+ * Play a sound now. A context that isn't running yet (Safari starts it 'suspended' and resumes
+ * asynchronously; iOS can also leave it 'interrupted') gets the sound scheduled once resume()
+ * resolves, instead of on a frozen clock. Never throws: a sound problem must not break the tap
+ * that asked for it (e.g. starting the clock).
+ */
 function play(level: number, make: (c: Ctx, out: AudioNode, t0: number) => number) {
-  const c = unlockAudio();
-  if (!c || c.state === 'closed') return;
-  stopSounds();
-  const t0 = c.currentTime + 0.02;
-  const out = outStage(c, c.destination, level);
-  current = { out, ends: make(c, out, t0) };
+  try {
+    const c = unlockAudio();
+    if (!c || c.state === 'closed') return;
+    stopSounds();
+    const id = pending;
+    const go = () => {
+      try {
+        if (id !== pending || c.state !== 'running') return;
+        const t0 = c.currentTime + 0.02;
+        const out = outStage(c, c.destination, level);
+        current = { out, ends: make(c, out, t0) };
+      } catch {
+        /* no sound this time */
+      }
+    };
+    if (c.state === 'running') return go();
+    const asked = Date.now();
+    c.resume()
+      .then(() => Date.now() - asked <= RESUME_WAIT_MS && go())
+      .catch(() => {});
+  } catch {
+    /* no sound this time */
+  }
 }
 
 /** Goal: vibration + the air horn. Call straight from the tap handler. */

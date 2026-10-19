@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addGoal,
   addTeam,
+  adjustMatchLength,
   borrowNeed,
   borrowedInto,
   defaultOutOnDraw,
@@ -11,8 +12,11 @@ import {
   endMatch,
   keeperIndex,
   loserOf,
+  matchLength,
   pauseClock,
+  remainingMs,
   setBorrow,
+  setMatchLength,
   sanitizeMatch,
   standings,
   startClock,
@@ -152,5 +156,69 @@ describe('match night', () => {
     expect(sanitizeMatch({ ...old, borrow: { team: 1, from: 1, ids: [] } }, 3)!.borrow).toBeNull();
     expect(sanitizeMatch({ ...old, borrow: { team: 2, from: 1, ids: 'x' } }, 3)!.borrow).toBeNull();
     expect(sanitizeMatch({ ...old, borrow: { team: 2, from: 1, ids: [1, 'c'] } }, 3)!.borrow).toEqual({ team: 2, from: 1, ids: ['c'] });
+  });
+});
+
+describe('match length (v5)', () => {
+  const M = 60_000;
+  const started = (ms: number) => pauseClock(startClock(startSession(3), 0), ms);
+
+  it('a match without its own length uses the default', () => {
+    const m = started(3 * M);
+    expect(matchLength(m, 8 * M)).toBe(8 * M);
+    expect(remainingMs(m, 3 * M, 8 * M)).toBe(5 * M);
+    expect(remainingMs(m, 3 * M, null)).toBeNull();
+  });
+
+  it('changing the length mid-match keeps the elapsed time and moves the finish', () => {
+    let m = startClock(startSession(3), 0);
+    m = setMatchLength(m, 6 * M);
+    expect(remainingMs(m, 2 * M, 8 * M)).toBe(4 * M);
+    expect(elapsedMs(m.clock, 2 * M)).toBe(2 * M);
+    // Shorter than what's already played: overtime, never a "negative remaining" bug elsewhere.
+    m = setMatchLength(m, 1 * M);
+    expect(remainingMs(m, 2 * M, 8 * M)).toBe(-1 * M);
+    expect(m.clock.running).toBe(true);
+  });
+
+  it('+1 / −1 minute change this match only, clamped to 1–60', () => {
+    let m = started(7.5 * M);
+    m = adjustMatchLength(m, M, 8 * M);
+    expect(matchLength(m, 8 * M)).toBe(9 * M);
+    expect(remainingMs(m, 0, 8 * M)).toBe(1.5 * M);
+    m = adjustMatchLength(adjustMatchLength(m, -M, 8 * M), -M, 8 * M);
+    expect(remainingMs(m, 0, 8 * M)).toBe(-0.5 * M);
+    expect(matchLength(setMatchLength(m, 0), 8 * M)).toBe(M);
+    expect(matchLength(setMatchLength(m, 999 * M), 8 * M)).toBe(60 * M);
+    expect(matchLength(adjustMatchLength(setMatchLength(m, M), -M, 8 * M), 8 * M)).toBe(M);
+    // The next match goes back to the default.
+    m = endMatch(m, 1, 10 * M);
+    expect(matchLength(m, 8 * M)).toBe(8 * M);
+  });
+
+  it('no time limit: no remaining time, ±1 does nothing, and it can be switched back', () => {
+    let m = setMatchLength(started(20 * M), null);
+    expect(matchLength(m, 8 * M)).toBeNull();
+    expect(remainingMs(m, 0, 8 * M)).toBeNull();
+    expect(adjustMatchLength(m, M, 8 * M)).toBe(m);
+    m = setMatchLength(m, 8 * M);
+    expect(remainingMs(m, 0, 8 * M)).toBe(-12 * M);
+    // A default of "no limit" applies to a match that didn't set its own.
+    expect(remainingMs(started(M), 0, null)).toBeNull();
+  });
+
+  it('sanitize: old saved states have no length; stale and malformed ones are dropped', () => {
+    const m = started(M);
+    const { length: _drop, ...old } = setMatchLength(m, 5 * M);
+    void _drop;
+    expect(sanitizeMatch(JSON.parse(JSON.stringify(old)), 3)!.length).toBeUndefined();
+    expect(matchLength(sanitizeMatch(JSON.parse(JSON.stringify(old)), 3)!, 8 * M)).toBe(8 * M);
+    const kept = sanitizeMatch(JSON.parse(JSON.stringify(setMatchLength(m, 5 * M))), 3)!;
+    expect(matchLength(kept, 8 * M)).toBe(5 * M);
+    expect(sanitizeMatch(JSON.parse(JSON.stringify(setMatchLength(m, null))), 3)!.length).toEqual({ at: 0, ms: null });
+    expect(sanitizeMatch({ ...m, length: { at: 3, ms: 5 * M } }, 3)!.length).toBeUndefined();
+    expect(sanitizeMatch({ ...m, length: { at: 0, ms: 'x' } }, 3)!.length).toBeUndefined();
+    expect(sanitizeMatch({ ...m, length: { at: 0, ms: -5 } }, 3)!.length).toBeUndefined();
+    expect(sanitizeMatch({ ...m, length: { at: 0, ms: 7.4 * M } }, 3)!.length).toEqual({ at: 0, ms: 7 * M });
   });
 });

@@ -95,6 +95,19 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('.sheet .pick-list button').first().click();
   await shot('09-match');
   await checkLayout('match');
+  // Match length (v5): the sheet from the chip under the clock; +1 minute for this match; no timer.
+  await page.waitForSelector('.goal-burst', { state: 'detached', timeout: 8000 }).catch(() => {});
+  await page.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+  await page.getByRole('button', { name: /^אורך המשחק/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '+1 דק׳' }).click();
+  await shot('09b-match-length');
+  await checkLayout('match length sheet');
+  await page.getByRole('dialog').locator('label.toggle').click();
+  await shot('09c-match-no-timer');
+  await page.getByRole('dialog').locator('label.toggle').click();
+  await page.getByRole('dialog').getByRole('button', { name: '+1 דק׳' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'אישור' }).click();
+  await shot('09d-match-added-time');
   await page.getByRole('button', { name: 'סיום משחק' }).click();
   await shot('10-match-after', true);
   // 14 players at 5-a-side: the short team came on and borrows from the losing team.
