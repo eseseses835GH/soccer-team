@@ -37,6 +37,19 @@ export interface MatchRecord {
   ms?: number;
   /** Who played for a and b (filled in by the reducer, which knows the rosters). */
   sides?: [string[], string[]];
+  /** A level match decided on penalties: the winner stays, as after a normal win. */
+  pens?: Pens;
+}
+
+/**
+ * Penalty shoot-out after a level match. `winner` is `a` or `b` of the record;
+ * `a`/`b` are the kicks scored, only when someone entered them (optional).
+ * Kicks never count as goals.
+ */
+export interface Pens {
+  winner: number;
+  a?: number;
+  b?: number;
 }
 
 export interface Clock {
@@ -144,12 +157,14 @@ export function loserOf(m: MatchState): number | null {
  * Finish the current match. `out` is the team that leaves (the loser, or the
  * team chosen on a draw). With only two teams nobody leaves.
  */
-export function endMatch(m: MatchState, out: number, now: number): MatchState {
+export function endMatch(m: MatchState, out: number, now: number, pens?: Pens): MatchState {
   const [a, b] = m.onPitch;
   if (out !== a && out !== b) return m;
   const [ga, gb] = score(m);
+  // Penalties only decide a level match, and their loser is the team that leaves.
+  if (pens && (ga !== gb || pens.winner === out || (pens.winner !== a && pens.winner !== b))) pens = undefined;
   const stayer = out === a ? b : a;
-  const winner = ga === gb ? null : ga > gb ? a : b;
+  const winner = pens ? pens.winner : ga === gb ? null : ga > gb ? a : b;
   const matchNo = m.history.length + 1;
   const streak = [...m.streak];
   const pitchSince = [...m.pitchSince];
@@ -186,6 +201,7 @@ export function endMatch(m: MatchState, out: number, now: number): MatchState {
         endedAt: now,
         ms: elapsedMs(m.clock, now),
         ...(m.borrow?.ids.length ? { borrow: m.borrow } : {}),
+        ...(pens ? { pens: cleanPens(pens, a, b, ga, gb)! } : {}),
       },
     ],
     // Borrowers go back to their own team.
@@ -276,10 +292,11 @@ export function standings(m: MatchState, numTeams: number): Standing[] {
     A.goalsAgainst += h.goalsB;
     B.goalsFor += h.goalsB;
     B.goalsAgainst += h.goalsA;
-    if (h.goalsA === h.goalsB) {
+    const w = matchWinner(h);
+    if (w === null) {
       A.drawn++;
       B.drawn++;
-    } else if (h.goalsA > h.goalsB) {
+    } else if (w === h.a) {
       A.won++;
       B.lost++;
     } else {
@@ -348,7 +365,7 @@ export function sanitizeMatch(raw: unknown, numTeams: number): MatchState | null
       elapsedMs: Number(r.clock?.elapsedMs) || 0,
     },
     goals: Array.isArray(r.goals) ? r.goals.filter((g) => inRange(g?.team)) : [],
-    history: Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)) : [],
+    history: Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)).map(sanitizeRecordPens) : [],
     dismissed: r.dismissed && inRange(r.dismissed.team) ? r.dismissed : null,
     borrow: sanitizeBorrow(r.borrow, numTeams, r.onPitch),
   };
@@ -361,4 +378,49 @@ function sanitizeBorrow(raw: unknown, numTeams: number, onPitch: unknown[]): Bor
   const inRange = (t: unknown) => Number.isInteger(t) && (t as number) >= 0 && (t as number) < numTeams;
   if (!inRange(b.team) || !inRange(b.from) || b.team === b.from || !onPitch.includes(b.team) || !Array.isArray(b.ids)) return null;
   return { team: b.team!, from: b.from!, ids: [...new Set(b.ids.filter((id): id is string => typeof id === 'string'))] };
+}
+
+// ---------- penalties ----------
+
+/**
+ * End a level match on penalties: `winner` stays, the other team leaves (to
+ * the back of the queue, as after a normal loss). `kicks` = shoot-out score as
+ * [kicks of onPitch[0], kicks of onPitch[1]], optional. Not level: unchanged.
+ */
+export function endOnPenalties(m: MatchState, winner: number, now: number, kicks?: [number, number] | null): MatchState {
+  const [a, b] = m.onPitch;
+  if (winner !== a && winner !== b) return m;
+  const [ga, gb] = score(m);
+  if (ga !== gb) return m;
+  return endMatch(m, winner === a ? b : a, now, { winner, ...(kicks ? { a: kicks[0], b: kicks[1] } : {}) });
+}
+
+/** Who won a finished match: on goals, or on penalties after a level score. Null = draw. */
+export function matchWinner(h: { a: number; b: number; goalsA: number; goalsB: number; pens?: Pens | null }): number | null {
+  if (h.goalsA !== h.goalsB) return h.goalsA > h.goalsB ? h.a : h.b;
+  return h.pens && (h.pens.winner === h.a || h.pens.winner === h.b) ? h.pens.winner : null;
+}
+
+const kick = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 99 ? (v as number) : undefined);
+
+/**
+ * A valid `pens` for a match a–b ending ga–gb, or null. The kicks are kept
+ * only when both are there and the winner scored more; otherwise just the winner.
+ */
+export function cleanPens(raw: unknown, a: number, b: number, ga: number, gb: number): Pens | null {
+  if (!raw || typeof raw !== 'object' || ga !== gb) return null;
+  const p = raw as Partial<Pens>;
+  if (p.winner !== a && p.winner !== b) return null;
+  const ka = kick(p.a);
+  const kb = kick(p.b);
+  const ok = ka !== undefined && kb !== undefined && (p.winner === a ? ka > kb : kb > ka);
+  return ok ? { winner: p.winner, a: ka, b: kb } : { winner: p.winner };
+}
+
+/** Older saved records have no `pens`; a malformed one is dropped (the match reads as a plain draw). */
+function sanitizeRecordPens(h: MatchRecord): MatchRecord {
+  if (h.pens === undefined) return h;
+  const { pens, ...rest } = h;
+  const clean = cleanPens(pens, h.a, h.b, h.goalsA, h.goalsB);
+  return clean ? { ...rest, pens: clean } : rest;
 }

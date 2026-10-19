@@ -9,7 +9,7 @@
  * (match lists are unioned), so syncing never duplicates an evening.
  */
 import type { GameResult } from './model';
-import { elapsedMs, type Borrow, type Goal, type MatchState } from '../match/match';
+import { cleanPens, elapsedMs, matchWinner, type Borrow, type Goal, type MatchState, type Pens } from '../match/match';
 
 export const HISTORY_MAX = 150;
 /** A single match never counts for more than this (a clock left running overnight). */
@@ -36,6 +36,8 @@ export interface EveningMatch {
   /** Clock time played, when known. */
   ms?: number;
   endedAt: number;
+  /** Level match decided on penalties (winner, optional kicks). Counts as a win/loss, never as goals. */
+  pens?: Pens;
 }
 
 export interface EveningTeam {
@@ -125,6 +127,7 @@ export function buildEvening({ match: m, result: r, players, bibs, now, id }: Bu
     ...(h.sides ? { sides: h.sides } : {}),
     ...(typeof h.ms === 'number' ? { ms: Math.min(h.ms, MATCH_MS_CAP) } : {}),
     endedAt: h.endedAt,
+    ...(h.pens ? { pens: { ...h.pens } } : {}),
   }));
   if (inProgressCounts(m, now)) {
     const [a, b] = m.onPitch;
@@ -219,15 +222,19 @@ function sanitizeRecord(raw: unknown): EveningRecord | null {
       : [];
     const count = (v: unknown, team: number) => (isNum(v) && v >= 0 ? Math.round(v) : goals.filter((g) => g.team === team).length);
     const sides = Array.isArray(mt.sides) && mt.sides.length === 2 ? ([strs(mt.sides[0]), strs(mt.sides[1])] as [string[], string[]]) : undefined;
+    const goalsA = count(mt.goalsA, mt.a);
+    const goalsB = count(mt.goalsB, mt.b);
+    const pens = cleanPens(mt.pens, mt.a, mt.b, goalsA, goalsB);
     matches.push({
       a: mt.a,
       b: mt.b,
-      goalsA: count(mt.goalsA, mt.a),
-      goalsB: count(mt.goalsB, mt.b),
+      goalsA,
+      goalsB,
       goals,
       ...(sides ? { sides } : {}),
       ...(isNum(mt.ms) && mt.ms >= 0 ? { ms: Math.min(mt.ms, MATCH_MS_CAP) } : {}),
       endedAt: isNum(mt.endedAt) ? mt.endedAt : 0,
+      ...(pens ? { pens } : {}),
     });
   }
   if (!matches.length) return null;
@@ -267,6 +274,8 @@ export interface TeamRow {
   lost: number;
   goalsFor: number;
   goalsAgainst: number;
+  /** Of `won`, how many on penalties. */
+  pensWon: number;
 }
 
 export interface Ranked {
@@ -292,6 +301,8 @@ export interface EveningStats {
   biggestWin: { index: number; margin: number } | null;
   /** Most goals in one match (≥ 3), index into matches. */
   mostGoals: { index: number; total: number } | null;
+  /** Indexes of the matches decided on penalties. */
+  pens: number[];
 }
 
 export function sideIds(rec: EveningRecord, mt: EveningMatch, side: 0 | 1): string[] {
@@ -302,10 +313,11 @@ export function nameIn(rec: EveningRecord, id: string): string {
   return rec.players.find((p) => p.id === id)?.name ?? '?';
 }
 
-const winnerOf = (mt: EveningMatch) => (mt.goalsA === mt.goalsB ? null : mt.goalsA > mt.goalsB ? mt.a : mt.b);
+/** Winner on goals, or on penalties after a level score (same rule as the match screen's standings). */
+const winnerOf = (mt: EveningMatch) => matchWinner(mt);
 
 export function teamTable(rec: EveningRecord): TeamRow[] {
-  const rows: TeamRow[] = rec.teams.map((_, team) => ({ team, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0 }));
+  const rows: TeamRow[] = rec.teams.map((_, team) => ({ team, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, pensWon: 0 }));
   for (const mt of rec.matches) {
     const A = rows[mt.a];
     const B = rows[mt.b];
@@ -326,6 +338,7 @@ export function teamTable(rec: EveningRecord): TeamRow[] {
       B.won++;
       A.lost++;
     }
+    if (w !== null && mt.pens) rows[w].pensWon++;
   }
   return rows
     .filter((r) => r.played > 0)
@@ -385,6 +398,7 @@ export function eveningStats(rec: EveningRecord): EveningStats {
     streak,
     biggestWin,
     mostGoals,
+    pens: rec.matches.flatMap((mt, i) => (mt.pens ? [i] : [])),
   };
 }
 
@@ -409,6 +423,8 @@ export interface AllTime {
   evenings: number;
   matches: number;
   goals: number;
+  /** Matches decided on penalties. */
+  pens: number;
   rows: AllTimeRow[];
 }
 
@@ -431,6 +447,7 @@ export function allTimeStats(history: EveningRecord[], roster: { id: string; nam
   };
   let matches = 0;
   let goals = 0;
+  let pens = 0;
   for (const rec of history) {
     const seen = new Set<AllTimeRow>();
     for (const p of rec.players) seen.add(row(rec, p.id));
@@ -438,6 +455,7 @@ export function allTimeStats(history: EveningRecord[], roster: { id: string; nam
     for (const mt of rec.matches) {
       matches++;
       goals += mt.goalsA + mt.goalsB;
+      if (mt.pens) pens++;
       const w = winnerOf(mt);
       ([0, 1] as const).forEach((side) => {
         for (const id of sideIds(rec, mt, side)) {
@@ -450,7 +468,7 @@ export function allTimeStats(history: EveningRecord[], roster: { id: string; nam
       for (const g of mt.goals) if (g.by && rec.players.some((p) => p.id === g.by)) row(rec, g.by).goals++;
     }
   }
-  return { evenings: history.length, matches, goals, rows: [...rows.values()] };
+  return { evenings: history.length, matches, goals, pens, rows: [...rows.values()] };
 }
 
 /** Win percentage, or null below the minimum number of matches. */

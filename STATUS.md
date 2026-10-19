@@ -153,3 +153,8 @@
 
 ## Not verified
 - Mixed versions during sync (see DECISIONS v4): a phone on the previous version that edits a player drops his positions.
+
+# v5: penalties
+
+- A level match can be decided on penalties ("מי ניצחה בפנדלים?", optional shoot-out score); the winner stays, the loser is queued. Counts as a win/loss everywhere, never as goals (DECISIONS → Penalties (v5)).
+- Tested: unit (queue rotation, standings/streak/dominance, 2 teams, sanitize garbage and old records, history stats/all-time/merge); e2e step 7c (0–0 → pens 3–2 → winner stays, loser at the back, summary and match list show it); screenshots `11a`/`11b` and `13b` (light + dark).

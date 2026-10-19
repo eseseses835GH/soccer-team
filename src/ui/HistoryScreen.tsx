@@ -102,6 +102,35 @@ function ScoreLine({ rec, m }: { rec: EveningRecord; m: EveningMatch }) {
   );
 }
 
+/** "פנדלים 4–3 · ניצחו הכחולים": kicks in the same order as the score line above (team a first). */
+function PensNote({ rec, m }: { rec: EveningRecord; m: EveningMatch }) {
+  if (!m.pens) return null;
+  const { a, b } = m.pens;
+  return (
+    <small className="pens-note pens-kicks-line">
+      🥅 פנדלים
+      {a !== undefined && b !== undefined && (
+        <>
+          {' '}
+          <span className="ev-goals">
+            <b>{a}</b>
+            <span aria-hidden="true">–</span>
+            <b>{b}</b>
+          </span>
+        </>
+      )}{' '}
+      · ניצחו ה<bdi>{lookOf(rec, m.pens.winner).name}</bdi>
+    </small>
+  );
+}
+
+/** Plain-text form for sharing: "(פנדלים 4–3, ניצחו הכחולים)". */
+function pensText(rec: EveningRecord, m: EveningMatch): string {
+  if (!m.pens) return '';
+  const kicks = m.pens.a !== undefined && m.pens.b !== undefined ? ` ${m.pens.a}–${m.pens.b}` : '';
+  return ` (פנדלים${kicks}, ניצחו ה${lookOf(rec, m.pens.winner).name})`;
+}
+
 interface Highlight {
   icon: string;
   title: string;
@@ -160,6 +189,26 @@ function highlightsOf(rec: EveningRecord, s: EveningStats): Highlight[] {
       text: `💥 הניצחון הגדול: ${line(s.biggestWin.index)}`,
     });
   }
+  if (s.pens.length === 1) {
+    const i = s.pens[0];
+    const m = rec.matches[i];
+    out.push({
+      icon: '🥅',
+      title: 'הוכרע בפנדלים',
+      value: <ScoreLine rec={rec} m={m} />,
+      sub: `משחק ${i + 1} · ניצחו ה${lookOf(rec, m.pens!.winner).name}${m.pens!.a !== undefined ? ` ${Math.max(m.pens!.a, m.pens!.b!)}–${Math.min(m.pens!.a, m.pens!.b!)}` : ''}`,
+      text: `🥅 הוכרע בפנדלים: ${line(i)}${pensText(rec, m)}`,
+    });
+  } else if (s.pens.length > 1) {
+    const winners = names(s.pens.map((i) => `ה${lookOf(rec, rec.matches[i].pens!.winner).name}`));
+    out.push({
+      icon: '🥅',
+      title: 'הוכרעו בפנדלים',
+      value: `${s.pens.length} משחקים`,
+      sub: `ניצחו: ${winners}`,
+      text: `🥅 ${s.pens.length} משחקים הוכרעו בפנדלים`,
+    });
+  }
   if (s.mostGoals && s.mostGoals.index !== s.biggestWin?.index) {
     out.push({
       icon: '🎯',
@@ -190,7 +239,9 @@ export function EveningScreen({ record: rec }: { record: EveningRecord }) {
       goals: s.goals,
       minutes: s.minutes,
       champion: champLook ? `${champLook.emoji} ה${champLook.name}` : undefined,
-      table: s.table.map((r) => `${lookOf(rec, r.team).emoji} ${lookOf(rec, r.team).name}: ${r.won} נ׳ · ${r.drawn} ת׳ · ${r.lost} ה׳`),
+      table: s.table.map(
+        (r) => `${lookOf(rec, r.team).emoji} ${lookOf(rec, r.team).name}: ${r.won} נ׳${r.pensWon ? ` (${r.pensWon} בפנדלים)` : ''} · ${r.drawn} ת׳ · ${r.lost} ה׳`,
+      ),
       highlights: highlights.map((h) => h.text),
     });
     if (await nativeShare({ text })) return;
@@ -214,7 +265,7 @@ export function EveningScreen({ record: rec }: { record: EveningRecord }) {
         {champ && (
           <p className="ev-champ-sub">
             {[
-              plural(champ.won, 'ניצחון אחד', 'ניצחונות'),
+              plural(champ.won, 'ניצחון אחד', 'ניצחונות') + (champ.pensWon ? ` (${champ.pensWon === 1 ? 'אחד' : champ.pensWon} בפנדלים)` : ''),
               champ.drawn ? plural(champ.drawn, 'תיקו אחד', 'תיקו') : '',
               champ.lost ? plural(champ.lost, 'הפסד אחד', 'הפסדים') : '',
             ]
@@ -295,6 +346,7 @@ export function EveningScreen({ record: rec }: { record: EveningRecord }) {
                 <span className="ev-no">{i + 1}</span>
                 <span className="ev-match-body">
                   <ScoreLine rec={rec} m={m} />
+                  <PensNote rec={rec} m={m} />
                   {by.length > 0 && <small className="muted">⚽ {by.join(', ')}</small>}
                 </span>
               </li>
@@ -432,6 +484,7 @@ function AllTimeView({ history }: { history: EveningRecord[] }) {
           </div>
         ))}
       </dl>
+      {t.pens > 0 && <p className="hint">{t.pens === 1 ? 'משחק אחד הוכרע' : `${t.pens} משחקים הוכרעו`} בפנדלים (נספר כניצחון למנצחת).</p>}
       <Board title="👑 מלכי השערים" rows={scorers} value={(r) => plural(r.goals, 'שער אחד', 'שערים')} />
       <Board title="🏅 אחוז ניצחונות" rows={pct} value={(r) => `${winPct(r)}% · ${r.played} משחקים`} />
       {!pct.length && <p className="hint">אחוז ניצחונות יופיע אחרי {MIN_GAMES_FOR_PCT} משחקים לשחקן.</p>}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addGoal, endMatch, loserOf, setLastScorer, startClock, startSession, type MatchState } from '../match/match';
+import { addGoal, endMatch, endOnPenalties, loserOf, setLastScorer, startClock, startSession, type MatchState } from '../match/match';
 import { buildEveningShareText } from '../share';
 import {
   stampSides,
@@ -301,5 +301,62 @@ describe('borrowers in per-player wins', () => {
     } as unknown as Parameters<typeof stampSides>[0];
     const out = stampSides(m, 0, r);
     expect(out.history[0].sides).toEqual([['a1', 'a2'], ['c1', 'b1']]);
+  });
+});
+
+describe('penalties in the history', () => {
+  /** A level match (`goals` per side) decided on penalties through the reducer. */
+  function pens(s: AppState, winnerSide: 0 | 1, goals = 0, kicks?: [number, number]): AppState {
+    let now = s.dayAt + MIN;
+    let m: MatchState = startClock(s.match!, now);
+    for (let i = 0; i < goals; i++) m = addGoal(addGoal(m, m.onPitch[0], (now += 1000)), m.onPitch[1], (now += 1000));
+    now = m.clock.startedAt! + 8 * MIN;
+    return reducer(s, { type: 'setMatch', match: endOnPenalties(m, m.onPitch[winnerSide], now, kicks), now });
+  }
+
+  it('carries pens into the record and counts them as wins, not goals', () => {
+    let s = baseState();
+    s = pens(s, 1, 1, [3, 4]); // red 1:1 blue, blue on pens; red out, yellow in
+    s = pens(s, 1, 0); // yellow 0:0 blue, blue on pens (no kicks); yellow out, red in
+    s = play(s, [[0, 'a']]); // red 1:0 blue ends blue's run
+    const rec = buildEvening({ match: s.match!, result: s.result!, players, bibs: ['red', 'blue', 'yellow'], now: s.dayAt })!;
+    expect(rec.matches[0]).toMatchObject({ a: 0, b: 1, goalsA: 1, goalsB: 1, pens: { winner: 1, a: 3, b: 4 } });
+    expect(rec.matches[1]).toMatchObject({ a: 2, b: 1, goalsA: 0, goalsB: 0, pens: { winner: 1 } });
+    expect(JSON.parse(JSON.stringify(rec))).toEqual(rec);
+
+    const st = eveningStats(rec);
+    expect(st.goals).toBe(3);
+    expect(st.pens).toEqual([0, 1]);
+    const blue = st.table.find((r) => r.team === 1)!;
+    expect(blue).toMatchObject({ won: 2, pensWon: 2, drawn: 0, lost: 1, goalsFor: 1, goalsAgainst: 2 });
+    expect(st.table.find((r) => r.team === 0)).toMatchObject({ won: 1, lost: 1, drawn: 0, pensWon: 0 });
+    expect(st.streak).toEqual({ team: 1, wins: 2 });
+    expect(st.playerWins.find((x) => x.id === 'c')).toMatchObject({ n: 2 });
+    expect(st.biggestWin).toBeNull();
+
+    const all = allTimeStats([rec], players);
+    expect(all.pens).toBe(2);
+    expect(all.goals).toBe(3);
+    expect(all.rows.find((r) => r.key === 'c')).toMatchObject({ won: 2 });
+  });
+
+  it('sanitizes pens in stored history; old records without pens load as before', () => {
+    let s = baseState();
+    s = pens(s, 0, 2, [5, 4]);
+    s = play(s, [[0, 'a']]);
+    const rec = buildEvening({ match: s.match!, result: s.result!, players, bibs: ['red', 'blue', 'yellow'], now: s.dayAt })!;
+    const raw = JSON.parse(JSON.stringify(rec));
+    expect(sanitizeHistory([raw])[0]).toEqual(rec);
+    const bad = structuredClone(raw);
+    bad.matches[0].pens = { winner: 2, a: 5, b: 4 }; // team not in the match
+    bad.matches[1].pens = { winner: bad.matches[1].a }; // not level
+    const clean = sanitizeHistory([bad])[0];
+    expect(clean.matches.every((x) => !('pens' in x))).toBe(true);
+    expect(eveningStats(clean).table.find((r) => r.team === 0)).toMatchObject({ drawn: 1 });
+    const kicks = structuredClone(raw);
+    kicks.matches[0].pens = { winner: 0, a: 1, b: 9 }; // kicks disagree: keep the winner only
+    expect(sanitizeHistory([kicks])[0].matches[0].pens).toEqual({ winner: 0 });
+    // Merging two copies by id keeps the pens.
+    expect(mergeHistory([rec], [sanitizeHistory([raw])[0]])[0].matches[0].pens).toEqual({ winner: 0, a: 5, b: 4 });
   });
 });

@@ -2089,3 +2089,68 @@ thead th {
     animation: none;
   }
 }
+
+/* ---------- penalties (draw sheet, match list) ---------- */
+.pens-score,
+.pens-kicks-line .ev-goals {
+  display: inline-flex;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.pens-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-block: 14px 4px;
+}
+.pens-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-block-size: 96px;
+  padding: 10px;
+  border: 3px solid var(--team);
+  border-radius: 20px;
+  background: var(--sunk);
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 800;
+  transition: transform 0.08s, opacity 0.15s;
+}
+.pens-team .dot {
+  inline-size: 22px;
+  block-size: 22px;
+  background: var(--team);
+}
+.pens-team:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.pens-team:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.pens-kicks {
+  margin-block: 10px 12px;
+}
+.pens-steppers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  gap: 12px;
+  padding-block-end: 6px;
+}
+.pens-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+.pens-stepper .stepper span {
+  min-inline-size: 40px;
+}
+.pens-note {
+  color: var(--ink-2);
+}

@@ -119,6 +119,22 @@ for (const scheme of ['light', 'dark']) {
   await playMatch([[0, 0], [0, 0], [0, null], [1, 3]]);
   await playMatch([[1, 2], [0, 0], [1, 2]]);
   await playMatch([[0, 4], [1, 1], [1, 1]]);
+  // A 1–1 decided on penalties: the sheet, then the optional shoot-out score.
+  await page.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+  for (const side of [0, 1]) {
+    await page.getByRole('button', { name: '+ גול' }).nth(side).click();
+    await page.locator('.sheet').getByRole('button', { name: 'דילוג' }).click();
+  }
+  await page.waitForSelector('.goal-burst', { state: 'detached', timeout: 5000 }).catch(() => {});
+  await page.getByRole('button', { name: 'סיום משחק' }).click();
+  await shot('11a-pens-sheet');
+  await checkLayout('penalties sheet');
+  await page.locator('.sheet').getByText('תוצאת הפנדלים (לא חובה)').click();
+  const steppers = page.locator('.sheet .pens-stepper');
+  for (let i = 0; i < 4; i++) await steppers.nth(0).getByRole('button', { name: 'יותר' }).click();
+  for (let i = 0; i < 3; i++) await steppers.nth(1).getByRole('button', { name: 'יותר' }).click();
+  await shot('11b-pens-kicks');
+  await page.locator('.sheet .pens-team').first().click();
   await page.waitForTimeout(2600); // let the "who's next" toast fade
   await page.getByRole('button', { name: 'סיום הערב' }).click();
   await shot('12-end-evening-sheet');

@@ -8,6 +8,7 @@ import {
   dominantTeam,
   elapsedMs,
   endMatch,
+  endOnPenalties,
   keeperIndex,
   loserOf,
   pauseClock,
@@ -25,7 +26,7 @@ import { engineOptions, teamLook } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
 import { BorrowCard } from './BorrowCard';
-import { Sheet } from './components';
+import { Sheet, Stepper } from './components';
 import { GoalBurst } from './GoalBurst';
 import { Icon } from './icons';
 import { celebrateGoal, playWhistle, stopSounds, unlockAudio, unlockOnNextTap } from './sounds';
@@ -69,7 +70,10 @@ export function MatchScreen() {
   const r = state.result;
   const [now, setNow] = useState(() => Date.now());
   const [scorerFor, setScorerFor] = useState<number | null>(null);
-  const [drawAsk, setDrawAsk] = useState(false);
+  /** Level match: first "who won on penalties?", then (plain draw) "who leaves?". */
+  const [drawAsk, setDrawAsk] = useState<false | 'pens' | 'leave'>(false);
+  /** Optional shoot-out score, [first team on the pitch, second]. */
+  const [kicks, setKicks] = useState<[number, number]>([0, 0]);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
   // After a reload the time-up whistle has no tap of its own: unlock audio on any tap first.
@@ -179,9 +183,23 @@ export function MatchScreen() {
     }
     const loser = loserOf(m);
     if (loser !== null) return finish(loser);
-    if (!m.queue.length) return finish(a);
-    setDrawAsk(true);
+    setKicks([0, 0]);
+    setDrawAsk('pens');
   };
+  /** A plain draw: with a queue, ask who leaves; with two teams nobody leaves. */
+  const plainDraw = () => (m.queue.length ? setDrawAsk('leave') : finish(a));
+  const finishOnPens = (winner: number) => {
+    const loserT = winner === a ? b : a;
+    // Kicks count only when entered and they agree with the winner (level kicks = not entered).
+    const scored = kicks[0] !== kicks[1] ? kicks : null;
+    set(endOnPenalties(m, winner, Date.now(), scored));
+    setDrawAsk(false);
+    const w = teamLook(state.settings, winner).name;
+    if (m.queue.length) notify(`ה${w} ניצחו בפנדלים · ה${teamLook(state.settings, loserT).name} יוצאים · נכנסים ה${teamLook(state.settings, m.queue[0]).name}`);
+    else notify(`ה${w} ניצחו בפנדלים`);
+  };
+  /** With a shoot-out score entered, only the team ahead can be the winner. */
+  const kicksAhead = kicks[0] === kicks[1] ? null : kicks[0] > kicks[1] ? a : b;
 
   const table = standings(m, k);
   const scorers = topScorers(m).slice(0, 5);
@@ -346,7 +364,59 @@ export function MatchScreen() {
 
       {burst && <GoalBurst key={burst.id} color={teamLook(state.settings, burst.team).color} onDone={() => setBurst(null)} />}
 
-      {drawAsk && (
+      {drawAsk === 'pens' && (
+        <Sheet title="מי ניצחה בפנדלים?" onClose={() => setDrawAsk(false)}>
+          <p className="lead">
+            תיקו{' '}
+            <span className="pens-score">
+              <b>{ga}</b>
+              <span aria-hidden="true">–</span>
+              <b>{gb}</b>
+            </span>
+            . המנצחת נשארת, המפסידה יוצאת.
+          </p>
+          <div className="pens-teams">
+            {[a, b].map((t) => {
+              const look = teamLook(state.settings, t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  className="pens-team"
+                  style={{ '--team': look.color } as React.CSSProperties}
+                  disabled={kicksAhead !== null && kicksAhead !== t}
+                  onClick={() => finishOnPens(t)}
+                >
+                  <span className="dot" aria-hidden="true" />
+                  ה{look.name}
+                </button>
+              );
+            })}
+          </div>
+          <details className="fold pens-kicks">
+            <summary>תוצאת הפנדלים (לא חובה)</summary>
+            <div className="pens-steppers">
+              {[a, b].map((t, side) => (
+                <div key={t} className="pens-stepper">
+                  <span>ה{teamLook(state.settings, t).name}</span>
+                  <Stepper
+                    label={`פנדלים של ה${teamLook(state.settings, t).name}`}
+                    value={kicks[side]}
+                    min={0}
+                    max={30}
+                    onChange={(v) => setKicks(side === 0 ? [v, kicks[1]] : [kicks[0], v])}
+                  />
+                </div>
+              ))}
+            </div>
+          </details>
+          <button type="button" className="btn btn-quiet btn-block" onClick={plainDraw}>
+            תיקו בלי פנדלים
+          </button>
+        </Sheet>
+      )}
+
+      {drawAsk === 'leave' && (
         <Sheet title="תיקו. מי יוצא?" onClose={() => setDrawAsk(false)}>
           <p className="lead">{defaultOutOnDraw(m) !== null ? 'בדרך כלל יוצאת הקבוצה שנמצאת יותר זמן על המגרש.' : 'משחק ראשון, אז תחליטו אתם.'}</p>
           <div className="stack">
