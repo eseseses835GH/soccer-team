@@ -17,7 +17,10 @@ and a nudge when one team keeps winning.
 
 ## How it works for the group
 1. **Players (once).** Each player needs a name and a level (1 = just started, 10 = the best in the
-   group). Optionally, pick up to three player *cards*, in two rows:
+   group). Optionally, tap where he's strong: 🧤 שוער (goalkeeper), 🛡️ הגנה (defence), 🔄 קישור (midfield),
+   ⚡ התקפה (attack), as many as fit. The split spreads defenders, midfielders and attackers across the teams;
+   🧤 means "one per team" in fixed-keeper mode and "starts in goal" when keepers rotate.
+   Folded under **עוד על השחקן** ("more about the player") you can pick up to three player *cards*, in two rows:
    - **חוזקות (strengths):** 🦍 החיה (the beast), 🎯 הצלף (the sniper), 🪄 הקוסם (the magician),
      🧠 המוח (the brain), 🧱 הסלע (the rock), 📣 הקפטן (the captain).
    - **חולשות (weaknesses):** 🐢 איטי (slow), 😮‍💨 נגמר אחרי 5 דקות (done after 5 minutes),
@@ -25,8 +28,8 @@ and a nudge when one team keeps winning.
      ball), 🌱 מתחיל (beginner).
 
    Cards shape the eight ratings used for balancing (stamina, passing, dribbling, shooting, defence,
-   teamwork, leadership). "דירוג מפורט" (detailed rating) opens one slider per rating, both when adding
-   and when editing. You can also paste a whole list or upload a CSV ([template](docs/roster-template.csv)).
+   teamwork, leadership). Folded inside that, "דירוג מפורט מתקדם" (advanced detailed rating) opens one slider
+   per rating, both when adding and when editing. You can also paste a whole list or upload a CSV ([template](docs/roster-template.csv)).
 2. **Tonight.** Tick who came and choose players per team (3–7). The app explains the plan in one line:
    - 10 players, 5-a-side → `5 נגד 5` (5 vs 5)
    - 14 → `5 נגד 5 · 4 בחוץ, משלימים 1 מהמפסידה` (5 vs 5, 4 wait outside and borrow 1 from the losing team)
@@ -84,14 +87,15 @@ node scripts/icons.mjs                 # regenerate PWA PNG icons from public/fa
 ```
 
 ## Importing a roster
-One player per line: a name, then optionally the level, the word `שוער` ("goalkeeper") and card names
+One player per line: a name, then optionally the level, the word `שוער` ("goalkeeper"), positions
+(`הגנה`/`מגן`/`בלם`, `קישור`/`קשר`, `התקפה`/`חלוץ`/`כנף`) and card names
 (any of the twelve; `נגמר`, `לא חוזר` and `מפחד` also work as short forms).
 Commas, semicolons, tabs or spaces all work, and a header line is ignored:
 ```
-שם,רמה,שוער,כרטיסיות
-אבי,8,,הקפטן
-דני הקטן 6 שוער
-נועם, 7, הקוסם, לא חוזר להגנה
+שם,רמה,שוער,עמדות,כרטיסיות
+אבי,8,,קישור,הקפטן
+דני הקטן 6 שוער הגנה
+נועם, 7, התקפה, הקוסם, לא חוזר להגנה
 יוסי
 ```
 Duplicate names and levels outside 1–10 are skipped and listed. A backup `.json` file can be imported
@@ -123,6 +127,7 @@ Penalties keep rules near-hard:
 | A team has no leader (leadership ≥ threshold) although there are enough | 1 per team |
 | A team has no fixed keeper although there are enough (fixed mode only) | 2 per team |
 | Team size differs from the plan | 50 per player |
+| Positions bunched: per player a team is off its fair share of defenders / midfielders / attackers, beyond what's unavoidable (a two-position player counts ½ in each) | 0.15 per player |
 
 **Search:**
 - **2 teams with ≤ 14 players:** exhaustive. Player 0 is pinned when sizes are equal, so 14 players

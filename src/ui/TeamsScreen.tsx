@@ -3,6 +3,7 @@ import { ATTR_KEYS, evaluate, randomSeed, scoreFromCost, suggestSwaps, type Swap
 import { ATTR_LABELS, goalsEvery } from '../i18n';
 import { startSession } from '../match/match';
 import { applyCards } from '../state/cards';
+import { FIELD_POSITIONS } from '../state/positions';
 import { lateJoin } from '../state/late';
 import { engineOptions, newId, teamLook, type AppState, type GameResult, type Player } from '../state/model';
 import { isResultStale, useStore } from '../state/store';
@@ -13,6 +14,21 @@ import { Icon } from './icons';
 import { rerollTeams, splitTeams } from './split';
 
 type Sel = { kind: 'team'; i: number } | { kind: 'sub'; id: string } | null;
+
+/** "🛡️2 🔄1 ⚡2": how many of a team's players are strong in each field position (a player can count twice). */
+function PositionLine({ members }: { members: Player[] }) {
+  const counts = FIELD_POSITIONS.map((x) => ({ ...x, n: members.filter((p) => p.positions?.includes(x.id)).length }));
+  return (
+    <span className="team-pos" aria-label={counts.map((c) => `${c.name} ${c.n}`).join(', ')}>
+      {counts.map((c) => (
+        <span key={c.id} aria-hidden="true" className={c.n ? '' : 'none'}>
+          {c.emoji}
+          {c.n}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 function teamCounts(r: GameResult): number[] {
   const c = new Array<number>(r.numTeams).fill(0);
@@ -80,6 +96,8 @@ export function TeamsScreen() {
   const k = r.numTeams;
   const counts = teamCounts(r);
   const indexOf = new Map(r.playerIds.map((id, i) => [id, i]));
+  // Only when someone in the split has a field position; otherwise the line would be all zeros.
+  const showPositions = players.some((p) => p.positions?.length);
   const stale = isResultStale(state);
   const edited = r.assignment.some((t, i) => t !== r.generated[i]);
   const animKey = `${r.createdAt}-${r.shown.length}`;
@@ -215,6 +233,7 @@ export function TeamsScreen() {
                   {t < 2 ? 'פותחים' : `בתור #${t - 1}`}
                   {short && ` · משלימים ${r.teamSize - counts[t]}`}
                 </span>
+                {showPositions && <PositionLine members={order.map((id) => byId.get(id)!).filter(Boolean)} />}
               </header>
               <ol>
                 {order.map((id, slot) => {

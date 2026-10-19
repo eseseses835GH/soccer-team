@@ -42,12 +42,20 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: 'השחקנים' }).click();
   await shot('03-players');
   await checkLayout('players');
+  // Quick add: level and positions up front; cards and sliders folded.
+  await page.getByPlaceholder('איך קוראים לו?').fill('שחר');
+  for (const pos of ['שוער', 'הגנה', 'קישור']) await page.getByRole('button', { name: pos, exact: true }).click();
+  await shot('03a-add-positions');
+  await page.getByText('עוד על השחקן').click();
   await page.getByRole('button', { name: 'הצלף', exact: true }).click();
   await page.getByRole('button', { name: 'נגמר אחרי 5 דקות', exact: true }).click();
-  await page.getByText('דירוג מפורט').click();
-  await shot('03b-add-detailed', true);
+  await shot('03b-add-more', true);
+  await page.getByText('דירוג מפורט מתקדם').click();
+  await shot('03c-add-detailed', true);
   await checkLayout('quick add with detailed rating');
-  await page.getByText('דירוג מפורט').click();
+  await page.getByText('דירוג מפורט מתקדם').click();
+  await page.getByText('עוד על השחקן').click();
+  await page.getByPlaceholder('איך קוראים לו?').fill('');
   await page.getByRole('button', { name: /אבי/ }).click();
   await shot('04-player-sheet');
   await page.locator('.sheet').evaluate((el) => el.scrollTo(0, el.scrollHeight));

@@ -79,6 +79,18 @@ describe('mergeById', () => {
 });
 
 describe('mergeDocs', () => {
+  it('carries player positions through the server and merges an edit to them', () => {
+    const withPos = { ...p('a'), canGK: true, positions: ['def', 'att'] } as Player;
+    const fromServer = sanitizeDoc(JSON.parse(JSON.stringify(doc([withPos, p('b')]))));
+    expect(fromServer.players[0].positions).toEqual(['def', 'att']);
+    expect(fromServer.players[0].canGK).toBe(true);
+    // A player without positions keeps its old shape, so old copies don't look edited.
+    expect(fromServer.players[1]).toEqual(p('b'));
+    const base = doc([p('a'), p('b')]);
+    const m = mergeDocs(base, base, doc([withPos, p('b')]));
+    expect(m.players[0].positions).toEqual(['def', 'att']);
+    expect(sanitizeDoc({ players: [{ ...withPos, positions: ['mid', 'xx', 'mid'] }] }).players[0].positions).toEqual(['mid']);
+  });
   it('merges pair rules as a set and drops pairs of deleted players', () => {
     const base = doc([p('a'), p('b'), p('c'), p('d')], { constraints: { together: [['a', 'b']], apart: [] } });
     const local = { ...base, constraints: { together: [['a', 'b']], apart: [['c', 'd']] } } as SyncDoc;

@@ -12,6 +12,14 @@ function p(id: string, level: number, over: Partial<Attributes> = {}): Player {
 const team = (prefix: string, levels: number[]) => levels.map((l, i) => p(`${prefix}${i}`, l));
 
 describe('suggestBorrowers', () => {
+  it('with equal levels, borrows the position the short team lacks', () => {
+    const short = [{ ...p('s0', 6), positions: ['att' as const] }, { ...p('s1', 6), positions: ['att' as const] }, ...team('s', [6, 6])];
+    const opponent = [{ ...p('o0', 6), positions: ['def' as const] }, { ...p('o1', 6), positions: ['att' as const] }, ...team('o', [6, 6, 6])];
+    const donors = [{ ...p('d0', 6), positions: ['att' as const] }, { ...p('d1', 6), positions: ['def' as const] }, p('d2', 6)];
+    const best = suggestBorrowers({ short, donors, opponent, need: 1, options: DEFAULT_OPTIONS, constraints: NONE })!;
+    expect(best.picks).toEqual([1]);
+  });
+
   it('picks the donor that makes the short team closest to the opponent', () => {
     const short = team('s', [6, 6, 6, 6]); // sum 24
     const opponent = team('o', [6, 6, 6, 6, 6]); // sum 30 → needs a 6

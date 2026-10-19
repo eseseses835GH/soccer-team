@@ -1,4 +1,5 @@
 import { CARDS, applyCards, sanitizeCards, type CardId } from './cards';
+import { parsePositionWords } from './positions';
 import { newId, sanitizePlayer, sanitizeSettings, type Player, type Settings } from './model';
 import type { Constraints } from '../engine';
 import { sanitizeHistory, type EveningRecord } from './history';
@@ -15,7 +16,7 @@ const HEADER_WORDS = ['שם', 'name'];
 
 /**
  * Parse a roster typed or pasted by hand, one player per line:
- *   "אבי 8", "אבי, 8", "דני הקטן, 6, שוער, החיה", "יוסי" (level 5).
+ *   "אבי 8", "אבי, 8", "דני הקטן, 6, שוער, החיה", "נועם 7 הגנה קישור", "יוסי" (level 5).
  * Works with CSV (comma/semicolon/tab) as exported from Excel or Sheets.
  */
 export function parseRoster(text: string, existingNames: string[] = []): ParsedRoster {
@@ -53,16 +54,18 @@ export function parseRoster(text: string, existingNames: string[] = []): ParsedR
       skipped.push({ line, reason: 'השם כבר קיים' });
       continue;
     }
-    const lower = rest.toLowerCase();
-    const canGK = GK_WORDS.some((w) => lower.split(/\s+/).includes(w));
+    const words = rest.toLowerCase().split(/\s+/);
+    const canGK = GK_WORDS.some((w) => words.includes(w));
+    const positions = parsePositionWords(words);
     const cards = parseCardNames(rest);
     taken.add(name);
-    players.push({ id: newId(), name, attrs: applyCards(level, cards), canGK, cards });
+    players.push({ id: newId(), name, attrs: applyCards(level, cards), canGK, cards, ...(positions.length ? { positions } : {}) });
   }
   return { players, skipped };
 }
 
-export const ROSTER_TEMPLATE = '﻿שם,רמה,שוער,כרטיסיות\nאבי,8,,הקפטן\nדני,5,שוער,איטי\nנועם,7,,הקוסם לא חוזר להגנה\nליאור,6,,החיה\nגיל,3,,מתחיל\n';
+export const ROSTER_TEMPLATE =
+  '﻿שם,רמה,שוער,עמדות,כרטיסיות\nאבי,8,,קישור,הקפטן\nדני,5,שוער,הגנה,איטי\nנועם,7,,התקפה,הקוסם לא חוזר להגנה\nליאור,6,,הגנה קישור,החיה\nגיל,3,,,מתחיל\n';
 
 /**
  * Card names (or short aliases) in the order they appear in the text. Longer terms are

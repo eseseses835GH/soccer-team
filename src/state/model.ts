@@ -12,6 +12,7 @@ import {
   type Weights,
 } from '../engine';
 import { sanitizeCards, type CardId } from './cards';
+import { sanitizePositions } from './positions';
 import type { MatchState } from '../match/match';
 import { sanitizeMatch } from '../match/match';
 import { addEvening, buildEvening, sanitizeHistory, type EveningRecord } from './history';
@@ -187,7 +188,10 @@ export function sanitizePlayer(p: unknown): Player | null {
     if (Number.isFinite(v)) attrs[k] = Math.min(10, Math.max(1, Math.round(v)));
   }
   const cards = sanitizeCards(r.cards);
-  return { id: r.id, name: r.name.trim().slice(0, 24), attrs, canGK: !!r.canGK, cards };
+  // No positions (and players from before positions existed) = the field is left out, so such a
+  // player looks exactly as before: synced docs and backups don't change for nothing.
+  const positions = sanitizePositions(r.positions);
+  return { id: r.id, name: r.name.trim().slice(0, 24), attrs, canGK: !!r.canGK, cards, ...(positions.length ? { positions } : {}) };
 }
 
 export function sanitizeSettings(raw: unknown): Settings {

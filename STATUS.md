@@ -138,3 +138,18 @@
 4. **Revoke invite links from the UI;** show the group's organizers.
 5. **Host on Vercel with the user's domain:** `vercel.json` and service-worker versioning are ready; the user follows `docs/SETUP-HOSTING-AND-LOGIN.md` (Vercel, domain, Supabase URLs, email template + Resend SMTP, Google). Verified locally only (no Vercel account yet).
 6. **(Future idea from the user, not built) Anonymous post-game ratings via WhatsApp:** after an evening, a logged-in group sends a link where players rate anonymously how each teammate played; results could nudge levels. Needs: a random anonymous token per evening (in the link, with an expiry), a Supabase table for votes + an RPC that accepts votes only for that evening's players, abuse limits (one vote per device/token, rate limits, ignore outliers), and a privacy note (votes are anonymous; only aggregates reach the organizers).
+
+# v4: positions and the player profile
+
+## What was built
+- **Player form (quick add and edit):** level → "איפה הוא חזק?" (🧤 שוער, 🛡️ הגנה, 🔄 קישור, ⚡ התקפה; 🧤 is the old `canGK`, now one control in both keeper modes) → folded "עוד על השחקן" with the 12 cards → folded inside it "דירוג מפורט מתקדם" (sliders).
+- **Balancing:** a position-spread term (weight 0.15, beyond what's unavoidable) so defenders/midfielders/attackers spread across teams; borrowing and swap suggestions see it too. With rotating keepers a 🧤 player starts in goal.
+- **Display:** tiny position emojis in the roster and import preview; a compact `🛡️2 🔄1 ⚡2` line per team on the teams screen.
+- **Import:** position words in pasted lists/CSV; the template has an `עמדות` column.
+
+## What was tested
+- Engine: stacked vs spread split of equal strength, odd counts free when as even as possible, ½ per position for two-position players, exact regression without positions, 3-team spread, borrowing picks the missing position. State: sanitizing/migration, emojis, backup, import words and the template, keeper order in rotate mode. Sync: positions survive the server round-trip and a remote edit merges.
+- e2e: quick add with positions and a keeper, roster emojis, the edit sheet's folds and a position edit, imported positions, the team line. Screenshots `03a`–`03c` (light + dark).
+
+## Not verified
+- Mixed versions during sync (see DECISIONS v4): a phone on the previous version that edits a player drops his positions.
