@@ -132,7 +132,9 @@
 - **Login on a real phone over the LAN IP.** Plain http there means PKCE falls back to the "plain" method, which Supabase supports.
 
 ## Next steps
-1. **Configure the Supabase dashboard:** Site URL, redirect URLs, the Google provider, and the email template with `{{ .Token }}` (see the report or DECISIONS).
+1. **Configure the Supabase dashboard:** Site URL, redirect URLs, the Google provider, and the email template with `{{ .Token }}` (step by step: `docs/SETUP-HOSTING-AND-LOGIN.md`).
 2. **A custom SMTP server** before real use: the built-in email sender is heavily rate-limited on the free plan.
 3. **"Players" role:** read-only access to teams and stats without ratings (needs a view or a separate doc without ratings).
 4. **Revoke invite links from the UI;** show the group's organizers.
+5. **Host on Vercel with the user's domain:** `vercel.json` and service-worker versioning are ready; the user follows `docs/SETUP-HOSTING-AND-LOGIN.md` (Vercel, domain, Supabase URLs, email template + Resend SMTP, Google). Verified locally only (no Vercel account yet).
+6. **(Future idea from the user, not built) Anonymous post-game ratings via WhatsApp:** after an evening, a logged-in group sends a link where players rate anonymously how each teammate played; results could nudge levels. Needs: a random anonymous token per evening (in the link, with an expiry), a Supabase table for votes + an RPC that accepts votes only for that evening's players, abuse limits (one vote per device/token, rate limits, ignore outliers), and a privacy note (votes are anonymous; only aggregates reach the organizers).

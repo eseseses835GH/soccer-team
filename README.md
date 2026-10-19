@@ -138,15 +138,18 @@ Penalties keep rules near-hard:
 **Score** = `round(100 · e^(−0.5 · cost))`. Well-balanced teams usually land at 80–95.
 
 ## Deploy
-`npm run build` outputs a static `dist/` with relative paths (`base: './'`).
+The app is hosted on **Vercel**. Step-by-step setup (Vercel, your own domain, Supabase redirect URLs,
+the email code template and SMTP, Google login), in Hebrew: [docs/SETUP-HOSTING-AND-LOGIN.md](docs/SETUP-HOSTING-AND-LOGIN.md).
 
-- **Netlify:** build `npm run build`, publish `dist`.
-- **Vercel:** import the repo; the Vite preset is detected.
-- **GitHub Pages:** `.github/workflows/deploy.yml` tests, builds and deploys on push to `main`.
-  Enable it under *Settings → Pages → Source: GitHub Actions*.
+- `npm run build` outputs a static `dist/` with relative paths (`base: './'`), so any static host works.
+- `vercel.json` sets the Vite preset and the headers: `index.html`, `sw.js` and the manifest are `no-cache`,
+  hashed files in `assets/` are cached for a year (`immutable`), plus `nosniff`, `Referrer-Policy` and `X-Frame-Options`.
+- No environment variables are needed on Vercel: the Supabase URL and publishable key come from the committed `.env`.
+- The old GitHub Pages workflow (`.github/workflows/deploy.yml`, runs on `main` only) is superseded by Vercel.
 
-The service worker caches the app shell and fonts as they load, so the second visit works offline.
-It never caches Supabase calls.
+The service worker precaches the app (not the lazy Supabase chunk), so the second visit works offline.
+Every build stamps `sw.js` with a hash of the build, so a new deploy installs a new worker and drops the
+old cache; pages are network-first, so users get the new version on the next open. It never caches Supabase calls.
 
 For login on a new host, add its address to the Supabase redirect URLs (Authentication → URL Configuration).
 
