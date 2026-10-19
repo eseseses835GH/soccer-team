@@ -167,11 +167,6 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: 'סיום משחק' }).click();
   await shot('11a-pens-sheet');
   await checkLayout('penalties sheet');
-  await page.locator('.sheet').getByText('תוצאת הפנדלים (לא חובה)').click();
-  const steppers = page.locator('.sheet .pens-stepper');
-  for (let i = 0; i < 4; i++) await steppers.nth(0).getByRole('button', { name: 'יותר' }).click();
-  for (let i = 0; i < 3; i++) await steppers.nth(1).getByRole('button', { name: 'יותר' }).click();
-  await shot('11b-pens-kicks');
   await page.locator('.sheet .pens-team').first().click();
   await page.waitForTimeout(2600); // let the "who's next" toast fade
   await page.getByRole('button', { name: 'סיום הערב' }).click();

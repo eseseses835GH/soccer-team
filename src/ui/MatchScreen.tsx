@@ -10,6 +10,8 @@ import {
   elapsedMs,
   endMatch,
   endOnPenalties,
+  addDrawExtraTime,
+  inDrawExtraTime,
   keeperIndex,
   loserOf,
   matchLength,
@@ -81,8 +83,6 @@ export function MatchScreen() {
   const [scorerFor, setScorerFor] = useState<number | null>(null);
   /** Level match: first "who won on penalties?", then (plain draw) "who leaves?". */
   const [drawAsk, setDrawAsk] = useState<false | 'pens' | 'leave'>(false);
-  /** Optional shoot-out score, [first team on the pitch, second]. */
-  const [kicks, setKicks] = useState<[number, number]>([0, 0]);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
   const [lengthOpen, setLengthOpen] = useState(false);
@@ -119,7 +119,19 @@ export function MatchScreen() {
       if (buzzed.current === matchKey) buzzed.current = '';
       return;
     }
-    if (running && buzzed.current !== matchKey) {
+    if (running && buzzed.current !== matchKey && m) {
+      // Level when the time runs out: a whistle and automatic extra time (once per match).
+      const extra = addDrawExtraTime(m, state.settings.drawExtraMinutes, dflt);
+      if (extra !== m) {
+        set(extra);
+        try {
+          navigator.vibrate?.([200, 100, 200]);
+        } catch {
+          /* ignore */
+        }
+        playWhistle(state.settings.goalSound, 'start', false);
+        return;
+      }
       buzzed.current = matchKey;
       try {
         navigator.vibrate?.([300, 120, 300]);
@@ -217,23 +229,18 @@ export function MatchScreen() {
     }
     const loser = loserOf(m);
     if (loser !== null) return finish(loser);
-    setKicks([0, 0]);
     setDrawAsk('pens');
   };
   /** A plain draw: with a queue, ask who leaves; with two teams nobody leaves. */
   const plainDraw = () => (m.queue.length ? setDrawAsk('leave') : finish(a));
   const finishOnPens = (winner: number) => {
     const loserT = winner === a ? b : a;
-    // Kicks count only when entered and they agree with the winner (level kicks = not entered).
-    const scored = kicks[0] !== kicks[1] ? kicks : null;
-    set(endOnPenalties(m, winner, Date.now(), scored));
+    set(endOnPenalties(m, winner, Date.now()));
     setDrawAsk(false);
     const w = teamLook(state.settings, winner).name;
     if (m.queue.length) notify(`ה${w} ניצחו בפנדלים · ה${teamLook(state.settings, loserT).name} יוצאים · נכנסים ה${teamLook(state.settings, m.queue[0]).name}`);
     else notify(`ה${w} ניצחו בפנדלים`);
   };
-  /** With a shoot-out score entered, only the team ahead can be the winner. */
-  const kicksAhead = kicks[0] === kicks[1] ? null : kicks[0] > kicks[1] ? a : b;
 
   const table = standings(m, k);
   const scorers = topScorers(m).slice(0, 5);
@@ -257,6 +264,11 @@ export function MatchScreen() {
           </span>
         )}
       </button>
+      {inDrawExtraTime(m) && (
+        <button type="button" className="extra-note" onClick={() => setLengthOpen(true)}>
+          תיקו · תוספת זמן <span dir="ltr">+{state.settings.drawExtraMinutes}</span> דק׳ <span className="extra-edit">שינוי</span>
+        </button>
+      )}
       <div className="clock-ctrl">
         <button type="button" className="btn btn-primary" onClick={startStop}>
           <Icon name={running ? 'pause' : 'play'} size={20} /> {running ? 'עצירה' : elapsed > 0 ? 'המשך' : 'התחלה'}
@@ -451,16 +463,7 @@ export function MatchScreen() {
       {burst && <GoalBurst key={burst.id} color={teamLook(state.settings, burst.team).color} onDone={() => setBurst(null)} />}
 
       {drawAsk === 'pens' && (
-        <Sheet title="מי ניצחה בפנדלים?" onClose={() => setDrawAsk(false)}>
-          <p className="lead">
-            תיקו{' '}
-            <span className="pens-score">
-              <b>{ga}</b>
-              <span aria-hidden="true">–</span>
-              <b>{gb}</b>
-            </span>
-            . המנצחת נשארת, המפסידה יוצאת.
-          </p>
+        <Sheet title="תיקו. מי ניצחה בפנדלים?" onClose={() => setDrawAsk(false)}>
           <div className="pens-teams">
             {[a, b].map((t) => {
               const look = teamLook(state.settings, t);
@@ -470,7 +473,6 @@ export function MatchScreen() {
                   type="button"
                   className="pens-team"
                   style={{ '--team': look.color } as React.CSSProperties}
-                  disabled={kicksAhead !== null && kicksAhead !== t}
                   onClick={() => finishOnPens(t)}
                 >
                   <span className="dot" aria-hidden="true" />
@@ -479,25 +481,8 @@ export function MatchScreen() {
               );
             })}
           </div>
-          <details className="fold pens-kicks">
-            <summary>תוצאת הפנדלים (לא חובה)</summary>
-            <div className="pens-steppers">
-              {[a, b].map((t, side) => (
-                <div key={t} className="pens-stepper">
-                  <span>ה{teamLook(state.settings, t).name}</span>
-                  <Stepper
-                    label={`פנדלים של ה${teamLook(state.settings, t).name}`}
-                    value={kicks[side]}
-                    min={0}
-                    max={30}
-                    onChange={(v) => setKicks(side === 0 ? [v, kicks[1]] : [kicks[0], v])}
-                  />
-                </div>
-              ))}
-            </div>
-          </details>
-          <button type="button" className="btn btn-quiet btn-block" onClick={plainDraw}>
-            תיקו בלי פנדלים
+          <button type="button" className="text-btn pens-none" onClick={plainDraw}>
+            בלי פנדלים, תיקו
           </button>
         </Sheet>
       )}

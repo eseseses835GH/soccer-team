@@ -321,3 +321,7 @@ User feedback: "Multiple delete? Where is the swipe delete of a player?" and "th
 ## Back to the evening from the main screen (v5)
 - **While an evening is on (there's a match state), the main screen's big button is "חזרה למשחק · משחק N"**, and "חלוקה מחדש" is a secondary text button that asks first. Before, the only button was "עושים כוחות", which silently re-split and ended the evening (the matches were archived to the history, but the live evening was gone) — a user hit this after pressing back from the match screen.
 - With teams but no match yet, "חזרה לקבוצות" sits above "עושים כוחות" (a re-split there only replaces teams, so it doesn't ask).
+
+## Extra time on a draw, simpler penalties (v5, user feedback)
+- **Level when the time runs out → a whistle (short-long) and automatic extra time**, default **2 minutes** (Settings → משחק → "תוספת זמן בתיקו": בלי / 1 / 2 / 3 / 5). It's added once per match (`MatchState.extraAt`); a note under the clock "תיקו · תוספת זמן +2 דק׳ · שינוי" opens the length sheet to edit it. When the extra time ends the normal full-time whistle blows; if it's still level, "סיום משחק" asks about penalties. A shared group setting (old phones drop it → back to the default 2).
+- **Penalties are one tap:** the sheet is just "תיקו. מי ניצחה בפנדלים?" with two team buttons and a small "בלי פנדלים, תיקו". The optional shoot-out score (kicks) was removed from the UI — the user found it too complicated. Old records with kicks still load and show them; new ones store only the winner.

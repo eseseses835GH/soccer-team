@@ -62,6 +62,8 @@ export interface Settings {
   matchMinutes: number;
   /** No time limit: the match clock counts up and never runs out (groups that play to a number of goals). */
   matchNoLimit: boolean;
+  /** Level when the time runs out: this many minutes of extra time are added once (0 = off). */
+  drawExtraMinutes: number;
   /** Bib colours the group owns, in the order teams get them. */
   bibs: BibId[];
   /** Look of the app on this phone (not taken from an imported backup). */
@@ -115,6 +117,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gkSwitchGoals: 1,
   matchMinutes: 8,
   matchNoLimit: false,
+  drawExtraMinutes: 2,
   bibs: BIBS.map((b) => b.id),
   theme: 'auto',
   accent: 'green',
@@ -209,6 +212,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     gkSwitchGoals: Math.round(num(r.gkSwitchGoals, 1, 5, 1)),
     matchMinutes: Math.round(num(r.matchMinutes, 1, 60, DEFAULT_SETTINGS.matchMinutes)),
     matchNoLimit: r.matchNoLimit === true,
+    drawExtraMinutes: Math.round(num(r.drawExtraMinutes, 0, 10, 2)),
     bibs: bibs.length >= 2 ? [...new Set(bibs)] : DEFAULT_SETTINGS.bibs,
     theme: r.theme === 'light' || r.theme === 'dark' ? r.theme : 'auto',
     accent: typeof r.accent === 'string' && ACCENT_IDS.has(r.accent) ? r.accent : 'green',

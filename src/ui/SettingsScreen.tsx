@@ -93,6 +93,22 @@ export function SettingsScreen() {
           checked={settings.matchNoLimit}
           onChange={(matchNoLimit) => set({ matchNoLimit })}
         />
+        <div className="field-row">
+          <span>תוספת זמן בתיקו</span>
+          <Segmented
+            label="תוספת זמן בתיקו"
+            value={settings.drawExtraMinutes}
+            onChange={(drawExtraMinutes) => set({ drawExtraMinutes })}
+            options={[
+              { value: 0, label: 'בלי' },
+              { value: 1, label: '1' },
+              { value: 2, label: '2' },
+              { value: 3, label: '3' },
+              { value: 5, label: '5' },
+            ]}
+          />
+        </div>
+        <p className="hint">כשהזמן נגמר בתיקו: שריקה, והמשחק ממשיך בתוספת זמן (פעם אחת). אחרי זה, אם עדיין תיקו, מחליטים בפנדלים.</p>
         <p className="hint">צלילים:</p>
         <Segmented
           label="צלילים"

@@ -81,6 +81,8 @@ export interface MatchState {
    * Missing (older saved states, or not changed) = the default from the settings.
    */
   length?: MatchLength;
+  /** The match (`history.length`) that already got automatic extra time for a draw: only once. */
+  extraAt?: number;
 }
 
 /** A match length in ms; null = no time limit (the clock counts up and never runs out). */
@@ -413,6 +415,7 @@ export function sanitizeMatch(raw: unknown, numTeams: number): MatchState | null
     dismissed: r.dismissed && inRange(r.dismissed.team) ? r.dismissed : null,
     borrow: sanitizeBorrow(r.borrow, numTeams, r.onPitch),
     ...sanitizeLength(r.length, Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)).length : 0),
+    ...(typeof r.extraAt === 'number' && r.extraAt === (Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)).length : 0) ? { extraAt: r.extraAt } : {}),
   };
 }
 
@@ -477,4 +480,21 @@ function sanitizeRecordPens(h: MatchRecord): MatchRecord {
   const { pens, ...rest } = h;
   const clean = cleanPens(pens, h.a, h.b, h.goalsA, h.goalsB);
   return clean ? { ...rest, pens: clean } : rest;
+}
+
+/**
+ * Time ran out with the score level: add `minutes` of extra time once for this match (whistle and
+ * carry on). Returns the match unchanged when it doesn't apply (not level, off, or already given).
+ */
+export function addDrawExtraTime(m: MatchState, minutes: number, dflt: number | null): MatchState {
+  const [ga, gb] = score(m);
+  if (ga !== gb || minutes <= 0 || m.extraAt === m.history.length) return m;
+  const len = matchLength(m, dflt);
+  if (len === null) return m;
+  return { ...setMatchLength(m, len + minutes * MINUTE), extraAt: m.history.length };
+}
+
+/** This match is in its automatic extra time for a draw. */
+export function inDrawExtraTime(m: MatchState): boolean {
+  return m.extraAt === m.history.length;
 }

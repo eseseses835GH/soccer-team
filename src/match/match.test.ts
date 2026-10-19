@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addDrawExtraTime,
+  inDrawExtraTime,
   addGoal,
   addTeam,
   adjustMatchLength,
@@ -294,5 +296,27 @@ describe('match length (v5)', () => {
     expect(sanitizeMatch({ ...m, length: { at: 0, ms: 'x' } }, 3)!.length).toBeUndefined();
     expect(sanitizeMatch({ ...m, length: { at: 0, ms: -5 } }, 3)!.length).toBeUndefined();
     expect(sanitizeMatch({ ...m, length: { at: 0, ms: 7.4 * M } }, 3)!.length).toEqual({ at: 0, ms: 7 * M });
+  });
+});
+
+describe('extra time on a draw (v5)', () => {
+  const M = 60_000;
+  it('adds the extra minutes once when level, and not when someone leads', () => {
+    let m = startSession(3);
+    const level = addDrawExtraTime(m, 2, 8 * M);
+    expect(matchLength(level, 8 * M)).toBe(10 * M);
+    expect(inDrawExtraTime(level)).toBe(true);
+    expect(addDrawExtraTime(level, 2, 8 * M)).toBe(level); // only once
+    m = addGoal(m, m.onPitch[0], 0);
+    expect(addDrawExtraTime(m, 2, 8 * M)).toBe(m);
+    expect(addDrawExtraTime(startSession(3), 0, 8 * M).extraAt).toBeUndefined(); // off
+    expect(addDrawExtraTime(startSession(3), 2, null).extraAt).toBeUndefined(); // no time limit
+  });
+  it('lapses with the next match and survives sanitizing for the current one', () => {
+    const m = addDrawExtraTime(startSession(3), 2, 8 * M);
+    expect(sanitizeMatch(JSON.parse(JSON.stringify(m)), 3)!.extraAt).toBe(0);
+    const next = endMatch(m, m.onPitch[0], 1);
+    expect(inDrawExtraTime(next)).toBe(false);
+    expect(matchLength(next, 8 * M)).toBe(8 * M);
   });
 });

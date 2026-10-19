@@ -118,23 +118,20 @@ for (let i = 0; i < 2; i++) {
   await page.locator('.sheet .pick-list button').first().click();
 }
 await page.getByRole('button', { name: 'סיום משחק' }).click();
-// 7c. A 0–0 decided on penalties (3–2): the winner stays, the loser goes to the back of the queue.
+// 7c. A 0–0 decided on penalties (one tap, no shoot-out score): the winner stays, the loser goes to the back of the queue.
 {
   const [first, second] = await page.locator('.side h2').allInnerTexts();
   await page.getByRole('button', { name: 'סיום משחק' }).click();
   const sheet = page.locator('.sheet');
-  assert(await sheet.getByRole('heading', { name: 'מי ניצחה בפנדלים?' }).isVisible(), 'penalties sheet on a draw');
-  assert(await sheet.getByRole('button', { name: 'תיקו בלי פנדלים' }).isVisible(), 'plain draw still offered');
-  await sheet.getByText('תוצאת הפנדלים (לא חובה)').click();
-  for (let i = 0; i < 3; i++) await sheet.getByRole('group', { name: `פנדלים של ה${first}` }).getByRole('button', { name: 'יותר' }).click();
-  for (let i = 0; i < 2; i++) await sheet.getByRole('group', { name: `פנדלים של ה${second}` }).getByRole('button', { name: 'יותר' }).click();
-  assert(await sheet.getByRole('button', { name: `ה${second}` }).isDisabled(), 'the team behind on kicks cannot be the winner');
+  assert(await sheet.getByRole('heading', { name: 'תיקו. מי ניצחה בפנדלים?' }).isVisible(), 'penalties sheet on a draw');
+  assert(await sheet.getByRole('button', { name: 'בלי פנדלים, תיקו' }).isVisible(), 'plain draw still offered');
+  assert((await sheet.locator('.stepper').count()) === 0, 'no shoot-out score to fill in');
   await sheet.getByRole('button', { name: `ה${first}` }).click();
   const after = await page.locator('.side h2').allInnerTexts();
   assert(after.includes(first) && !after.includes(second), `penalty winner stays: ${after}`);
   const m = await page.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).match);
   const last = m.history[m.history.length - 1];
-  assert(last.goalsA === 0 && last.goalsB === 0 && last.pens?.a === 3 && last.pens?.b === 2 && last.pens.winner === last.a, `pens recorded: ${JSON.stringify(last.pens)}`);
+  assert(last.goalsA === 0 && last.goalsB === 0 && last.pens?.winner === last.a && last.pens.a === undefined, `pens recorded: ${JSON.stringify(last.pens)}`);
   assert(m.queue[m.queue.length - 1] === last.b && last.out === last.b, 'penalty loser to the back of the queue');
 }
 await page.getByRole('button', { name: 'סיום הערב' }).click();
@@ -148,7 +145,7 @@ const totals = await page.locator('.ev-stats dd').allInnerTexts();
 assert(totals[0] === '3' && totals[1] === '3', `summary totals: ${totals}`);
 assert(summary.includes('הוכרע בפנדלים'), 'summary mentions the penalty match');
 await page.locator('.evening details').first().evaluate((d) => (d.open = true));
-assert(/פנדלים\s*3\s*–?\s*2/.test(await page.locator('.ev-matches').innerText()), 'match list shows the shoot-out score');
+assert(/פנדלים/.test(await page.locator('.ev-matches').innerText()), 'match list marks the penalty match');
 await back();
 assert((await page.locator('.ev-list li').count()) === 1, 'history lists the evening');
 await page.getByRole('radio', { name: 'כל הזמנים' }).click();

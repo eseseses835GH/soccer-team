@@ -2311,3 +2311,24 @@ thead th {
 .cta-dock > .dock-secondary:first-of-type:not(:last-child) {
   margin: 0 auto 10px;
 }
+
+/* ---------- extra time on a draw ---------- */
+.extra-note {
+  display: block;
+  margin: 6px auto 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--notice-bg);
+  color: var(--notice-ink);
+  font-weight: 700;
+}
+.extra-note .extra-edit {
+  margin-inline-start: 6px;
+  text-decoration: underline;
+  font-weight: 600;
+}
+.pens-none {
+  display: block;
+  margin: 14px auto 4px;
+  font-weight: 600;
+}

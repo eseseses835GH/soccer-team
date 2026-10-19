@@ -63,8 +63,19 @@ const expectSounds = async (want, step) => {
   assert(JSON.stringify(got) === JSON.stringify(want), `${step}: sounds ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
 };
 
+const patchSettings = async (patch) => {
+  await page.evaluate((patch) => {
+    const key = `kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`;
+    const st = JSON.parse(localStorage.getItem(key));
+    st.settings = { ...st.settings, ...patch };
+    localStorage.setItem(key, JSON.stringify(st));
+  }, patch);
+  await page.reload();
+};
 await page.goto(base);
 await page.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+// The checks below run the clock out at 0:0; automatic extra time for a draw is checked on its own at the end.
+await patchSettings({ drawExtraMinutes: 0 });
 await page.getByRole('button', { name: 'עושים כוחות' }).click();
 await page.waitForSelector('.team');
 await page.getByRole('button', { name: /התחלת משחק/ }).click();
@@ -181,6 +192,25 @@ assert(/^20:0\d$/.test(await page.locator('.clock').innerText()), `no timer coun
 await page.getByRole('button', { name: 'סיום משחק' }).click();
 await finishDraw();
 await expectNew(from, ['whistle-start', 'whistle-end'], 'no timer: end tap whistles');
+
+// Extra time on a draw (v5): level when the time runs out → a whistle and +2 minutes (once),
+// then the real full-time whistle when the extra time is over.
+{
+  await page.getByRole('button', { name: 'סיום משחק' }).click();
+  await finishDraw();
+  await patchSettings({ drawExtraMinutes: 2, matchNoLimit: false, matchMinutes: 8 });
+  await page.waitForSelector('.clock');
+  const from = (await sounds()).length;
+  await page.getByRole('button', { name: 'התחלה' }).click();
+  await page.clock.runFor(8 * 60_000 + 2_000);
+  await expectNew(from, ['whistle-start', 'whistle-start'], 'draw at time-up: extra-time whistle');
+  assert(await page.locator('.extra-note').isVisible(), 'extra-time note shown');
+  assert(!(await page.locator('.clock.over').isVisible()), 'extra time: clock back to time left');
+  assert((await page.getByRole('button', { name: /^אורך המשחק/ }).innerText()).includes('10'), 'length is now 10 minutes');
+  await page.clock.runFor(2 * 60_000 + 2_000);
+  await expectNew(from, ['whistle-start', 'whistle-start', 'whistle-end'], 'end of extra time: full-time whistle');
+  assert(await page.locator('.clock.over').isVisible(), 'after extra time: overtime');
+}
 
 assert((await page.evaluate(() => window.__speech)) === 0, 'speechSynthesis was used');
 
