@@ -49,8 +49,8 @@ export const ACCENTS = [
 export type AccentId = (typeof ACCENTS)[number]['id'];
 const ACCENT_IDS = new Set<string>(ACCENTS.map((a) => a.id));
 
-/** Goal celebration sound: crowd + announcer, crowd only, or silent (the animation always plays). */
-export type GoalSound = 'all' | 'crowd' | 'off';
+/** Match sounds (goal air horn + referee whistles) on or off; the goal animation always plays. */
+export type GoalSound = 'on' | 'off';
 
 export interface Settings {
   weights: Weights;
@@ -114,7 +114,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bibs: BIBS.map((b) => b.id),
   theme: 'auto',
   accent: 'green',
-  goalSound: 'all',
+  goalSound: 'on',
 };
 
 export const INITIAL_STATE: AppState = {
@@ -204,7 +204,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     bibs: bibs.length >= 2 ? [...new Set(bibs)] : DEFAULT_SETTINGS.bibs,
     theme: r.theme === 'light' || r.theme === 'dark' ? r.theme : 'auto',
     accent: typeof r.accent === 'string' && ACCENT_IDS.has(r.accent) ? r.accent : 'green',
-    goalSound: r.goalSound === 'crowd' || r.goalSound === 'off' ? r.goalSound : 'all',
+    // Older versions had 'all' (crowd + announcer) and 'crowd': both mean sound on.
+    goalSound: r.goalSound === 'off' ? 'off' : 'on',
   };
 }
 

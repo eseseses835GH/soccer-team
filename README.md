@@ -78,6 +78,8 @@ Browser checks against `npm run preview` (Playwright; set `CHROMIUM_PATH` if nee
 ```bash
 npm run screenshots -- ./screenshots   # 390px, light + dark; fails on console errors / overflow
 npm run e2e                            # add, import, split 22, re-roll, late arrival, match, pairs, end evening + summary + history, new day, backup link
+npm run sounds-check                   # whistles/horn fire at the right moments (spies on Web Audio), never speech
+npm run render-sounds -- ./sounds      # offline-render horn + whistles to WAV, check peak levels
 node scripts/icons.mjs                 # regenerate PWA PNG icons from public/favicon.svg
 ```
 
