@@ -438,6 +438,56 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   assert((await rot('form.add details.more > summary')) !== (await rot('form.add details.detailed > summary')), 'open and closed folds have different chevrons');
 }
 
+// 15. Match length (v5) on a touch phone, with the sound code broken on purpose: the first tap on
+// "התחלה" still starts the clock (sounds can never block it); the length sheet changes this match
+// and the default, ±1 only this match, it survives a reload, and "בלי טיימר" counts up.
+{
+  const tctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'he-IL' });
+  await tctx.addInitScript(() => {
+    AudioContext.prototype.createDynamicsCompressor = () => {
+      throw new Error('no compressor');
+    };
+  });
+  const tp = await tctx.newPage();
+  tp.on('pageerror', (e) => errors.push(`match length: ${e.message}`));
+  const stored = () => tp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  await tp.goto(base);
+  await tp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).tap();
+  await tp.getByRole('button', { name: 'עושים כוחות' }).tap();
+  await tp.getByRole('button', { name: /התחלת משחק/ }).tap();
+  await tp.getByRole('button', { name: /^התחלה$/ }).tap();
+  assert(await tp.getByRole('button', { name: /עצירה/ }).isVisible(), 'first tap on התחלה starts the clock even if sound fails');
+  const chip = tp.getByRole('button', { name: /^אורך המשחק/ });
+  assert((await chip.innerText()).includes('8 דק׳'), `length chip shows the default: ${await chip.innerText()}`);
+  await tp.locator('.clock').tap(); // the clock opens the sheet too
+  const sheet = tp.getByRole('dialog');
+  await sheet.getByRole('radio', { name: '5' }).tap();
+  assert((await stored()).settings.matchMinutes === 5, 'picked length saved as the default');
+  await sheet.getByRole('button', { name: '+1 דק׳' }).tap();
+  assert((await stored()).settings.matchMinutes === 5, '+1 changes this match only');
+  await sheet.getByRole('button', { name: 'אישור' }).tap();
+  assert(/^5:\d\d$/.test(await tp.locator('.clock').innerText()), `6-minute match shows 5:xx: ${await tp.locator('.clock').innerText()}`);
+  await tp.reload();
+  await tp.waitForSelector('.clock');
+  assert(/6 דק׳\s*\+1/.test(await chip.innerText()), `added time survives a reload: ${await chip.innerText()}`);
+  await chip.tap();
+  await sheet.locator('label.toggle').tap();
+  assert((await stored()).settings.matchNoLimit === true, '"no timer" saved as the default');
+  await sheet.getByRole('button', { name: 'אישור' }).tap();
+  assert((await chip.innerText()).includes('בלי הגבלת זמן'), 'no-timer chip');
+  assert(/^0:\d\d$/.test(await tp.locator('.clock').innerText()), `no timer counts up: ${await tp.locator('.clock').innerText()}`);
+  await tp.getByRole('button', { name: 'סיום משחק' }).tap();
+  // A 0–0 now asks about penalties first (v5): pick a winner.
+  if (await tp.locator('.pens-team').count()) await tp.locator('.pens-team').first().tap();
+  else if (await sheet.isVisible()) await sheet.getByRole('button', { name: /יוצאים/ }).first().tap();
+  assert((await chip.innerText()).includes('בלי הגבלת זמן'), 'next match has no timer either');
+  await chip.tap();
+  await sheet.locator('label.toggle').tap();
+  await sheet.getByRole('button', { name: 'אישור' }).tap();
+  assert((await chip.innerText()).trim().endsWith('5 דק׳'), `timer back at the default: ${await chip.innerText()}`);
+  await tctx.close();
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {

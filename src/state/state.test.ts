@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyCards, toggleCard } from './cards';
 import { lateJoin } from './late';
-import { INITIAL_STATE, NEW_DAY_MS, defaultAttrs, sanitize, type AppState, type GameResult, type Player } from './model';
+import { INITIAL_STATE, NEW_DAY_MS, defaultAttrs, defaultMatchMs, sanitize, sanitizeSettings, type AppState, type GameResult, type Player } from './model';
 import { decodeBackup, encodeBackup, makeBackup, mergePlayers, parseRoster } from './io';
 import { reducer } from './reducer';
 import { orderBySize } from './split';
@@ -207,5 +207,14 @@ describe('look (theme and accent)', () => {
     const theirs = { ...INITIAL_STATE.settings, theme: 'dark' as const, accent: 'blue' as const, matchMinutes: 12 };
     const next = reducer(mine, { type: 'importPlayers', players: [p('a')], settings: theirs });
     expect(next.settings).toMatchObject({ theme: 'light', accent: 'pink', matchMinutes: 12 });
+  });
+});
+
+describe('match length settings (v5)', () => {
+  it('"no timer" is off unless explicitly on; the default length follows it', () => {
+    expect(sanitizeSettings({ matchMinutes: 6 })).toMatchObject({ matchMinutes: 6, matchNoLimit: false });
+    expect(sanitizeSettings({ matchNoLimit: 'yes' }).matchNoLimit).toBe(false);
+    expect(defaultMatchMs(sanitizeSettings({ matchMinutes: 6 }))).toBe(6 * 60_000);
+    expect(defaultMatchMs(sanitizeSettings({ matchMinutes: 6, matchNoLimit: true }))).toBeNull();
   });
 });

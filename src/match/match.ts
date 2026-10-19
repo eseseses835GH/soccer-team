@@ -75,6 +75,18 @@ export interface MatchState {
   dismissed: { team: number; atMatch: number } | null;
   /** Borrowers for the current match (null = not decided yet / not needed). */
   borrow: Borrow | null;
+  /**
+   * Length of the current match when it differs from the default (see `matchLength`). `at` is
+   * the match it belongs to (`history.length`), so it lapses by itself when the match ends.
+   * Missing (older saved states, or not changed) = the default from the settings.
+   */
+  length?: MatchLength;
+}
+
+/** A match length in ms; null = no time limit (the clock counts up and never runs out). */
+export interface MatchLength {
+  at: number;
+  ms: number | null;
 }
 
 export function startSession(numTeams: number): MatchState {
@@ -108,6 +120,38 @@ export function pauseClock(m: MatchState, now: number): MatchState {
 
 export function resetClock(m: MatchState): MatchState {
   return { ...m, clock: { running: false, startedAt: null, elapsedMs: 0 } };
+}
+
+export const MINUTE = 60_000;
+/** Match lengths allowed, in minutes (the settings stepper uses the same range). */
+export const MIN_MINUTES = 1;
+export const MAX_MINUTES = 60;
+
+const clampLength = (ms: number) => Math.min(MAX_MINUTES * MINUTE, Math.max(MIN_MINUTES * MINUTE, Math.round(ms / MINUTE) * MINUTE));
+
+/** The current match's length in ms (null = no limit). `dflt` = the settings' length for a new match. */
+export function matchLength(m: MatchState, dflt: number | null): number | null {
+  return m.length && m.length.at === m.history.length ? m.length.ms : dflt;
+}
+
+/** Set the current match's length (whole minutes, 1–60), or null for no time limit. */
+export function setMatchLength(m: MatchState, ms: number | null): MatchState {
+  return { ...m, length: { at: m.history.length, ms: ms === null ? null : clampLength(ms) } };
+}
+
+/** Added (or taken off) time for this match only, e.g. +1 minute for an injury. No-op without a limit. */
+export function adjustMatchLength(m: MatchState, deltaMs: number, dflt: number | null): MatchState {
+  const len = matchLength(m, dflt);
+  return len === null ? m : setMatchLength(m, len + deltaMs);
+}
+
+/**
+ * Time left on the clock: negative = overtime, null = no limit. Changing the length mid-match
+ * just moves the finish line: the elapsed time stays, so the remaining time follows from it.
+ */
+export function remainingMs(m: MatchState, now: number, dflt: number | null): number | null {
+  const len = matchLength(m, dflt);
+  return len === null ? null : len - elapsedMs(m.clock, now);
 }
 
 export function score(m: MatchState): [number, number] {
@@ -368,7 +412,17 @@ export function sanitizeMatch(raw: unknown, numTeams: number): MatchState | null
     history: Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)).map(sanitizeRecordPens) : [],
     dismissed: r.dismissed && inRange(r.dismissed.team) ? r.dismissed : null,
     borrow: sanitizeBorrow(r.borrow, numTeams, r.onPitch),
+    ...sanitizeLength(r.length, Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)).length : 0),
   };
+}
+
+/** Older saved states have no `length` (= the default); a stale or malformed one is dropped. */
+function sanitizeLength(raw: unknown, matchNo: number): { length?: MatchLength } {
+  if (!raw || typeof raw !== 'object') return {};
+  const l = raw as Partial<MatchLength>;
+  if (l.at !== matchNo) return {};
+  if (l.ms === null) return { length: { at: matchNo, ms: null } };
+  return typeof l.ms === 'number' && Number.isFinite(l.ms) && l.ms > 0 ? { length: { at: matchNo, ms: clampLength(l.ms) } } : {};
 }
 
 /** Older saved states have no `borrow`; anything malformed is dropped (the step just shows again). */

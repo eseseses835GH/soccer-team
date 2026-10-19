@@ -21,6 +21,7 @@
   - A **dominance hint** with a one-swap fix.
   - **Borrowing from the losing team (v3):** when a short team is on the pitch, an optional card suggests who comes over from the team that just lost, so the next match is as even as possible. You can tap someone else, or skip. Borrowers play that match only, and they can be picked as scorers.
   - **Match sounds (v4):** a referee pea whistle at kick-off (short-long, not on resume) and at full time (short-short-long: time-up or the end tap, once per match), and a synthesized stadium air horn on goals, plus the "גוֹל!" burst. No announcer or crowd. Setting "צלילים: פועל / כבוי" and a mute icon on the match screen. `npm run sounds-check` verifies the timing in a browser; `npm run render-sounds` renders WAVs.
+  - **Editable match length (v5):** tap the clock or the `⏱ 8 דק׳` chip: quick picks / stepper (this match + default), ±1 minute for this match only, or "בלי טיימר" (counts up). Whistles play in iPhone silent mode (Audio Session 'playback'); see DECISIONS.
   - "End the evening".
 - **Players screen:**
   - Quick add: name, level 1–10 (with a one-line scale hint), up to 3 of 12 player cards in two rows (6 strengths, 6 weaknesses).

@@ -2259,3 +2259,45 @@ thead th {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+
+/* ---------- match length (v5) ---------- */
+.match .clock {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.length-chip {
+  display: block;
+  margin: 2px auto 0;
+  min-block-size: 32px;
+  padding: 4px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--sunk);
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.len-now {
+  font-variant-numeric: tabular-nums;
+  margin-block-end: 12px;
+}
+.len-pills {
+  justify-content: space-between;
+}
+.len-added {
+  display: inline-block;
+  margin-inline-end: 6px; /* the badge is dir=ltr: its end faces the Hebrew text before it */
+  padding-inline: 6px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.8rem;
+}
+.len-sub {
+  margin-block: 18px 8px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.sheet .toggle {
+  margin-block: 12px;
+}
