@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ATTR_KEYS, type Attributes } from '../engine';
+import { ATTR_KEYS, type Attributes, type Position } from '../engine';
 import { ATTR_LABELS, scoreLabel } from '../i18n';
 import { STRENGTHS, WEAKNESSES, cardById, type Card, type CardId } from '../state/cards';
+import { ALL_POSITIONS, positionEmojis, togglePosition } from '../state/positions';
 
 /** Labelled slider with a visible value. */
 export function RatingSlider({
@@ -105,6 +106,62 @@ export function CardBadges({ cards, all = false }: { cards: CardId[]; all?: bool
       {shown.map((c) => (
         <span key={c.id} aria-hidden="true" title={c.name}>
           {c.emoji}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Where he's strong: 🧤 שוער (stored as `canGK`) and the three field positions, any number of them.
+ * `fixedKeepers` only changes what the keeper hint says.
+ */
+export function PositionPicker({
+  canGK,
+  positions,
+  fixedKeepers,
+  onChange,
+}: {
+  canGK: boolean;
+  positions: Position[];
+  fixedKeepers: boolean;
+  onChange: (canGK: boolean, positions: Position[]) => void;
+}) {
+  return (
+    <div className="pos-picker">
+      <div className="card-chips" role="group" aria-label="איפה הוא חזק">
+        {ALL_POSITIONS.map((x) => {
+          const on = x.id === 'gk' ? canGK : positions.includes(x.id);
+          return (
+            <button
+              key={x.id}
+              type="button"
+              className={`card-chip ${on ? 'on' : ''}`}
+              aria-pressed={on}
+              onClick={() => (x.id === 'gk' ? onChange(!canGK, positions) : onChange(canGK, togglePosition(positions, x.id)))}
+            >
+              <span className="card-emoji" aria-hidden="true">
+                {x.emoji}
+              </span>
+              {x.name}
+            </button>
+          );
+        })}
+      </div>
+      {canGK && <p className="hint small pos-hint">{fixedKeepers ? '🧤 שוער קבוע: יתחלק שוער אחד לכל קבוצה' : '🧤 השוערים מתחלפים, והוא יעמוד ראשון בשער'}</p>}
+    </div>
+  );
+}
+
+/** Tiny, quiet position emojis next to a name. */
+export function PositionBadges({ player }: { player: { canGK: boolean; positions?: Position[] } }) {
+  const shown = positionEmojis(player);
+  if (!shown.length) return null;
+  return (
+    <span className="pos-badges" aria-label={shown.map((x) => x.name).join(', ')}>
+      {shown.map((x) => (
+        <span key={x.id} aria-hidden="true" title={x.name}>
+          {x.emoji}
         </span>
       ))}
     </span>

@@ -135,3 +135,18 @@
 2. **A custom SMTP server** before real use: the built-in email sender is heavily rate-limited on the free plan.
 3. **"Players" role:** read-only access to teams and stats without ratings (needs a view or a separate doc without ratings).
 4. **Revoke invite links from the UI;** show the group's organizers.
+
+# v4: positions and the player profile
+
+## What was built
+- **Player form (quick add and edit):** level → "איפה הוא חזק?" (🧤 שוער, 🛡️ הגנה, 🔄 קישור, ⚡ התקפה; 🧤 is the old `canGK`, now one control in both keeper modes) → folded "עוד על השחקן" with the 12 cards → folded inside it "דירוג מפורט מתקדם" (sliders).
+- **Balancing:** a position-spread term (weight 0.15, beyond what's unavoidable) so defenders/midfielders/attackers spread across teams; borrowing and swap suggestions see it too. With rotating keepers a 🧤 player starts in goal.
+- **Display:** tiny position emojis in the roster and import preview; a compact `🛡️2 🔄1 ⚡2` line per team on the teams screen.
+- **Import:** position words in pasted lists/CSV; the template has an `עמדות` column.
+
+## What was tested
+- Engine: stacked vs spread split of equal strength, odd counts free when as even as possible, ½ per position for two-position players, exact regression without positions, 3-team spread, borrowing picks the missing position. State: sanitizing/migration, emojis, backup, import words and the template, keeper order in rotate mode. Sync: positions survive the server round-trip and a remote edit merges.
+- e2e: quick add with positions and a keeper, roster emojis, the edit sheet's folds and a position edit, imported positions, the team line. Screenshots `03a`–`03c` (light + dark).
+
+## Not verified
+- Mixed versions during sync (see DECISIONS v4): a phone on the previous version that edits a player drops his positions.

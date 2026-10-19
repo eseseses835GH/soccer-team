@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react';
-import { ATTR_KEYS, type Attributes } from '../engine';
+import { ATTR_KEYS, type Attributes, type Position } from '../engine';
 import { playersCount } from '../i18n';
 import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
 import { ROSTER_TEMPLATE, parseBackup, parseRoster, type ParsedRoster } from '../state/io';
 import { newId, type Player } from '../state/model';
+import { withPositions } from '../state/positions';
 import { useStore } from '../state/store';
 import { downloadText } from '../share';
 import { useUi } from './App';
-import { AttrSliders, CardBadges, CardPicker, LevelPicker, Sheet, Toggle } from './components';
+import { AttrSliders, CardBadges, CardPicker, LevelPicker, PositionBadges, PositionPicker, Sheet } from './components';
 import { Icon } from './icons';
 
 const MAX_NAME = 24;
@@ -20,14 +21,50 @@ const isTuned = (attrs: Attributes, cards: CardId[]) => {
   return ATTR_KEYS.some((k) => attrs[k] !== base[k]);
 };
 
-function DetailedRating({ attrs, cards, open, onChange }: { attrs: Attributes; cards: CardId[]; open?: boolean; onChange: (a: Attributes) => void }) {
+const POSITIONS_LABEL = (
+  <span className="label">
+    איפה הוא חזק? <small>לא חובה · אפשר כמה</small>
+  </span>
+);
+
+/**
+ * "More about the player", folded: the cards, and folded inside them the per-attribute sliders.
+ * The open state is only the initial one (so removing the last card doesn't snap it shut).
+ */
+function MoreAboutPlayer({
+  attrs,
+  cards,
+  open,
+  detailedOpen,
+  onCards,
+  onAttrs,
+}: {
+  attrs: Attributes;
+  cards: CardId[];
+  open?: boolean;
+  detailedOpen?: boolean;
+  onCards: (c: CardId[]) => void;
+  onAttrs: (a: Attributes) => void;
+}) {
+  const [initial] = useState({ open, detailedOpen });
+  const tuned = isTuned(attrs, cards);
   return (
-    <details className="fold detailed" open={open}>
+    <details className="fold more" open={initial.open}>
       <summary>
-        דירוג מפורט <small>{isTuned(attrs, cards) ? 'כוונן ידנית' : 'לא חובה'}</small>
+        עוד על השחקן
+        {cards.length ? <CardBadges cards={cards} all /> : <small>לא חובה</small>}
       </summary>
-      <p className="hint small">מתחיל מהרמה ומהכרטיסיות. שינוי רמה או כרטיסייה מחשב אותו מחדש.</p>
-      <AttrSliders attrs={attrs} onChange={onChange} />
+      <span className="label first">
+        איזה שחקן הוא? <small>עד {MAX_CARDS}</small>
+      </span>
+      <CardPicker value={cards} onToggle={(id) => onCards(toggleCard(cards, id))} />
+      <details className="fold detailed" open={initial.detailedOpen}>
+        <summary>
+          דירוג מפורט מתקדם <small>{tuned ? 'כוונן ידנית' : 'לשחק עם המספרים'}</small>
+        </summary>
+        <p className="hint small">מתחיל מהרמה ומהכרטיסיות. שינוי רמה או כרטיסייה מחשב אותו מחדש.</p>
+        <AttrSliders attrs={attrs} onChange={onAttrs} />
+      </details>
     </details>
   );
 }
@@ -38,6 +75,8 @@ export function PlayersScreen() {
   const [name, setName] = useState('');
   const [level, setLevel] = useState(5);
   const [cards, setCards] = useState<CardId[]>([]);
+  const [canGK, setCanGK] = useState(false);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [attrs, setAttrs] = useState<Attributes>(() => applyCards(5, []));
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Player | null>(null);
@@ -58,14 +97,18 @@ export function PlayersScreen() {
     const n = name.trim();
     if (!n) return setError('צריך שם');
     if (nameTaken(n)) return setError('כבר יש שחקן בשם הזה. אפשר להוסיף כינוי, למשל "דני ג׳"');
-    dispatch({ type: 'addPlayer', player: { id: newId(), name: n, attrs: { ...attrs, overall: level }, canGK: false, cards }, present: true });
+    const player = withPositions<Player>({ id: newId(), name: n, attrs: { ...attrs, overall: level }, canGK, cards }, positions);
+    dispatch({ type: 'addPlayer', player, present: true });
     notify(`${n} נוסף ומסומן שהגיע`);
     setName('');
     setProfile(5, []);
+    setCanGK(false);
+    setPositions([]);
     setError(null);
     nameRef.current?.focus();
   };
 
+  const fixedKeepers = state.settings.gkMode === 'fixed';
   const sorted = [...state.players].sort((a, b) => a.name.localeCompare(b.name, 'he'));
 
   return (
@@ -93,11 +136,17 @@ export function PlayersScreen() {
         <span className="label">רמה</span>
         <LevelPicker value={level} onChange={(l) => setProfile(l, cards)} />
         <p className="hint small level-hint">{LEVEL_HINT}</p>
-        <span className="label">
-          איזה שחקן הוא? <small>לא חובה · עד {MAX_CARDS}</small>
-        </span>
-        <CardPicker value={cards} onToggle={(id) => setProfile(level, toggleCard(cards, id))} />
-        <DetailedRating attrs={{ ...attrs, overall: level }} cards={cards} onChange={setAttrs} />
+        {POSITIONS_LABEL}
+        <PositionPicker
+          canGK={canGK}
+          positions={positions}
+          fixedKeepers={fixedKeepers}
+          onChange={(gk, ps) => {
+            setCanGK(gk);
+            setPositions(ps);
+          }}
+        />
+        <MoreAboutPlayer attrs={{ ...attrs, overall: level }} cards={cards} onCards={(c) => setProfile(level, c)} onAttrs={setAttrs} />
         <button type="submit" className="btn btn-primary btn-block">
           <Icon name="plus" size={20} /> הוספה
         </button>
@@ -123,6 +172,7 @@ export function PlayersScreen() {
             <li key={p.id}>
               <button type="button" onClick={() => setEditing(p)}>
                 <span className="name">{p.name}</span>
+                <PositionBadges player={p} />
                 <CardBadges cards={p.cards} all />
                 <span className="level" aria-label={`רמה ${p.attrs.overall}`}>
                   {p.attrs.overall}
@@ -137,7 +187,7 @@ export function PlayersScreen() {
         <PlayerSheet
           player={editing}
           nameTaken={nameTaken}
-          fixedKeepers={state.settings.gkMode === 'fixed'}
+          fixedKeepers={fixedKeepers}
           onClose={() => setEditing(null)}
           onSave={(p) => {
             dispatch({ type: 'updatePlayer', player: p });
@@ -207,12 +257,21 @@ function PlayerSheet({
         <span className="label">רמה</span>
         <LevelPicker value={draft.attrs.overall} onChange={(v) => setProfile(v, draft.cards)} />
         <p className="hint small level-hint">{LEVEL_HINT}</p>
-        <span className="label">
-          איזה שחקן הוא? <small>עד {MAX_CARDS}</small>
-        </span>
-        <CardPicker value={draft.cards} onToggle={(id) => setProfile(draft.attrs.overall, toggleCard(draft.cards, id))} />
-        {fixedKeepers && <Toggle checked={draft.canGK} onChange={(v) => setDraft({ ...draft, canGK: v })} label="שוער קבוע" hint="יתחלק שוער אחד לכל קבוצה" />}
-        <DetailedRating attrs={draft.attrs} cards={draft.cards} open onChange={(a) => setDraft({ ...draft, attrs: a })} />
+        {POSITIONS_LABEL}
+        <PositionPicker
+          canGK={draft.canGK}
+          positions={draft.positions ?? []}
+          fixedKeepers={fixedKeepers}
+          onChange={(gk, ps) => setDraft((d) => withPositions({ ...d, canGK: gk }, ps))}
+        />
+        <MoreAboutPlayer
+          attrs={draft.attrs}
+          cards={draft.cards}
+          open={player.cards.length > 0 || isTuned(player.attrs, player.cards)}
+          detailedOpen={isTuned(player.attrs, player.cards)}
+          onCards={(c) => setProfile(draft.attrs.overall, c)}
+          onAttrs={(a) => setDraft((d) => ({ ...d, attrs: a }))}
+        />
         <div className="stack">
           <button type="submit" className="btn btn-primary btn-block">
             שמירה
@@ -264,8 +323,8 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet title="ייבוא רשימה" onClose={onClose}>
-      <p className="lead">שחקן בכל שורה: שם, ואחריו רמה (לא חובה). אפשר להוסיף ״שוער״ ושמות של כרטיסיות, למשל ״הקוסם״ או ״איטי״.</p>
-      <pre className="example" dir="rtl">{'אבי 8\nדני הקטן, 6, שוער\nנועם, 7, הקוסם, לא חוזר להגנה\nיוסי'}</pre>
+      <p className="lead">שחקן בכל שורה: שם, ואחריו רמה (לא חובה). אפשר להוסיף עמדות (״שוער״, ״הגנה״, ״קישור״, ״התקפה״) ושמות של כרטיסיות, למשל ״הקוסם״ או ״איטי״.</p>
+      <pre className="example" dir="rtl">{'אבי 8 קישור\nדני הקטן, 6, שוער, הגנה\nנועם, 7, התקפה, הקוסם, לא חוזר להגנה\nיוסי'}</pre>
       <textarea className="input textarea" rows={6} placeholder="מדביקים כאן…" value={text} onChange={(e) => setText(e.target.value)} aria-label="רשימת שחקנים" />
       <div className="row-links">
         <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
@@ -304,8 +363,7 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
           <ul className="preview-list">
             {parsed.players.slice(0, 30).map((p) => (
               <li key={p.id}>
-                {p.name} <span className="muted">{p.attrs.overall}</span> <CardBadges cards={p.cards} all />
-                {p.canGK && ' 🧤'}
+                {p.name} <span className="muted">{p.attrs.overall}</span> <PositionBadges player={p} /> <CardBadges cards={p.cards} all />
               </li>
             ))}
           </ul>

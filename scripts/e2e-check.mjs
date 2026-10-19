@@ -18,17 +18,21 @@ const teamOf = (name) =>
 
 await page.goto(base);
 
-// 1. Quick add with level + card, duplicate rejected.
+// 1. Quick add with level + positions + card (cards and sliders are folded under "עוד על השחקן"), duplicate rejected.
 await page.getByRole('button', { name: 'הוספת שחקנים' }).click();
-for (const [n, lvl, cards] of [['אלון', '7', ['החיה']], ['Ben', '4', ['איטי', 'מפחד מהכדור']], ['גיא', '9', ['הקוסם']]]) {
+const more = page.locator('form.add details.more');
+assert(!(await more.evaluate((d) => d.open)), '"more about the player" starts folded');
+for (const [n, lvl, positions, cards] of [['אלון', '7', ['התקפה'], ['החיה']], ['Ben', '4', ['שוער', 'הגנה', 'קישור'], ['איטי', 'מפחד מהכדור']], ['גיא', '9', [], ['הקוסם']]]) {
   await page.getByPlaceholder('איך קוראים לו?').fill(n);
   await page.getByRole('radio', { name: lvl, exact: true }).click();
+  for (const pos of positions) await page.getByRole('button', { name: pos, exact: true }).click();
+  if (!(await more.evaluate((d) => d.open))) await page.getByText('עוד על השחקן').click();
   for (const card of cards) await page.getByRole('button', { name: card, exact: true }).click();
   if (n === 'Ben') {
     // Optional detailed rating in quick add: shooting slider 4-2 → 6.
-    await page.getByText('דירוג מפורט').click();
+    await page.getByText('דירוג מפורט מתקדם').click();
     await page.getByLabel('בעיטה').fill('6');
-    await page.getByText('דירוג מפורט').click();
+    await page.getByText('דירוג מפורט מתקדם').click();
   }
   await page.getByRole('button', { name: /^הוספה$/ }).click();
 }
@@ -36,6 +40,16 @@ assert((await page.locator('.roster li').count()) === 3, 'quick add should creat
 const ben = await page.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).players.find((p) => p.name === 'Ben'));
 assert(JSON.stringify(ben.cards) === '["slow","scared"]', `Ben's cards ${JSON.stringify(ben.cards)}`);
 assert(ben.attrs.shooting === 6 && ben.attrs.stamina === 2 && ben.attrs.overall === 4, `Ben's ratings ${JSON.stringify(ben.attrs)}`);
+assert(ben.canGK === true && JSON.stringify(ben.positions) === '["def","mid"]', `Ben's positions ${ben.canGK} ${JSON.stringify(ben.positions)}`);
+assert((await page.locator('.roster li', { hasText: 'Ben' }).locator('.pos-badges').getAttribute('aria-label')) === 'שוער, הגנה, קישור', 'position emojis in the roster');
+// The edit sheet opens "more" (he has cards) and the sliders (hand-tuned); removing a position saves.
+await page.locator('.roster li', { hasText: 'Ben' }).locator('button').first().click();
+assert(await page.locator('.sheet details.more').evaluate((d) => d.open), 'edit sheet opens "more" for a player with cards');
+assert(await page.locator('.sheet details.detailed').evaluate((d) => d.open), 'edit sheet opens the sliders for a hand-tuned player');
+await page.locator('.sheet').getByRole('button', { name: 'קישור', exact: true }).click();
+await page.locator('.sheet').getByRole('button', { name: 'שמירה' }).click();
+const ben2 = await page.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).players.find((p) => p.name === 'Ben'));
+assert(JSON.stringify(ben2.positions) === '["def"]' && ben2.canGK, `Ben's positions after edit ${JSON.stringify(ben2.positions)}`);
 await page.getByPlaceholder('איך קוראים לו?').fill('גיא');
 await page.getByRole('button', { name: /^הוספה$/ }).click();
 assert(await page.getByText('כבר יש שחקן בשם הזה').isVisible(), 'duplicate name error');
@@ -48,7 +62,7 @@ assert(await page.getByText(/צריך לפחות 4 שחקנים/).isVisible(), '
 // 3. Import a pasted list (19 more players → 22).
 await page.getByRole('button', { name: 'השחקנים' }).click();
 await page.getByRole('button', { name: /ייבוא רשימה/ }).click();
-const list = Array.from({ length: 19 }, (_, i) => `שחקן ${i + 1}, ${1 + (i % 10)}${i === 3 ? ', שוער' : ''}${i === 5 ? ', הסלע' : ''}`).join('\n');
+const list = Array.from({ length: 19 }, (_, i) => `שחקן ${i + 1}, ${1 + (i % 10)}${i === 3 ? ', שוער' : ''}${i === 5 ? ', הסלע' : ''}${i % 4 === 1 ? ', הגנה' : ''}${i % 4 === 2 ? ', חלוץ קשר' : ''}`).join('\n');
 await page.getByLabel('רשימת שחקנים').fill(list + '\nאלון 5');
 assert(await page.getByText('19 שחקנים מוכנים, 1 דולגו').isVisible(), 'import preview counts');
 await page.getByRole('button', { name: /הוספת 19 שחקנים/ }).click();
@@ -64,6 +78,7 @@ await page.getByRole('button', { name: 'עושים כוחות' }).click();
 await page.waitForSelector('.team');
 const dt = Date.now() - t0;
 assert(dt < 1500, `split took ${dt}ms`);
+assert((await page.locator('.team .team-pos').count()) === (await page.locator('.team').count()), 'position line on every team');
 assert(JSON.stringify(await teamSizes()) === '[5,5,5,5]', `sizes ${await teamSizes()}`);
 assert((await page.locator('.bench .member').count()) === 2, 'two subs');
 

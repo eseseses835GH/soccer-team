@@ -234,3 +234,67 @@ describe('performance', () => {
     expect(performance.now() - t0).toBeLessThan(500);
   });
 });
+
+describe('positions', () => {
+  const lvl = (id: string, level: number, positions?: Player['positions']): Player => {
+    const attrs = {} as Attributes;
+    for (const k of ATTR_KEYS) attrs[k] = level;
+    return { id, name: id, attrs, canGK: false, positions };
+  };
+
+  it('a stacked split loses to a spread split of equal strength', () => {
+    // Both splits below are 17 v 17 in every attribute.
+    const players = [lvl('a', 6, ['def']), lvl('b', 6, ['def']), lvl('c', 6, ['att']), lvl('d', 6, ['att']), lvl('e', 5), lvl('f', 5)];
+    const stacked = [0, 0, 1, 1, 0, 1]; // both defenders on one team, both attackers on the other
+    const spread = [0, 1, 0, 1, 0, 1];
+    const evStacked = evaluate(players, stacked, 2, DEFAULT_OPTIONS);
+    const evSpread = evaluate(players, spread, 2, DEFAULT_OPTIONS);
+    expect(evStacked.balanceCost).toBeCloseTo(evSpread.balanceCost, 9);
+    expect(evSpread.penalties.positions).toBe(0);
+    // 2 defenders 2/0 and 2 attackers 2/0: 2 + 2 players off the fair share.
+    expect(evStacked.penalties.positions).toBeCloseTo(4 * DEFAULT_OPTIONS.positionWeight, 9);
+    expect(evStacked.cost).toBeGreaterThan(evSpread.cost);
+    const r = search(players, 2, DEFAULT_OPTIONS, NONE, { seed: 1 });
+    expect(evaluate(players, r.best.assignment, 2, DEFAULT_OPTIONS).penalties.positions).toBe(0);
+  });
+
+  it('odd counts cost nothing when split as evenly as possible', () => {
+    const players = [lvl('a', 5, ['def']), lvl('b', 5, ['def']), lvl('c', 5, ['def']), lvl('d', 5), lvl('e', 5), lvl('f', 5)];
+    expect(evaluate(players, [0, 0, 1, 0, 1, 1], 2, DEFAULT_OPTIONS).penalties.positions).toBe(0); // 2/1
+    // 3/0: 1.5 + 1.5 off, minus the unavoidable 0.5 + 0.5.
+    expect(evaluate(players, [0, 0, 0, 1, 1, 1], 2, DEFAULT_OPTIONS).penalties.positions).toBeCloseTo(2 * DEFAULT_OPTIONS.positionWeight, 9);
+  });
+
+  it('a player with two positions counts half in each', () => {
+    const players = [lvl('a', 5, ['def', 'att']), lvl('b', 5, ['def']), lvl('c', 5), lvl('d', 5)];
+    // def total 1.5, share 0.75 each. Together: 1.5/0 → 1.5 off; floor with ½ grain is 0.5.
+    expect(evaluate(players, [0, 0, 1, 1], 2, DEFAULT_OPTIONS).penalties.positions).toBeGreaterThan(0);
+    expect(evaluate(players, [0, 1, 0, 1], 2, DEFAULT_OPTIONS).penalties.positions).toBe(0);
+  });
+
+  it('players without positions give exactly the same results as before', () => {
+    const base = mkPlayers(12, 91);
+    const empty = base.map((p) => ({ ...p, positions: [] }));
+    const off = { ...DEFAULT_OPTIONS, positionWeight: 0 };
+    for (const k of [2, 3]) {
+      const o = { seed: 3, maxRestarts: 100, timeBudgetMs: 1e9 };
+      const a = search(base, k, DEFAULT_OPTIONS, NONE, o);
+      const b = search(empty, k, DEFAULT_OPTIONS, NONE, o);
+      const c = search(base, k, off, NONE, o);
+      expect(b.pool).toEqual(a.pool);
+      expect(c.pool).toEqual(a.pool);
+      const ev = evaluate(empty, a.best.assignment, k, DEFAULT_OPTIONS);
+      expect(ev.penalties.positions).toBe(0);
+      expect(ev.cost).toBe(a.best.cost);
+    }
+  });
+
+  it('spreads positions across 3 teams without hurting the level balance much', () => {
+    const players = mkPlayers(15, 95).map((p, i) => ({ ...p, positions: i < 6 ? (['def'] as const).slice() : i < 9 ? (['att'] as const).slice() : [] }));
+    const r = search(players, 3, DEFAULT_OPTIONS, NONE, { seed: 4, maxRestarts: 300, timeBudgetMs: 1e9 });
+    const ev = evaluate(players, r.best.assignment, 3, DEFAULT_OPTIONS);
+    expect(ev.penalties.positions).toBe(0); // 2/2/2 defenders, 1/1/1 attackers
+    const plain = search(players, 3, { ...DEFAULT_OPTIONS, positionWeight: 0 }, NONE, { seed: 4, maxRestarts: 300, timeBudgetMs: 1e9 });
+    expect(ev.balanceCost - evaluate(players, plain.best.assignment, 3, DEFAULT_OPTIONS).balanceCost).toBeLessThan(0.2);
+  });
+});

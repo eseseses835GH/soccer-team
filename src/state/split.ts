@@ -27,11 +27,17 @@ export function pickSubs(present: Player[], count: number, constraints: Constrai
   return [...free, ...rest].slice(0, count);
 }
 
-/** Keeper order for one team: random; in "fixed" mode declared keepers go first. */
+/**
+ * Keeper order for one team: random. In "fixed" mode declared keepers go first; when keepers
+ * rotate, one player who is good in goal (🧤) starts, and everyone else still takes turns.
+ */
 export function keeperOrder(members: Player[], mode: GkMode, rng: Rng): string[] {
   const ids = shuffle(rng, members.map((p) => p.id));
-  if (mode !== 'fixed') return ids;
   const gk = new Set(members.filter((p) => p.canGK).map((p) => p.id));
+  if (mode !== 'fixed') {
+    const first = ids.find((id) => gk.has(id));
+    return first ? [first, ...ids.filter((id) => id !== first)] : ids;
+  }
   return [...ids.filter((id) => gk.has(id)), ...ids.filter((id) => !gk.has(id))];
 }
 

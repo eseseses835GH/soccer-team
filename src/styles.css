@@ -445,10 +445,32 @@ select.input {
   margin-block-start: 6px;
   color: var(--ink-3);
 }
-.fold.detailed summary small {
+.fold.detailed summary small,
+.fold.more summary small {
   font-weight: 400;
   color: var(--ink-3);
   margin-inline-start: 8px;
+}
+.fold.more summary .badges {
+  margin-inline-start: 8px;
+}
+.fold.more .label.first {
+  margin-block-start: 4px;
+}
+/* The advanced sliders sit inside "more about the player": a lighter divider, no extra gap. */
+.fold.more .fold.detailed {
+  margin-block-start: 14px;
+}
+.pos-hint {
+  margin-block-start: 6px;
+  color: var(--ink-3);
+}
+.pos-badges {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 0.75rem;
+  opacity: 0.75;
+  flex: none;
 }
 .badges {
   display: inline-flex;
@@ -913,6 +935,17 @@ input[type='range']::-moz-range-thumb {
 .team-sub {
   color: var(--ink-3);
   font-size: 0.8rem;
+}
+.team-pos {
+  display: flex;
+  gap: 8px;
+  margin-block-start: 2px;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.team-pos .none {
+  opacity: 0.45;
 }
 .team ol {
   list-style: none;

@@ -206,3 +206,42 @@ This supersedes the v2 line "Who moves over from the losing team is decided at t
 - `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are in `.env`, which is committed. The publishable key is meant for browsers; RLS is what protects the data. No secret or service-role key is used anywhere in the client. Without these variables the app hides login and sync entirely.
 - **`@supabase/supabase-js` is pinned to 2.112.4** (released August 2026), not the newest.
 - **Merge notes (manager):** the goal-sound choice stays per phone like the look (added to `LOCAL_SETTINGS`). Synced evening history goes through the history module's own `sanitizeHistory` / `mergeHistory`, so records from another phone are validated, sorted newest first and capped the same way as local ones.
+
+## Positions and player profile (v4)
+The user's structure for a player (after talking it over with friends): **level → where he's strong → (folded) more about him**.
+
+### The profile
+- **Level 1–10 stays the main thing.** Quick add at the pitch is still: name, level, add. Positions are one optional tap row; everything else is folded.
+- **"איפה הוא חזק?" (where is he strong): 🧤 שוער, 🛡️ הגנה, 🔄 קישור, ⚡ התקפה, any number of them.** Engine ids: `def`, `mid`, `att` in `Player.positions`. Stored in a fixed order (def, mid, att); unknown values and duplicates are dropped by `sanitizePositions`.
+- **🧤 שוער *is* `canGK`.** One control, one field, no duplicate data. The old "שוער קבוע" toggle (only shown in fixed-keeper mode) is gone: the 🧤 chip is always there. It still matters for the split only in fixed-keeper mode (the existing rule: one declared keeper per team). When keepers rotate *(my call, the user said "the keeper usually rotates")*: a 🧤 player starts in goal for his team, and everyone else still takes their turn in random order (one keeper first, not all of them, so the rotation still feels like a rotation). A one-line hint under the chips says which of the two applies.
+- **"עוד על השחקן" (more about the player), folded by default:** the 12 strength/weakness cards, unchanged, and inside it another fold, **"דירוג מפורט מתקדם"** (advanced detailed rating) with the per-attribute sliders. Level and cards still recompute the sliders. The edit sheet opens "more" when the player has cards or hand-tuned sliders, and the sliders fold when they're hand-tuned; the open state is only the initial one, so removing the last card doesn't snap the fold shut. The summary line shows the picked cards' emojis.
+- **No positions = the `positions` field is left out** (not stored as `[]`). Old players and players without positions keep exactly their previous shape, so the synced doc and backups don't change for nothing and a phone still on the previous version sees identical player records. *(my call)* Caveat: a phone still running the previous version that edits a player and pushes would drop that player's positions (its `sanitizePlayer` doesn't know the field). Phones update the PWA on the next open, so this is a short window.
+- **Shown small and quiet:** tiny faded position emojis after the name in the roster list and the import preview. On the teams screen each team header gets a compact line, e.g. `🛡️2 🔄1 ⚡2` (players strong in each field position; a two-position player counts in both; a zero is greyed). It only appears when someone in the split has a position. No ratings are shown anywhere new; positions aren't shown on the home (attendance) screen or in the WhatsApp text.
+- **Import:** `שוער` (and `gk`, `כן` in the keeper column) → 🧤 as before; `הגנה`/`מגן`/`בלם` → def, `קישור`/`קשר` → mid, `התקפה`/`חלוץ`/`כנף` → att, as whole words, so the card "לא חוזר להגנה" is not read as defence. The template gained an `עמדות` column.
+- **Sample squad** has positions (and two two-position players) so the demo shows the team line.
+
+### Balancing: the position spread term
+- **Each player adds 1/len(positions) to each of his positions.** For each position P and team t the fair share is `total_P × size_t / n`; the term is `positionWeight × Σ_P max(0, Σ_t |count − share| − unavoidable_P)`. Players without positions don't count; with nobody having a position (or the weight at 0) the term is skipped entirely, so results are bit-for-bit what they were (tested: same pool for no positions, empty positions, and weight 0).
+- **"Beyond what's unavoidable", like the keeper and leader rules.** 3 defenders in 5 v 5 can't do better than 2/1 (0.5 + 0.5 off), so that is subtracted: 2/1 costs 0 and 3/0 costs 2 units. The *difference* between 3/0 and 2/1 is the same as in the plain formula, so the ranking is unchanged; only the offset is gone. Without that offset an odd number of defenders would drag the 0–100 score down for every possible split, and it would widen the re-roll window (40% of best). The unavoidable part is computed for whole players (round shares down/up, ups go to the largest remainders). Two-position players (½ each) can sometimes beat that; the term is then clamped at 0, i.e. anything at least as even as the best whole-player split is free.
+- **Fast:** per-player position fractions are precomputed in `buildProblem` (n × 3), and `aggregate` sums them per team only when the term is on. The 22-player tests stay at the same speed.
+- **Weight 0.15 per player of avoidable deviation** (manager's suggestion was ~0.25). So "3/0 instead of 2/1" costs 0.3 rating points: about a typical balance cost, below the keeper (2) and leader (1) penalties, so a re-roll (+0.5 cap) can occasionally trade a little position spread for variety but never breaks a rule. Simulation (150 random squads per row, levels 2–9, 60% one card, 60% one position / 20% two / 20% none; balance score = `100·e^(−0.5·balance cost)` of the split chosen, i.e. level and attributes only; spread = avoidable position deviation of that split):
+
+  | squad | weight | balance score | p90 / max drop vs no positions | avg level gap per player | avoidable spread | splits with spread ≥ 2 |
+  |---|---|---|---|---|---|---|
+  | 10, 2 teams | 0 | 88.6 | – | 0.13 | 1.71 | 65 / 150 |
+  | | 0.1 | 87.2 | 4 / 8 | 0.16 | 0.23 | 3 |
+  | | **0.15** | **87.0** | **5 / 8** | **0.17** | **0.19** | **2** |
+  | | 0.25 | 86.1 | 7 / 12 | 0.18 | 0.07 | 2 |
+  | 12, 2 teams | 0 | 91.0 | – | 0.10 | 1.64 | 70 |
+  | | **0.15** | **89.4** | **5 / 7** | **0.12** | **0.02** | **0** |
+  | | 0.25 | 89.3 | 5 / 13 | 0.12 | 0.01 | 0 |
+  | 15, 3 teams | 0 | 83.0 | – | 0.15 | 2.48 | 94 |
+  | | **0.15** | **80.8** | **6 / 8** | **0.17** | **0.13** | **0** |
+  | | 0.25 | 80.5 | 6 / 8 | 0.17 | 0.09 | 0 |
+  | 20, 4 teams | 0 | 78.0 | – | 0.17 | 3.96 | 128 |
+  | | **0.15** | **75.7** | **5 / 12** | **0.19** | **0.13** | **0** |
+  | | 0.25 | 75.5 | 5 / 12 | 0.19 | 0.10 | 0 |
+
+  Already at 0.1 almost all stacking disappears; 0.15 removes nearly all of the rest for ~1.5–2.5 balance-score points on average, and the average per-player level gap between teams moves by only 0.02–0.04. 0.25 buys almost nothing more and doubles the worst cases on small squads. Level still dominates: it has weight 3 of 10 in the balance cost, and a one-point level difference between two teams' averages costs more than any realistic position spread.
+- **The 0–100 score includes the (small) position term,** like it includes the keeper/leader rules. On the sample squad (5·5·4) the split stays the same as without positions; its score is 77 instead of 82 because a little spread is left that can't be fixed without hurting level balance more. *(my call: leaving it out of the score would make the shown score disagree with what the engine optimizes.)* Not editable in the UI, like the other penalties.
+- **Borrowing and swap suggestions use the same cost, so positions count there too.** For borrowing, that means with equal levels the short team borrows the position it lacks against the team it faces (tested); level still decides first. Late-arrival swaps and the dominance swap simply see the extra term; nothing else changed.
