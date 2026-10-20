@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ATTR_KEYS, type Constraints } from '../engine';
 import { ATTR_LABELS, goalsEvery } from '../i18n';
-import { IMPORT_HASH, encodeBackup, makeBackup } from '../state/io';
+import { makeBackup } from '../state/io';
 import { ACCENTS, BIBS, teamLook, type BibId } from '../state/model';
 import { useGroups, useStore } from '../state/store';
 import { STATUS_TEXT, useSync } from '../sync/SyncProvider';
-import { copyText, downloadText, nativeShare } from '../share';
+import { downloadText } from '../share';
 import { useUi } from './App';
 import { RatingSlider, Segmented, Stepper, Toggle } from './components';
 import { Icon } from './icons';
@@ -46,13 +46,6 @@ export function SettingsScreen({ focus }: { focus?: string }) {
     dispatch({ type: 'addConstraint', kind, pair: [a, b] });
     setA('');
     setB('');
-  };
-
-  const backup = () => makeBackup(players, constraints, settings);
-  const sendLink = async () => {
-    const url = `${location.origin}${location.pathname}${IMPORT_HASH}${await encodeBackup(backup())}`;
-    if (await nativeShare({ title: 'הסגל של כוחות', url })) return;
-    notify((await copyText(url)) ? 'הקישור הועתק' : 'ההעתקה נכשלה');
   };
 
   return (
@@ -266,25 +259,16 @@ export function SettingsScreen({ focus }: { focus?: string }) {
         </SettingsFold>
       )}
 
-      <SettingsFold id="backup" title="שיתוף הסגל וגיבוי" value={undefined}>
-        <p className="hint">
-          {current.synced ? 'הקבוצה מסונכרנת עם החשבון. ' : 'הכול נשמר רק בטלפון הזה. '}
-          כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים. הקובץ שומר גם את היסטוריית הערבים.
-        </p>
-        <div className="stack">
-          <button type="button" className="btn btn-quiet btn-block" disabled={!players.length} onClick={sendLink}>
-            <Icon name="link" size={20} /> שליחת קישור למארגן נוסף
-          </button>
-          <button
-            type="button"
-            className="btn btn-quiet btn-block"
-            disabled={!players.length}
-            onClick={() => downloadText(`kochot-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(makeBackup(players, constraints, settings, Date.now(), state.history), null, 1), 'application/json')}
-          >
-            <Icon name="download" size={20} /> הורדת קובץ גיבוי
-          </button>
-        </div>
-        <p className="hint small">שחזור מקובץ: במסך השחקנים, ״ייבוא רשימה״.</p>
+      <SettingsFold id="backup" title="גיבוי" value={undefined}>
+        <p className="hint">קובץ עם השחקנים, הדירוגים והערבים. שחזור: במסך השחקנים, ״ייבוא רשימה״.</p>
+        <button
+          type="button"
+          className="btn btn-quiet btn-block"
+          disabled={!players.length}
+          onClick={() => downloadText(`kochot-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(makeBackup(players, constraints, settings, Date.now(), state.history), null, 1), 'application/json')}
+        >
+          <Icon name="download" size={20} /> הורדת קובץ גיבוי
+        </button>
       </SettingsFold>
 
       <SettingsFold id="advanced" title="הנוסחה לחלוקה" value="כמה כל תכונה שוקלת">

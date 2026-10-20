@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ATTR_KEYS, type Attributes, type Position } from '../engine';
 import { playersCount } from '../i18n';
 import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
-import { ROSTER_TEMPLATE, parseBackup, parseRoster, type ParsedRoster } from '../state/io';
+import { ROSTER_TEMPLATE, parseBackup, parseRoster, restoreBackup, type ParsedRoster } from '../state/io';
 import { newId, type Player } from '../state/model';
 import { withPositions } from '../state/positions';
 import { loadJSON, saveJSON } from '../state/storage';
@@ -264,7 +264,7 @@ export function PlayersScreen() {
       {selecting && (
         <div className="select-bar" role="toolbar" aria-label="פעולות על השחקנים שנבחרו">
           <span className="select-count" aria-live="polite">
-            {picked.length ? `נבחרו ${picked.length}` : 'בחרו שחקנים'}
+            {picked.length === 1 ? 'נבחר אחד' : picked.length ? `נבחרו ${picked.length}` : 'בחרו שחקנים'}
           </span>
           <button type="button" className="btn btn-danger btn-small" disabled={!picked.length} onClick={() => setDeleting(picked)}>
             מחיקה
@@ -399,7 +399,7 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
 
   const commit = (players: Player[]) => {
     for (const p of players) dispatch({ type: 'addPlayer', player: p });
-    notify(`נוספו ${players.length} שחקנים`);
+    notify(players.length === 1 ? 'נוסף שחקן אחד' : `נוספו ${players.length} שחקנים`);
     onClose();
   };
 
@@ -409,9 +409,11 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
       if (file.name.toLowerCase().endsWith('.json')) {
         const b = parseBackup(JSON.parse(content));
         if (!b) return notify('הקובץ לא נראה כמו גיבוי של כוחות');
-        const taken = new Set(state.players.map((p) => p.name.trim()));
+        const r = restoreBackup(state.players, state.constraints, b);
+        dispatch({ type: 'importPlayers', players: r.players, constraints: r.constraints });
         if (b.history?.length) dispatch({ type: 'mergeHistory', records: b.history });
-        commit(b.players.filter((p) => !taken.has(p.name.trim())).map((p) => ({ ...p, id: newId() })));
+        notify(r.added === 0 ? 'כל השחקנים מהקובץ כבר ברשימה' : r.added === 1 ? 'נוסף שחקן אחד' : `נוספו ${r.added} שחקנים`);
+        onClose();
         return;
       }
       setText(content.replace(/^﻿/, ''));
@@ -447,8 +449,14 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
       {text.trim() && (
         <div className="preview">
           <p>
-            <strong>{parsed.players.length}</strong> שחקנים מוכנים
-            {parsed.skipped.length > 0 && `, ${parsed.skipped.length} דולגו`}
+            {parsed.players.length === 1 ? (
+              'שחקן אחד מוכן'
+            ) : (
+              <>
+                <strong>{parsed.players.length}</strong> שחקנים מוכנים
+              </>
+            )}
+            {parsed.skipped.length > 0 && (parsed.skipped.length === 1 ? ', אחד דולג' : `, ${parsed.skipped.length} דולגו`)}
           </p>
           {parsed.skipped.length > 0 && (
             <ul className="skipped">
@@ -469,7 +477,7 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
         </div>
       )}
       <button type="button" className="btn btn-primary btn-block" disabled={!parsed.players.length} onClick={() => commit(parsed.players)}>
-        הוספת {parsed.players.length || ''} שחקנים
+        {parsed.players.length === 1 ? 'הוספת שחקן אחד' : `הוספת ${parsed.players.length || ''} שחקנים`.replace('  ', ' ')}
       </button>
     </Sheet>
   );

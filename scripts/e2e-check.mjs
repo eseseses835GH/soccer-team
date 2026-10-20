@@ -64,7 +64,7 @@ await page.getByRole('button', { name: 'השחקנים' }).click();
 await page.getByRole('button', { name: /ייבוא רשימה/ }).click();
 const list = Array.from({ length: 19 }, (_, i) => `שחקן ${i + 1}, ${1 + (i % 10)}${i === 3 ? ', שוער' : ''}${i === 5 ? ', הסלע' : ''}${i % 4 === 1 ? ', הגנה' : ''}${i % 4 === 2 ? ', חלוץ קשר' : ''}`).join('\n');
 await page.getByLabel('רשימת שחקנים').fill(list + '\nאלון 5');
-assert(await page.getByText('19 שחקנים מוכנים, 1 דולגו').isVisible(), 'import preview counts');
+assert(await page.getByText('19 שחקנים מוכנים, אחד דולג').isVisible(), 'import preview counts');
 await page.getByRole('button', { name: /הוספת 19 שחקנים/ }).click();
 assert((await page.locator('.roster li').count()) === 22, 'import adds 19');
 await back();
@@ -192,32 +192,37 @@ await page.getByRole('button', { name: 'ערבים קודמים' }).click();
 assert((await page.locator('.ev-list li').count()) === 2, 'new-day reset saved the unfinished evening');
 await back();
 
-// 10. Backup link → import on another device.
+// 10. Backup file → restore on another phone (players screen → "ייבוא רשימה"). The roster link is gone
+// from Settings (v8), but an old #import= link that was already sent still opens.
 await page.getByRole('button', { name: 'הגדרות' }).click();
-// Capture what the app copies (headless clipboard reads are unreliable).
-// Desktop Chrome on macOS has navigator.share, so stub that path too.
-await page.evaluate(() => {
-  // Newer Chrome builds expose the Web Share API, whose sheet never resolves headless.
-  Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
-  navigator.clipboard.writeText = async (t) => {
-    window.__copied = t;
-  };
-  if (navigator.share) navigator.share = async (d) => {
-    window.__copied = d.url ?? d.text;
-  };
-});
-await page.locator('summary', { hasText: 'שיתוף הסגל וגיבוי' }).click();
-await page.getByRole('button', { name: /שליחת קישור/ }).click();
-await page.waitForFunction(() => window.__copied);
-const link = await page.evaluate(() => window.__copied);
-assert(link.includes('#import='), 'backup link copied');
-const other = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
-await other.goto(link);
-await other.getByRole('button', { name: /^ייבוא$/ }).click();
-await other.getByRole('button', { name: 'השחקנים' }).click();
-const imported = await other.locator('.roster li').count();
-assert(imported === 23, `imported ${imported} players`);
-assert((await other.getByRole('button', { name: 'ערבים קודמים' }).count()) === 0, 'the link leaves the history out');
+await page.locator('summary', { hasText: /^גיבוי/ }).click();
+assert((await page.getByRole('button', { name: /שליחת קישור/ }).count()) === 0, 'no roster link in Settings');
+const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'הורדת קובץ גיבוי' }).click()]);
+const backupFile = await download.path();
+{
+  const other = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  other.on('pageerror', (e) => errors.push(e.message));
+  await other.goto(base + '#players');
+  await other.getByRole('button', { name: /ייבוא רשימה/ }).click();
+  await other.locator('input[type=file]').setInputFiles({ name: 'kochot-backup.json', mimeType: 'application/json', buffer: (await import('node:fs')).readFileSync(backupFile) });
+  await other.waitForSelector('.roster li');
+  const imported = await other.locator('.roster li').count();
+  assert(imported === 23, `restored ${imported} players from the file`);
+  const restored = await other.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  assert(restored.history.length === 2, `the file brings the history: ${restored.history.length}`);
+  assert(restored.constraints.apart.length === 1, `the file keeps the rules between players: ${JSON.stringify(restored.constraints)}`);
+  await other.context().close();
+  // An old link (deflate-raw + base64url after "#import=z.") still imports.
+  const { deflateRawSync } = await import('node:zlib');
+  const old = { app: 'kochot', v: 2, exportedAt: 1, players: [{ id: 'l1', name: 'מקישור', attrs: { overall: 6 }, canGK: false, cards: [] }, { id: 'l2', name: 'עוד אחד', attrs: { overall: 4 }, canGK: false, cards: [] }], constraints: { together: [], apart: [] }, settings: {} };
+  const lp = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  lp.on('pageerror', (e) => errors.push(e.message));
+  await lp.goto(base + '#import=z.' + deflateRawSync(Buffer.from(JSON.stringify(old))).toString('base64url'));
+  await lp.getByRole('button', { name: /^ייבוא$/ }).click();
+  await lp.goto(base + '#players');
+  assert((await lp.locator('.roster li').count()) === 2, 'an old #import= link still imports');
+  await lp.context().close();
+}
 
 // 11. 14 players at 5-a-side (5 · 5 · 4): the short team borrows from the losing team for one match.
 {
@@ -764,6 +769,52 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await hp.getByRole('button', { name: 'לקבוצות' }).click();
   assert(hp.url().endsWith('#teams'), 'help: back returns to the teams');
   await hp.context().close();
+}
+
+// QA pass (v8): a re-split from the teams screen's "changed" banner asks before ending a live evening;
+// a phone that kept the app open overnight starts the new day when it comes back to the screen;
+// one imported player is "שחקן אחד".
+{
+  const qc = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'he-IL' });
+  const qp = await qc.newPage();
+  qp.on('pageerror', (e) => errors.push(`qa: ${e.message}`));
+  await qp.clock.install();
+  const stored = () => qp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  await qp.goto(base);
+  await qp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).tap();
+  await qp.goto(base + '#players');
+  await qp.getByRole('button', { name: /ייבוא רשימה/ }).tap();
+  await qp.getByLabel('רשימת שחקנים').fill('יחיד 6');
+  assert((await qp.locator('.sheet .preview p').first().innerText()) === 'שחקן אחד מוכן', 'qa: one player ready (singular)');
+  await qp.getByRole('button', { name: 'הוספת שחקן אחד' }).tap();
+  assert(await qp.getByText('נוסף שחקן אחד').isVisible(), 'qa: one player added (singular)');
+  await qp.goto(base + '#home');
+  await qp.getByRole('button', { name: /^כולם$/ }).tap();
+  await qp.locator('.attend label', { hasText: 'יחיד' }).tap();
+  await qp.getByRole('button', { name: 'עושים כוחות' }).tap();
+  await qp.waitForSelector('.team');
+  await qp.getByRole('button', { name: /התחלת משחק/ }).tap();
+  await qp.getByRole('button', { name: '+ גול' }).first().tap();
+  await qp.getByRole('button', { name: 'דילוג' }).tap();
+  await qp.getByRole('button', { name: 'סיום משחק' }).tap();
+  // Someone is ticked at home instead of "הגיע מאוחר": the teams screen offers a re-split, which asks first.
+  await qp.goto(base + '#home');
+  await qp.locator('.attend label', { hasText: 'יחיד' }).tap();
+  await qp.goto(base + '#teams');
+  await qp.locator('.notice').getByRole('button', { name: 'חלוקה מחדש' }).tap();
+  const ask = qp.getByRole('dialog', { name: 'לחלק מחדש?' });
+  assert(await ask.isVisible(), 'qa: re-split during an evening asks first');
+  assert(/משחק אחד/.test(await ask.innerText()), 'qa: the question says what is saved');
+  await ask.getByRole('button', { name: 'ביטול' }).tap();
+  assert((await stored()).match?.history.length === 1, 'qa: cancelling keeps the evening');
+  // The app stays open; 13 hours later the phone shows it again (no reload).
+  await qp.clock.fastForward(13 * 3600e3);
+  await qp.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await qp.waitForTimeout(100);
+  const later = await stored();
+  assert(later.presentIds.length === 0 && !later.match && !later.result && later.history.length === 1, `qa: new day on return: ${later.presentIds.length} present, history ${later.history.length}`);
+  assert(await qp.getByRole('button', { name: /כמו בפעם הקודמת/ }).isVisible(), 'qa: main screen offers "same as last time" after the new day');
+  await qc.close();
 }
 
 console.log(`split 22 players in ${dt}ms`);

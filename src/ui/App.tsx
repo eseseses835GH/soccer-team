@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { playersCount } from '../i18n';
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
 import { useGroups, useStore } from '../state/store';
 import { JOIN_HASH, STATUS_TEXT, useSync, type SyncStatus } from '../sync/SyncProvider';
@@ -231,7 +232,7 @@ export function App() {
       {incoming && (
         <Sheet title="ייבוא סגל" onClose={() => setIncoming(null)}>
           <p className="lead">
-            בקישור יש {incoming.players.length} שחקנים עם הדירוגים שלהם. שחקנים עם אותו שם יעודכנו, והשאר יתווספו.
+            בקישור יש {playersCount(incoming.players.length)} עם הדירוגים שלהם. שחקנים עם אותו שם יעודכנו, והשאר יתווספו.
           </p>
           <div className="stack">
             <button type="button" className="btn btn-primary btn-block" onClick={doImport}>
