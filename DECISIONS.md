@@ -426,3 +426,9 @@ User: "add questions and answers: what the icons are, and an explanation of thin
 - **The user found the help screen far too long ("יותר מדי").** It now has only: **דירוג שחקנים** (level 1–10, positions, strengths, weaknesses — the legends still come from the data) and **עוד** (the 0–100 score, rules between players, what happens on a draw, who sees ratings, why add to the home screen), each one or two lines. Removed everything obvious from using the app (winner stays, borrowing, subs, keeper modes, detailed rating, team numbers, history, sync steps, icons legends for teams/history/top bar).
 - **Top bar order (RTL, right → left):** history · ? · players · settings, so the "?" sits right of the players icon and settings is at the far left.
 - Rule for the future: help covers only what isn't obvious from the screen itself; keep answers to one or two lines.
+
+## Settings: essentials open, the rest folded below (v7, user feedback)
+- Order: שאלות ותשובות · **משחק** (open) · folds: שוערים, גופיות, מי עם מי, חשבון, שיתוף הסגל וגיבוי, הנוסחה לחלוקה · **מראה** (open, near the bottom) · נתונים (fold, last).
+- Renames: "כללים בין שחקנים" → **"מי עם מי"**; "גיבוי ושיתוף הסגל" → **"שיתוף הסגל וגיבוי"**; "מתקדם" → **"הנוסחה לחלוקה"** (summary: "כמה כל תכונה שוקלת"); "חשבון וסנכרון" → **"חשבון"**, with a one-line "why" (only needed when another organizer manages the group from their phone).
+- **"סנכרון עכשיו" removed**: syncing is automatic (on open, focus, back online, every minute and after each change), so the button only raised questions.
+- **"Add to home screen" moved out of Settings** into the help screen as "איך מוסיפים למסך הבית?", showing the live steps / install button (`InstallHelp`). The main-screen prompt on the second use is unchanged.

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ATTR_KEYS, type Constraints } from '../engine';
 import { ATTR_LABELS, goalsEvery } from '../i18n';
 import { IMPORT_HASH, encodeBackup, makeBackup } from '../state/io';
-import { ACCENTS, BIBS, teamLook, type BibId, type Theme } from '../state/model';
+import { ACCENTS, BIBS, teamLook, type BibId } from '../state/model';
 import { useGroups, useStore } from '../state/store';
 import { STATUS_TEXT, useSync } from '../sync/SyncProvider';
 import { copyText, downloadText, nativeShare } from '../share';
@@ -10,10 +10,8 @@ import { useUi } from './App';
 import { RatingSlider, Segmented, Stepper, Toggle } from './components';
 import { Icon } from './icons';
 import { HelpLink } from './HelpScreen';
-import { InstallSettings } from './InstallPrompt';
 import { SettingsFold } from './SettingsFold';
 
-const THEMES: Record<Theme, string> = { light: 'בהיר', dark: 'כהה', auto: 'לפי הטלפון' };
 const RULE_LABEL = { apart: 'לא באותה קבוצה', together: 'תמיד באותה קבוצה' } as const;
 
 export function SettingsScreen() {
@@ -97,35 +95,6 @@ export function SettingsScreen() {
         <p className="hint small">שריקת שופט בפתיחה ובסיום, וצופר כשמבקיעים גול. אפשר להשתיק גם ממסך המשחק.</p>
       </div>
 
-      <SettingsFold id="look" title="מראה" value={THEMES[settings.theme]}>
-        <Segmented
-          label="מצב תצוגה"
-          value={settings.theme}
-          onChange={(theme) => set({ theme })}
-          options={[
-            { value: 'light', label: 'בהיר' },
-            { value: 'dark', label: 'כהה' },
-            { value: 'auto', label: 'לפי הטלפון' },
-          ]}
-        />
-        <p className="hint">צבע ראשי (כפתורים, סימוני נוכחות וציון האיזון):</p>
-        <div className="bibs" role="radiogroup" aria-label="צבע ראשי">
-          {ACCENTS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              role="radio"
-              className={`bib ${settings.accent === c.id ? 'on' : ''}`}
-              aria-checked={settings.accent === c.id}
-              onClick={() => set({ accent: c.id })}
-              style={{ '--team': c.swatch } as React.CSSProperties}
-            >
-              <span className="swatch" aria-hidden="true" />
-              {c.name}
-            </button>
-          ))}
-        </div>
-      </SettingsFold>
 
       <SettingsFold id="gk" title="שוערים" value={settings.gkMode === 'fixed' ? 'שוער קבוע' : `מתחלפים ${goalsEvery(settings.gkSwitchGoals)}`}>
         <Segmented
@@ -200,7 +169,7 @@ export function SettingsScreen() {
         )}
       </SettingsFold>
 
-      <SettingsFold id="rules" title="כללים בין שחקנים" value={ruleCount ? String(ruleCount) : 'אין'}>
+      <SettingsFold id="rules" title="מי עם מי" value={ruleCount ? String(ruleCount) : 'אין'}>
         <p className="hint">אפשר לבקש שני שחקנים שתמיד יהיו בקבוצות שונות, או תמיד באותה קבוצה. החלוקה תשמור על זה.</p>
         <ul className="rule-examples">
           <li>
@@ -266,10 +235,8 @@ export function SettingsScreen() {
         )}
       </SettingsFold>
 
-      <InstallSettings />
-
       {sync.configured && (
-        <SettingsFold id="account" title="חשבון וסנכרון" value={sync.email ? 'מחוברים' : 'לא מחוברים'}>
+        <SettingsFold id="account" title="חשבון" value={sync.email ? 'מחוברים' : 'לא מחוברים'}>
           {sync.email ? (
             <>
               <p className="account-who">
@@ -279,11 +246,6 @@ export function SettingsScreen() {
                 ״{current.name}״: {current.synced ? STATUS_TEXT[sync.status] : 'בטלפון הזה בלבד. אפשר לסנכרן אותה מתפריט הקבוצות (שם הקבוצה למעלה במסך הראשי).'}
               </p>
               <div className="stack">
-                {current.synced && (
-                  <button type="button" className="btn btn-quiet btn-block" onClick={sync.syncNow}>
-                    סנכרון עכשיו
-                  </button>
-                )}
                 <button type="button" className="btn btn-quiet btn-block" onClick={() => void sync.signOut()}>
                   יציאה מהחשבון
                 </button>
@@ -291,7 +253,7 @@ export function SettingsScreen() {
             </>
           ) : (
             <>
-              <p className="hint">בלי חשבון הכול נשמר רק בטלפון הזה. עם חשבון אפשר לסנכרן קבוצה בין כמה מארגנים ולהזמין מארגנים נוספים.</p>
+              <p className="hint">לא חובה. צריך רק אם עוד מארגן ינהל איתכם את הקבוצה מהטלפון שלו: השחקנים נשמרים בשרת ומתעדכנים אצל כולם לבד.</p>
               <button type="button" className="btn btn-quiet btn-block" onClick={() => sync.openLogin('account')}>
                 התחברות
               </button>
@@ -300,7 +262,7 @@ export function SettingsScreen() {
         </SettingsFold>
       )}
 
-      <SettingsFold id="backup" title="גיבוי ושיתוף הסגל" value={undefined}>
+      <SettingsFold id="backup" title="שיתוף הסגל וגיבוי" value={undefined}>
         <p className="hint">
           {current.synced ? 'הקבוצה מסונכרנת עם החשבון. ' : 'הכול נשמר רק בטלפון הזה. '}
           כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים. הקובץ שומר גם את היסטוריית הערבים.
@@ -321,7 +283,7 @@ export function SettingsScreen() {
         <p className="hint small">שחזור מקובץ: במסך השחקנים, ״ייבוא רשימה״.</p>
       </SettingsFold>
 
-      <SettingsFold id="advanced" title="מתקדם" value="משקלים באיזון">
+      <SettingsFold id="advanced" title="הנוסחה לחלוקה" value="כמה כל תכונה שוקלת">
         <p className="hint">כמה כל תכונה חשובה כשמשווים בין הקבוצות. 0 = להתעלם.</p>
         <div className="sliders">
           {ATTR_KEYS.map((k) => (
@@ -342,6 +304,37 @@ export function SettingsScreen() {
           חזרה לברירת המחדל
         </button>
       </SettingsFold>
+
+      <div className="group">
+        <h2>מראה</h2>
+        <Segmented
+          label="מצב תצוגה"
+          value={settings.theme}
+          onChange={(theme) => set({ theme })}
+          options={[
+            { value: 'light', label: 'בהיר' },
+            { value: 'dark', label: 'כהה' },
+            { value: 'auto', label: 'לפי הטלפון' },
+          ]}
+        />
+        <p className="hint">צבע ראשי (כפתורים, סימוני נוכחות וציון האיזון):</p>
+        <div className="bibs" role="radiogroup" aria-label="צבע ראשי">
+          {ACCENTS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              className={`bib ${settings.accent === c.id ? 'on' : ''}`}
+              aria-checked={settings.accent === c.id}
+              onClick={() => set({ accent: c.id })}
+              style={{ '--team': c.swatch } as React.CSSProperties}
+            >
+              <span className="swatch" aria-hidden="true" />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <SettingsFold id="data" title="נתונים" value={undefined}>
         {current.synced && <p className="hint">הקבוצה מסונכרנת: מחיקה כאן תמחק את השחקנים גם אצל שאר המארגנים.</p>}

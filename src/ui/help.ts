@@ -29,6 +29,8 @@ export interface HelpItem {
   q: string;
   a?: string[];
   legend?: LegendRow[];
+  /** Show the live "add to home screen" steps (or install button) under the answer. */
+  install?: boolean;
 }
 
 export interface HelpSection {
@@ -90,8 +92,8 @@ export const HELP: HelpSection[] = [
       },
       {
         id: 'rules',
-        q: 'מה זה ״כללים בין שחקנים״?',
-        a: ['״לא באותה קבוצה״ (למשל שני החזקים) או ״תמיד ביחד״ (למשל שניים שבאו באותו אוטו). מגדירים בהגדרות.'],
+        q: 'מה זה ״מי עם מי״?',
+        a: ['״לא באותה קבוצה״ (למשל שני החזקים) או ״תמיד ביחד״ (למשל שניים שבאו באותו אוטו). מגדירים בהגדרות ← ״מי עם מי״.'],
       },
       {
         id: 'draw',
@@ -105,8 +107,8 @@ export const HELP: HelpSection[] = [
       },
       {
         id: 'install',
-        q: 'למה להוסיף למסך הבית?',
-        a: ['באייפון, בלי זה ספארי עלול למחוק את הנתונים אחרי כשבוע. בהגדרות ← ״גישה מהירה״.'],
+        q: 'איך מוסיפים למסך הבית?',
+        install: true,
       },
     ],
   },

@@ -283,9 +283,8 @@ for (const scheme of ['light', 'dark']) {
     const sw = await p.evaluate(() => document.documentElement.scrollWidth);
     if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
     if (name === '16a-install-ios') {
-      await p.getByRole('button', { name: 'הגדרות' }).click();
-      await p.locator('summary', { hasText: 'גישה מהירה' }).click();
-      await p.locator('.install-settings').scrollIntoViewIfNeeded();
+      await p.goto(base + '#help/install');
+      await p.locator('#help-install .install-settings').scrollIntoViewIfNeeded();
       await p.waitForTimeout(150);
       await p.screenshot({ path: `${out}/${scheme}-16d-install-settings.png` });
     }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUi } from './App';
+import { InstallHelp } from './InstallPrompt';
 import { searchHelp, type HelpItem, type LegendMark } from './help';
 import { Icon } from './icons';
 
@@ -35,6 +36,7 @@ function Question({ item, open }: { item: HelpItem; open: boolean }) {
             ))}
           </ul>
         )}
+        {item.install && <InstallHelp />}
       </div>
     </details>
   );

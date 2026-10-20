@@ -18,13 +18,13 @@ describe('help screen data', () => {
     for (const p of ALL_POSITIONS) expect(shown).toContainEqual(expect.objectContaining({ emoji: p.emoji, name: p.name }));
   });
 
-  it('has unique ids and a non-empty answer or legend everywhere', () => {
+  it("has unique ids and a non-empty answer, legend or install steps everywhere", () => {
     const ids = HELP_ITEMS.map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(new Set(HELP.map((s) => s.id)).size).toBe(HELP.length);
     for (const i of HELP_ITEMS) {
       expect(i.q.trim()).not.toBe('');
-      expect((i.a?.length ?? 0) + (i.legend?.length ?? 0)).toBeGreaterThan(0);
+      expect((i.a?.length ?? 0) + (i.legend?.length ?? 0) + (i.install ? 1 : 0)).toBeGreaterThan(0);
     }
   });
 

@@ -36,7 +36,7 @@ export function DeletePlayerSheet({ players, onCancel, onConfirm }: { players: P
     const who = !many ? 'הוא' : inTeams.length === 1 ? inTeams[0].name : inTeams.length === players.length ? 'הם' : 'חלק מהם';
     notes.push(`${who} בכוחות של היום, אז הכוחות יתבטלו${played ? '. המשחקים ששוחקו נשמרים בהיסטוריה.' : ' וצריך לעשות כוחות מחדש.'}`);
   }
-  if (hasPairs) notes.push(many ? 'גם הכללים בין שחקנים שלהם (באותה קבוצה / לא באותה קבוצה) יימחקו.' : 'גם הכללים בין שחקנים שלו (באותה קבוצה / לא באותה קבוצה) יימחקו.');
+  if (hasPairs) notes.push(many ? 'גם ההגדרות ״מי עם מי״ שלהם יימחקו.' : 'גם ההגדרות ״מי עם מי״ שלו יימחקו.');
   if (current.synced) notes.push(many ? 'הקבוצה מסונכרנת, אז הם יימחקו גם אצל המארגנים האחרים.' : 'הקבוצה מסונכרנת, אז הוא יימחק גם אצל המארגנים האחרים.');
 
   return (

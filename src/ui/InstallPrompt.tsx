@@ -3,7 +3,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { INSTALL_KEY, detectPlatform, neverAgain, recordUse, sanitizeFlags, snooze, type InstallFlags, type PlatformInfo } from '../state/install';
 import { loadJSON, saveJSON } from '../state/storage';
-import { SettingsFold } from './SettingsFold';
 
 /** Chromium's install event (not in the TS DOM lib). */
 interface InstallEvent extends Event {
@@ -220,28 +219,27 @@ export function InstallCard({ install }: { install: ReturnType<typeof useInstall
   );
 }
 
-/** Settings: the same help, always there, folded as "גישה מהירה". */
-export function InstallSettings() {
+
+/** The "how to add to the home screen" steps, shown inside the help screen. */
+export function InstallHelp() {
   const install = useInstall();
   const done = install.standalone || install.flags.installed;
   return (
-    <SettingsFold id="install" title="גישה מהירה" value={done ? 'במסך הבית' : 'הוספה למסך הבית'}>
-      <div className="install-settings">
-        {done && !install.canPrompt ? (
-          <p className="hint">{install.standalone ? 'כוחות פתוחה ממסך הבית ✓' : 'כוחות הותקנה במסך הבית ✓ פותחים אותה משם.'}</p>
-        ) : (
-          <>
-            <p className="hint">מוסיפים את כוחות למסך הבית. {install.info.platform.startsWith('ios') ? WHY_IOS : WHY}</p>
-            {install.canPrompt ? (
-              <button type="button" className="btn btn-quiet btn-block" onClick={() => void install.install()}>
-                התקנה
-              </button>
-            ) : (
-              <InstallSteps info={install.info} />
-            )}
-          </>
-        )}
-      </div>
-    </SettingsFold>
+    <div className="install-settings">
+      {done && !install.canPrompt ? (
+        <p className="hint">{install.standalone ? 'כוחות פתוחה ממסך הבית ✓' : 'כוחות הותקנה במסך הבית ✓ פותחים אותה משם.'}</p>
+      ) : (
+        <>
+          <p className="hint">{install.info.platform.startsWith('ios') ? WHY_IOS : WHY}</p>
+          {install.canPrompt ? (
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => void install.install()}>
+              התקנה
+            </button>
+          ) : (
+            <InstallSteps info={install.info} />
+          )}
+        </>
+      )}
+    </div>
   );
 }

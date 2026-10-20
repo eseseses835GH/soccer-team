@@ -159,12 +159,12 @@ await page.getByRole('button', { name: 'הגדרות' }).click();
 assert((await page.locator('details.settings-fold[open]').count()) === 0, 'settings folds start closed');
 assert(await page.getByText('אורך משחק').isVisible(), 'game settings open');
 assert(/גופיות\s*· אין/.test(await page.locator('details.settings-fold > summary', { hasText: 'גופיות' }).innerText()), 'bibs summary says none');
-await page.locator('summary', { hasText: 'כללים בין שחקנים' }).click();
+await page.locator('summary', { hasText: 'מי עם מי' }).click();
 await page.getByLabel('שחקן ראשון').selectOption({ label: 'אלון' });
 await page.getByLabel('שחקן שני').selectOption({ label: 'גיא' });
 await page.getByRole('button', { name: 'הוספת כלל' }).click();
 assert(await page.getByText(/אלון וגיא\s*· לא באותה קבוצה/).isVisible(), 'rule listed in plain words');
-assert(/כללים בין שחקנים\s*· 1/.test(await page.locator('summary', { hasText: 'כללים בין שחקנים' }).innerText()), 'rules summary counts');
+assert(/מי עם מי\s*· 1/.test(await page.locator('summary', { hasText: 'מי עם מי' }).innerText()), 'rules summary counts');
 await back();
 await page.getByRole('button', { name: 'עושים כוחות' }).click();
 await page.waitForSelector('.team');
@@ -206,7 +206,7 @@ await page.evaluate(() => {
     window.__copied = d.url ?? d.text;
   };
 });
-await page.locator('summary', { hasText: 'גיבוי ושיתוף הסגל' }).click();
+await page.locator('summary', { hasText: 'שיתוף הסגל וגיבוי' }).click();
 await page.getByRole('button', { name: /שליחת קישור/ }).click();
 await page.waitForFunction(() => window.__copied);
 const link = await page.evaluate(() => window.__copied);
@@ -665,11 +665,9 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await card(ip).getByRole('button', { name: 'לא להציג שוב' }).tap();
   await nextUse(ip, { snoozeUntil: 0 });
   assert((await card(ip).count()) === 0 && (await flags(ip)).never === true, 'install: "never" remembered');
-  // Settings keeps the steps.
-  await ip.getByRole('button', { name: 'הגדרות' }).tap();
-  assert(/גישה מהירה/.test(await ip.locator('details.settings-fold > summary', { hasText: 'גישה מהירה' }).innerText()), 'install: folded as "quick access"');
-  await ip.locator('summary', { hasText: 'גישה מהירה' }).tap();
-  assert(await ip.locator('.install-settings').getByText(/הוספה למסך הבית״ ואז/).isVisible(), 'install: steps in Settings');
+  // The help screen keeps the steps ("איך מוסיפים למסך הבית?"); Settings no longer has them.
+  await ip.goto(base + '#help/install');
+  assert(await ip.locator('#help-install .install-settings').getByText(/הוספה למסך הבית״ ואז/).isVisible(), 'install: steps in the help screen');
   await ic.close();
 
   // An in-app browser on iOS: open in Safari first.
@@ -688,9 +686,8 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await sp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).tap();
   await nextUse(sp);
   assert((await flags(sp)).uses === 2 && (await card(sp).count()) === 0, 'install: never shown when already installed');
-  await sp.getByRole('button', { name: 'הגדרות' }).tap();
-  await sp.locator('summary', { hasText: 'גישה מהירה' }).tap();
-  assert(await sp.getByText('כוחות פתוחה ממסך הבית').isVisible(), 'install: Settings says it is installed');
+  await sp.goto(base + '#help/install');
+  assert(await sp.getByText('כוחות פתוחה ממסך הבית').isVisible(), 'install: help says it is installed');
   await sc.close();
 
   // Android Chrome: the captured prompt is one tap.
