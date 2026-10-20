@@ -173,3 +173,7 @@
 # v6: left early
 - **Built:** "עזב באמצע" (teams screen) / "מישהו עזב?" (match screen): pick → confirm → he's off his team, the bench, the keeper rotation, the borrow and today's attendance, without reshuffling; then the best sub is offered, or (no subs) up to 2 swaps that never touch a match under way. A tiny short team outside goes to the bench; nobody goes below 2. Not flagged as stale. See DECISIONS → Left early (v6).
 - **Tested:** 17 unit tests (`src/state/leave.test.ts`); e2e step 11b (sample squad, a match, 2 late arrivals, one leaves → sub suggestion accepted, not stale, attendance and history right, the evening continues, a second leave from the match screen); screenshots `16a`–`16f` (light + dark).
+
+# v7: help screen
+- **Built:** `#help` "שאלות ותשובות": a "?" in the main top bar, a row at the top of Settings, a "?" next to the balance score (opens that question). Folded questions in four sections, a search box, and an icon legend generated from the cards and positions (DECISIONS → Help screen (v7)). Content in `src/ui/help.ts`.
+- **Tested:** `src/ui/help.test.ts` (legend = every card and position, unique ids, search); e2e help step (top bar → question opens → legend has every card/position chip from the add form → search → Settings row and back → score "?" opens #help/score → back to the teams); screenshots `02c`–`02g` (light + dark).

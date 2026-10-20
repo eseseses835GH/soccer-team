@@ -39,6 +39,22 @@ for (const scheme of ['light', 'dark']) {
   await shot('02-home');
   await shot('02b-home-full', true);
   await checkLayout('home');
+  // Help: from the top bar "?", all folded, one question open, the icon legend.
+  await page.getByRole('button', { name: 'שאלות ותשובות' }).click();
+  await shot('02c-help');
+  await checkLayout('help');
+  await page.locator('#help-how > summary').click();
+  await page.locator('#help-score > summary').click();
+  await page.locator('#help-how').scrollIntoViewIfNeeded();
+  await shot('02d-help-open');
+  for (const id of ['icons-positions', 'icons-strengths', 'icons-weaknesses', 'icons-teams', 'icons-history', 'icons-top']) await page.locator(`#help-${id} > summary`).click();
+  await page.evaluate(() => scrollTo(0, 0));
+  await shot('02e-help-legend');
+  await shot('02f-help-legend-full', true);
+  await checkLayout('help legend');
+  await page.getByLabel('חיפוש בשאלות').fill('שוער');
+  await shot('02g-help-search');
+  await page.getByRole('button', { name: /^חזרה$/ }).click();
   await page.getByRole('button', { name: 'השחקנים' }).click();
   await page.locator('.swipe-tip').scrollIntoViewIfNeeded();
   await shot('03-players-tip');

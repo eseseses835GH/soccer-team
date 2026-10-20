@@ -282,7 +282,7 @@ function usePrefersReducedMotion() {
 }
 
 /** Big 0–100 balance score; counts up when `animateKey` changes. */
-export function ScoreMeter({ score, animateKey }: { score: number; animateKey?: string | number }) {
+export function ScoreMeter({ score, animateKey, onHelp }: { score: number; animateKey?: string | number; onHelp?: () => void }) {
   const reduced = usePrefersReducedMotion();
   const [shown, setShown] = useState(score);
   const lastKey = useRef(animateKey);
@@ -316,6 +316,11 @@ export function ScoreMeter({ score, animateKey }: { score: number; animateKey?: 
           <span style={{ inlineSize: `${shown}%` }} />
         </span>
       </div>
+      {onHelp && (
+        <button type="button" className="score-help" aria-label="מה זה מדד האיזון?" onClick={onHelp}>
+          <span aria-hidden="true">?</span>
+        </button>
+      )}
     </div>
   );
 }
