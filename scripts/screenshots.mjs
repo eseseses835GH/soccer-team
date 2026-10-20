@@ -210,10 +210,21 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: 'ביטול' }).click();
   await page.getByRole('button', { name: 'סגירה' }).click();
   await page.getByRole('button', { name: 'הגדרות' }).click();
+  await page.evaluate(() => scrollTo(0, 0));
   await shot('11-settings', true);
-  await page.locator('details.group.fold > summary').click();
-  await page.locator('details.group.fold > summary').scrollIntoViewIfNeeded();
-  await shot('11b-settings-advanced-open');
+  // Every fold open (v7), then the bibs fold with bibs switched on.
+  await page.locator('details.settings-fold').evaluateAll((ds) => ds.forEach((d) => (d.open = true)));
+  await page.waitForTimeout(100);
+  await shot('11b-settings-all-open', true);
+  await checkLayout('settings (open)');
+  await page.locator('details.settings-fold').evaluateAll((ds) => ds.forEach((d) => (d.open = false)));
+  await page.locator('summary', { hasText: 'גופיות' }).click();
+  await page.locator('summary', { hasText: 'גופיות' }).scrollIntoViewIfNeeded();
+  await shot('11c-settings-bibs-off');
+  await page.locator('label.toggle', { hasText: 'יש לכם גופיות' }).click();
+  await shot('11d-settings-bibs-on');
+  await page.locator('label.toggle', { hasText: 'יש לכם גופיות' }).click();
+  await page.locator('summary', { hasText: 'גופיות' }).click();
   await checkLayout('settings');
   const dir = await page.evaluate(() => getComputedStyle(document.body).direction);
   if (dir !== 'rtl') errors.push(`${scheme}: direction is ${dir}`);
@@ -257,6 +268,7 @@ for (const scheme of ['light', 'dark']) {
     if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
     if (name === '16a-install-ios') {
       await p.getByRole('button', { name: 'הגדרות' }).click();
+      await p.locator('summary', { hasText: 'גישה מהירה' }).click();
       await p.locator('.install-settings').scrollIntoViewIfNeeded();
       await p.waitForTimeout(150);
       await p.screenshot({ path: `${out}/${scheme}-16d-install-settings.png` });

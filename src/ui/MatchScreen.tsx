@@ -30,7 +30,7 @@ import {
   type MatchState,
 } from '../match/match';
 import { eveningId, hasEveningData } from '../state/history';
-import { defaultMatchMs, engineOptions, teamLook } from '../state/model';
+import { defaultMatchMs, engineOptions, teamLook, verb } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
 import { BorrowCard } from './BorrowCard';
@@ -221,7 +221,7 @@ export function MatchScreen() {
     setDrawAsk(false);
     if (m.queue.length) {
       const inLook = teamLook(state.settings, m.queue[0]);
-      notify(`ה${outLook.name} יוצאים · נכנסים ה${inLook.name}`);
+      notify(`${outLook.the} ${verb(outLook, 'יוצאים', 'יוצאת')} · ${verb(inLook, 'נכנסים', 'נכנסת')} ${inLook.the}`);
     } else notify('המשחק נשמר');
   };
   const end = () => {
@@ -239,9 +239,13 @@ export function MatchScreen() {
     const loserT = winner === a ? b : a;
     set(endOnPenalties(m, winner, Date.now()));
     setDrawAsk(false);
-    const w = teamLook(state.settings, winner).name;
-    if (m.queue.length) notify(`ה${w} ניצחו בפנדלים · ה${teamLook(state.settings, loserT).name} יוצאים · נכנסים ה${teamLook(state.settings, m.queue[0]).name}`);
-    else notify(`ה${w} ניצחו בפנדלים`);
+    const w = teamLook(state.settings, winner);
+    const won = `${w.the} ${verb(w, 'ניצחו', 'ניצחה')} בפנדלים`;
+    if (m.queue.length) {
+      const out = teamLook(state.settings, loserT);
+      const next = teamLook(state.settings, m.queue[0]);
+      notify(`${won} · ${out.the} ${verb(out, 'יוצאים', 'יוצאת')} · ${verb(next, 'נכנסים', 'נכנסת')} ${next.the}`);
+    } else notify(won);
   };
 
   const table = standings(m, k);
@@ -359,7 +363,7 @@ export function MatchScreen() {
       {dom !== null && weaken && (
         <div className="notice tip">
           <p>
-            ה{teamLook(state.settings, dom).name} שולטים ({m.streak[dom] >= 3 ? `${m.streak[dom]} ניצחונות ברצף` : 'רוב המשחקים'}). להחליף את{' '}
+            {teamLook(state.settings, dom).the} {verb(teamLook(state.settings, dom), 'שולטים', 'שולטת')} ({m.streak[dom] >= 3 ? `${m.streak[dom]} ניצחונות ברצף` : 'רוב המשחקים'}). להחליף את{' '}
             <strong>{byId.get(r.playerIds[weaken.swaps[0][0]])?.name}</strong> ב-<strong>{byId.get(r.playerIds[weaken.swaps[0][1]])?.name}</strong>?
             <span className="muted"> מדד {scoreFromCost(weaken.before)} ← {scoreFromCost(weaken.after)}</span>
           </p>
@@ -388,7 +392,7 @@ export function MatchScreen() {
         </button>
         {nextUp !== undefined && (
           <p className="hint center">
-            הבאים: ה{teamLook(state.settings, nextUp).name}
+            {verb(teamLook(state.settings, nextUp), 'הבאים', 'הבאה')}: {teamLook(state.settings, nextUp).the}
             {counts[nextUp] < r.teamSize && ` · משלימים ${r.teamSize - counts[nextUp]} מהמפסידה`}
           </p>
         )}
@@ -444,7 +448,7 @@ export function MatchScreen() {
       </div>
 
       {scorerFor !== null && (
-        <Sheet title={`מי הבקיע ל${teamLook(state.settings, scorerFor).name}?`} onClose={() => setScorerFor(null)}>
+        <Sheet title={`מי הבקיע ${teamLook(state.settings, scorerFor).to}?`} onClose={() => setScorerFor(null)}>
           <ul className="pick-list">
             {lineup(scorerFor).map((id) => (
               <li key={id}>
@@ -482,7 +486,7 @@ export function MatchScreen() {
                   onClick={() => finishOnPens(t)}
                 >
                   <span className="dot" aria-hidden="true" />
-                  ה{look.name}
+                  {look.the}
                 </button>
               );
             })}
@@ -499,7 +503,7 @@ export function MatchScreen() {
           <div className="stack">
             {[a, b].map((t) => (
               <button key={t} type="button" className={`btn btn-block ${defaultOutOnDraw(m) === t ? 'btn-primary' : 'btn-quiet'}`} onClick={() => finish(t)}>
-                ה{teamLook(state.settings, t).name} יוצאים
+                {teamLook(state.settings, t).the} {verb(teamLook(state.settings, t), 'יוצאים', 'יוצאת')}
               </button>
             ))}
           </div>

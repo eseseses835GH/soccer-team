@@ -70,26 +70,26 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
     const { id, plan } = step;
     const name = nameOf(id);
     const t = plan.team;
-    const team = t !== null ? look(t).name : '';
+    const tl = t !== null ? look(t) : null;
     const n = t !== null ? count(plan.result, t) : 0;
     const onPitchNow = t !== null && live && !!m?.onPitch.includes(t);
     let what: string;
     if (plan.outcome === 'sub') what = 'הוא יוצא מהמחליפים.';
-    else if (plan.outcome === 'blocked') what = `אי אפשר: בקבוצת ה${team} יישאר שחקן אחד ואין מחליף. כדי להמשיך צריך חלוקה מחדש מהמסך הראשי.`;
-    else if (plan.outcome === 'subIn') what = `${nameOf(plan.subId!)} נכנס במקומו ל${team}.`;
-    else if (plan.outcome === 'toBench') what = `ה${team} נשארים ${n}, מעט מדי לקבוצה: ${names(plan.result.subIds.map(nameOf))} מחכים בחוץ כמחליפים.`;
-    else what = `ה${team} נשארים ${n}${onPitchNow ? ' וממשיכים ככה במשחק הזה' : ''}.`;
+    else if (plan.outcome === 'blocked') what = `אי אפשר: ${tl?.in} יישאר שחקן אחד ואין מחליף. כדי להמשיך צריך חלוקה מחדש מהמסך הראשי.`;
+    else if (plan.outcome === 'subIn') what = `${nameOf(plan.subId!)} נכנס במקומו ${tl?.to}.`;
+    else if (plan.outcome === 'toBench') what = `${tl?.in} נשארים ${n}, מעט מדי לקבוצה: ${names(plan.result.subIds.map(nameOf))} מחכים בחוץ כמחליפים.`;
+    else what = `${tl?.in} נשארים ${n}${onPitchNow ? ' וממשיכים ככה במשחק הזה' : ''}.`;
     const confirm = () => {
       dispatch({ type: 'leave', id, now: Date.now() });
       const s = suggestAfterLeave(plan, leaveCtx(state));
       if (s) return setStep({ kind: 'suggest', s, team: t! });
       notify(
         plan.outcome === 'toBench'
-          ? `${name} עזב · ה${team} מחכים כמחליפים`
+          ? `${name} עזב · שחקני ${tl?.the} מחכים כמחליפים`
           : plan.outcome === 'subIn'
             ? `${name} עזב · ${nameOf(plan.subId!)} נכנס במקומו`
             : plan.outcome === 'short'
-              ? `${name} עזב · ה${team} ${n}`
+              ? `${name} עזב · ${tl?.in} נשארו ${n}`
               : `${name} עזב`,
       );
       onClose();
@@ -116,7 +116,7 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
   }
 
   const { s, team } = step;
-  const t = look(team).name;
+  const tl = look(team);
   const n = count(r, team);
   if (s.kind === 'sub') {
     const before = scoreFromCost(s.before);
@@ -124,13 +124,13 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
     const others = r.subIds.filter((id) => id !== s.subId);
     const bringIn = (subId: string) => {
       dispatch({ type: 'subIn', subId, team });
-      notify(`${nameOf(subId)} נכנס ל${t}`);
+      notify(`${nameOf(subId)} נכנס ${tl.to}`);
       onClose();
     };
     return (
       <Sheet title="להכניס מחליף?" onClose={onClose}>
         <p className="lead">
-          ה{t} נשארו {n}. הכי מתאים להם: <strong>{nameOf(s.subId)}</strong>.
+          {tl.in} נשארו {n}. הכי מתאים להם: <strong>{nameOf(s.subId)}</strong>.
           {after !== before && (
             <>
               {' '}
@@ -163,7 +163,7 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
   return (
     <Sheet title="לאזן מחדש?" onClose={onClose}>
       <p className="lead">
-        ה{t} נשארו {n}. אפשר לשפר את האיזון מ-<strong>{scoreFromCost(sw.before)}</strong> ל-<strong>{scoreFromCost(sw.after)}</strong> עם{' '}
+        {tl.in} נשארו {n}. אפשר לשפר את האיזון מ-<strong>{scoreFromCost(sw.before)}</strong> ל-<strong>{scoreFromCost(sw.after)}</strong> עם{' '}
         {sw.swaps.length === 1 ? 'החלפה אחת' : 'שתי החלפות'}:
       </p>
       <ul className="swap-list">

@@ -12,7 +12,7 @@ import {
   type EveningStats,
   type TeamRow,
 } from '../state/history';
-import { BIBS, type TeamLook } from '../state/model';
+import { bibLook, verb, type TeamLook } from '../state/model';
 import { useStore } from '../state/store';
 import { buildEveningShareText, copyText, nativeShare } from '../share';
 import { useUi } from './App';
@@ -21,10 +21,14 @@ import { Icon } from './icons';
 
 // ---------- helpers ----------
 
-function lookOf(rec: EveningRecord, t: number): TeamLook {
-  const bib = BIBS.find((b) => b.id === rec.teams[t]?.bib);
-  return bib ? { name: bib.name, emoji: bib.emoji, color: bib.color } : { name: `קבוצה ${t + 1}`, emoji: '⚪', color: 'var(--bib-none)' };
-}
+/** Bib colour, numbered team ("n2") or an old record's missing bib (numbered by position). */
+const lookOf = (rec: EveningRecord, t: number): TeamLook => bibLook(rec.teams[t]?.bib, t);
+
+/** "האדומים לקחו את הערב" / "קבוצה 1 לקחה את הערב". */
+const champTitle = (look: TeamLook) => `${look.the} ${verb(look, 'לקחו', 'לקחה')} את הערב`;
+
+/** "ניצחו האדומים" / "ניצחה קבוצה 1". */
+const wonBy = (look: TeamLook) => `${verb(look, 'ניצחו', 'ניצחה')} ${look.the}`;
 
 function dateLabel(ts: number): string {
   const d = new Date(ts);
@@ -119,7 +123,7 @@ function PensNote({ rec, m }: { rec: EveningRecord; m: EveningMatch }) {
           </span>
         </>
       )}{' '}
-      · ניצחו ה<bdi>{lookOf(rec, m.pens.winner).name}</bdi>
+      · {verb(lookOf(rec, m.pens.winner), 'ניצחו', 'ניצחה')} <bdi>{lookOf(rec, m.pens.winner).the}</bdi>
     </small>
   );
 }
@@ -128,7 +132,7 @@ function PensNote({ rec, m }: { rec: EveningRecord; m: EveningMatch }) {
 function pensText(rec: EveningRecord, m: EveningMatch): string {
   if (!m.pens) return '';
   const kicks = m.pens.a !== undefined && m.pens.b !== undefined ? ` ${m.pens.a}–${m.pens.b}` : '';
-  return ` (פנדלים${kicks}, ניצחו ה${lookOf(rec, m.pens.winner).name})`;
+  return ` (פנדלים${kicks}, ${wonBy(lookOf(rec, m.pens.winner))})`;
 }
 
 interface Highlight {
@@ -171,9 +175,9 @@ function highlightsOf(rec: EveningRecord, s: EveningStats): Highlight[] {
     out.push({
       icon: '🔥',
       title: 'הרצף הארוך',
-      value: `ה${t.name}`,
+      value: t.the,
       sub: `${s.streak.wins} ניצחונות ברצף`,
-      text: `🔥 הרצף הארוך: ה${t.name}, ${s.streak.wins} ניצחונות ברצף`,
+      text: `🔥 הרצף הארוך: ${t.the}, ${s.streak.wins} ניצחונות ברצף`,
     });
   }
   const line = (i: number) => {
@@ -196,11 +200,11 @@ function highlightsOf(rec: EveningRecord, s: EveningStats): Highlight[] {
       icon: '🥅',
       title: 'הוכרע בפנדלים',
       value: <ScoreLine rec={rec} m={m} />,
-      sub: `משחק ${i + 1} · ניצחו ה${lookOf(rec, m.pens!.winner).name}${m.pens!.a !== undefined ? ` ${Math.max(m.pens!.a, m.pens!.b!)}–${Math.min(m.pens!.a, m.pens!.b!)}` : ''}`,
+      sub: `משחק ${i + 1} · ${wonBy(lookOf(rec, m.pens!.winner))}${m.pens!.a !== undefined ? ` ${Math.max(m.pens!.a, m.pens!.b!)}–${Math.min(m.pens!.a, m.pens!.b!)}` : ''}`,
       text: `🥅 הוכרע בפנדלים: ${line(i)}${pensText(rec, m)}`,
     });
   } else if (s.pens.length > 1) {
-    const winners = names(s.pens.map((i) => `ה${lookOf(rec, rec.matches[i].pens!.winner).name}`));
+    const winners = names(s.pens.map((i) => lookOf(rec, rec.matches[i].pens!.winner).the));
     out.push({
       icon: '🥅',
       title: 'הוכרעו בפנדלים',
@@ -238,7 +242,7 @@ export function EveningScreen({ record: rec }: { record: EveningRecord }) {
       matches: s.matches,
       goals: s.goals,
       minutes: s.minutes,
-      champion: champLook ? `${champLook.emoji} ה${champLook.name}` : undefined,
+      champion: champLook ? `${champLook.emoji} ${champTitle(champLook)}` : undefined,
       table: s.table.map(
         (r) => `${lookOf(rec, r.team).emoji} ${lookOf(rec, r.team).name}: ${r.won} נ׳${r.pensWon ? ` (${r.pensWon} בפנדלים)` : ''} · ${r.drawn} ת׳ · ${r.lost} ה׳`,
       ),
@@ -261,7 +265,7 @@ export function EveningScreen({ record: rec }: { record: EveningRecord }) {
           {dateLabel(rec.startedAt)} · {timeLabel(rec.startedAt)}
           {timeLabel(rec.endedAt) !== timeLabel(rec.startedAt) && `–${timeLabel(rec.endedAt)}`}
         </p>
-        <h1 id="ev-h">{champLook ? `ה${champLook.name} לקחו את הערב` : 'ערב צמוד, בלי מנצח ברור'}</h1>
+        <h1 id="ev-h">{champLook ? champTitle(champLook) : 'ערב צמוד, בלי מנצח ברור'}</h1>
         {champ && (
           <p className="ev-champ-sub">
             {[

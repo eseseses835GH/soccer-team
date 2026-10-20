@@ -148,7 +148,7 @@ const lengthSheet = async () => {
 const finishDraw = async () => {
   // A level match asks about penalties first (v5): pick a winner; older flow: who leaves.
   if (await page.locator('.pens-team').count()) await page.locator('.pens-team').first().click();
-  else if (await page.getByRole('dialog').isVisible()) await page.getByRole('dialog').getByRole('button', { name: /יוצאים/ }).first().click();
+  else if (await page.getByRole('dialog').isVisible()) await page.getByRole('dialog').getByRole('button', { name: /יוצא(ים|ת)$/ }).first().click();
 };
 await finishDraw(); // the match above ended 0:0
 // Shortened mid-match to 5 minutes: the time-up whistle comes at 5:00, not 8:00.

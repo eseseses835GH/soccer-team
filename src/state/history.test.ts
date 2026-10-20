@@ -307,7 +307,7 @@ describe('evening share text', () => {
       matches: 6,
       goals: 14,
       minutes: 48,
-      champion: '🔴 האדומים',
+      champion: '🔴 האדומים לקחו את הערב',
       table: ['🔴 אדומים: 4 נ׳', '🔵 כחולים: 1 נ׳'],
       highlights: ['👑 מלך השערים: אבי (4)'],
     });

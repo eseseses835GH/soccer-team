@@ -105,7 +105,7 @@ await page.getByRole('button', { name: '+ גול' }).nth(1).click();
 await page.getByRole('button', { name: 'דילוג' }).click();
 await page.getByRole('button', { name: 'סיום משחק' }).click();
 const pitch = await page.locator('.side h2').allInnerTexts();
-assert(pitch[0] !== 'אדומים' || pitch[1] !== 'כחולים', `after a loss the pitch should change: ${pitch}`);
+assert(pitch[0] !== 'קבוצה 1' || pitch[1] !== 'קבוצה 2', `after a loss the pitch should change: ${pitch}`);
 assert(await page.getByText('טבלת הערב').isVisible(), 'standings shown');
 await page.getByRole('button', { name: /לקבוצות/ }).click();
 assert(await page.getByRole('button', { name: /חזרה למשחק/ }).isVisible(), 'match continues');
@@ -126,7 +126,7 @@ await page.getByRole('button', { name: 'סיום משחק' }).click();
   assert(await sheet.getByRole('heading', { name: 'תיקו. מי ניצחה בפנדלים?' }).isVisible(), 'penalties sheet on a draw');
   assert(await sheet.getByRole('button', { name: 'בלי פנדלים, תיקו' }).isVisible(), 'plain draw still offered');
   assert((await sheet.locator('.stepper').count()) === 0, 'no shoot-out score to fill in');
-  await sheet.getByRole('button', { name: `ה${first}` }).click();
+  await sheet.getByRole("button", { name: first, exact: true }).click();
   const after = await page.locator('.side h2').allInnerTexts();
   assert(after.includes(first) && !after.includes(second), `penalty winner stays: ${after}`);
   const m = await page.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).match);
@@ -138,7 +138,7 @@ await page.getByRole('button', { name: 'סיום הערב' }).click();
 await page.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
 await page.waitForSelector('.evening');
 const summary = await page.locator('.evening').innerText();
-assert(/לקחו את הערב/.test(summary), 'summary names the evening winner');
+assert(/קבוצה \d לקחה את הערב/.test(summary), 'summary names the evening winner');
 assert(summary.includes('מלך השערים'), 'summary shows the top scorer');
 await page.waitForTimeout(1200); // the totals count up
 const totals = await page.locator('.ev-stats dd').allInnerTexts();
@@ -155,9 +155,16 @@ assert(await page.getByRole('button', { name: 'ערבים קודמים' }).isVis
 
 // 8. Keep-apart pair is respected on a fresh split.
 await page.getByRole('button', { name: 'הגדרות' }).click();
+// Settings v7: only "משחק" is open; everything else is a fold.
+assert((await page.locator('details.settings-fold[open]').count()) === 0, 'settings folds start closed');
+assert(await page.getByText('אורך משחק').isVisible(), 'game settings open');
+assert(/גופיות\s*· אין/.test(await page.locator('details.settings-fold > summary', { hasText: 'גופיות' }).innerText()), 'bibs summary says none');
+await page.locator('summary', { hasText: 'כללים בין שחקנים' }).click();
 await page.getByLabel('שחקן ראשון').selectOption({ label: 'אלון' });
 await page.getByLabel('שחקן שני').selectOption({ label: 'גיא' });
-await page.getByRole('button', { name: 'הוספת זוג' }).click();
+await page.getByRole('button', { name: 'הוספת כלל' }).click();
+assert(await page.getByText(/אלון וגיא\s*· לא באותה קבוצה/).isVisible(), 'rule listed in plain words');
+assert(/כללים בין שחקנים\s*· 1/.test(await page.locator('summary', { hasText: 'כללים בין שחקנים' }).innerText()), 'rules summary counts');
 await back();
 await page.getByRole('button', { name: 'עושים כוחות' }).click();
 await page.waitForSelector('.team');
@@ -199,6 +206,7 @@ await page.evaluate(() => {
     window.__copied = d.url ?? d.text;
   };
 });
+await page.locator('summary', { hasText: 'גיבוי ושיתוף הסגל' }).click();
 await page.getByRole('button', { name: /שליחת קישור/ }).click();
 await page.waitForFunction(() => window.__copied);
 const link = await page.evaluate(() => window.__copied);
@@ -228,7 +236,7 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   const card = pg.locator('.borrow');
   assert(await card.isVisible(), 'borrow step shown when the short team comes on');
   const title = await card.locator('h3').innerText();
-  assert(/משלימים את ה.+ מה.+/.test(title), `borrow title: ${title}`);
+  assert(/^משלימים את קבוצה \d מקבוצה \d$/.test(title), `borrow title: ${title}`);
   assert(/מומלץ: .+ עובר ל.+, כך המשחק הבא הכי שווה/.test(await card.locator('.borrow-why').innerText()), 'borrow reason');
   assert((await card.locator('.borrow-picks button').count()) === 5, 'five donors to pick from');
   const suggested = await card.locator('.borrow-picks button.sel .name').innerText();
@@ -239,14 +247,14 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   assert(/בחרתם/.test(await card.locator('.borrow-why').innerText()), 'override shown');
   assert(/עם ההמלצה \d+/.test(await card.locator('.hint').innerText()), 'recommended score shown on override');
   await card.getByRole('button', { name: 'אישור' }).click();
-  assert(await pg.getByText(new RegExp(`${otherName} משחק עם ה`)).isVisible(), 'borrow recorded');
+  assert(await pg.getByText(new RegExp(`${otherName} משחק עם קבוצה \\d`)).isVisible(), 'borrow recorded');
   // The borrower can score for the short team (second side = the team that came on).
   await pg.getByRole('button', { name: '+ גול' }).nth(1).click();
   assert(await pg.locator('.sheet .pick-list').getByText(otherName, { exact: true }).isVisible(), 'borrower listed as a scorer');
   await pg.getByRole('button', { name: 'דילוג' }).click();
   // Survives a reload.
   await pg.reload();
-  assert(await pg.getByText(new RegExp(`${otherName} משחק עם ה`)).isVisible(), 'borrow survives reload');
+  assert(await pg.getByText(new RegExp(`${otherName} משחק עם קבוצה \\d`)).isVisible(), 'borrow survives reload');
   // The short team wins and stays: the borrower goes back and it borrows again from the new loser.
   await pg.getByRole('button', { name: 'סיום משחק' }).click();
   assert(await pg.locator('.borrow').isVisible(), 'short team that stays borrows again');
@@ -255,6 +263,35 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   await pg.locator('.borrow').getByRole('button', { name: 'דילוג' }).click();
   assert((await pg.locator('.borrow').count()) === 0, 'skip hides the step');
   console.log(`borrow: suggested ${suggested}, picked ${otherName}`);
+}
+
+// 11a. Bibs (v7): off by default (numbered teams); switched on in Settings, teams get bib names.
+{
+  const pg = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  pg.on('pageerror', (e) => errors.push(e.message));
+  await pg.goto(base);
+  await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+  await pg.waitForSelector('.team');
+  assert(JSON.stringify(await pg.locator('.team h2').allInnerTexts()) === '["קבוצה 1","קבוצה 2","קבוצה 3"]', `numbered teams: ${await pg.locator('.team h2').allInnerTexts()}`);
+  const colours = await pg.locator('.team').evaluateAll((ts) => ts.map((t) => getComputedStyle(t).getPropertyValue('--team')));
+  assert(new Set(colours).size === 3, `numbered teams have different colours: ${colours}`);
+  await pg.goto(base + '#settings');
+  await pg.locator('summary', { hasText: 'גופיות' }).click();
+  assert((await pg.locator('button.bib[aria-pressed]').count()) === 0, 'no bib picker while bibs are off');
+  await pg.locator('label.toggle', { hasText: 'יש לכם גופיות' }).click();
+  assert((await pg.locator('button.bib[aria-pressed]').count()) === 8, 'bib picker shown when on');
+  await pg.getByRole('button', { name: /^צהובים/ }).click(); // drop yellow: 7 colours
+  assert(/גופיות\s*· 7 צבעים/.test(await pg.locator('summary', { hasText: 'גופיות' }).innerText()), 'bibs summary counts colours');
+  await pg.goto(base + '#teams');
+  assert(JSON.stringify(await pg.locator('.team h2').allInnerTexts()) === '["אדומים","כחולים","ירוקים"]', `bib names: ${await pg.locator('.team h2').allInnerTexts()}`);
+  await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+  await pg.getByRole('button', { name: '+ גול' }).first().click();
+  assert((await pg.getByRole('dialog').locator('h2').innerText()) === 'מי הבקיע לאדומים?', 'scorer sheet with a bib name');
+  await pg.getByRole('button', { name: 'דילוג' }).click();
+  await pg.getByRole('button', { name: 'סיום משחק' }).click();
+  assert(/^משלימים את הירוקים מהכחולים$/.test(await pg.locator('.borrow h3').innerText()), 'borrow title with bib names');
+  await pg.context().close();
 }
 
 // 11b. Left early (v6): after a match, a player of the team outside leaves → he's out of the teams and
@@ -554,7 +591,7 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await tp.getByRole('button', { name: 'סיום משחק' }).tap();
   // A 0–0 now asks about penalties first (v5): pick a winner.
   if (await tp.locator('.pens-team').count()) await tp.locator('.pens-team').first().tap();
-  else if (await sheet.isVisible()) await sheet.getByRole('button', { name: /יוצאים/ }).first().tap();
+  else if (await sheet.isVisible()) await sheet.getByRole('button', { name: /יוצא(ים|ת)$/ }).first().tap();
   assert((await chip.innerText()).includes('בלי הגבלת זמן'), 'next match has no timer either');
   await chip.tap();
   await sheet.locator('label.toggle').tap();
@@ -630,6 +667,8 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   assert((await card(ip).count()) === 0 && (await flags(ip)).never === true, 'install: "never" remembered');
   // Settings keeps the steps.
   await ip.getByRole('button', { name: 'הגדרות' }).tap();
+  assert(/גישה מהירה/.test(await ip.locator('details.settings-fold > summary', { hasText: 'גישה מהירה' }).innerText()), 'install: folded as "quick access"');
+  await ip.locator('summary', { hasText: 'גישה מהירה' }).tap();
   assert(await ip.locator('.install-settings').getByText(/הוספה למסך הבית״ ואז/).isVisible(), 'install: steps in Settings');
   await ic.close();
 
@@ -650,6 +689,7 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await nextUse(sp);
   assert((await flags(sp)).uses === 2 && (await card(sp).count()) === 0, 'install: never shown when already installed');
   await sp.getByRole('button', { name: 'הגדרות' }).tap();
+  await sp.locator('summary', { hasText: 'גישה מהירה' }).tap();
   assert(await sp.getByText('כוחות פתוחה ממסך הבית').isVisible(), 'install: Settings says it is installed');
   await sc.close();
 

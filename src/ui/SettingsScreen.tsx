@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { ATTR_KEYS, type Constraints } from '../engine';
-import { ATTR_LABELS } from '../i18n';
+import { ATTR_LABELS, goalsEvery } from '../i18n';
 import { IMPORT_HASH, encodeBackup, makeBackup } from '../state/io';
-import { ACCENTS, BIBS, type BibId } from '../state/model';
+import { ACCENTS, BIBS, teamLook, type BibId, type Theme } from '../state/model';
 import { useGroups, useStore } from '../state/store';
 import { STATUS_TEXT, useSync } from '../sync/SyncProvider';
 import { copyText, downloadText, nativeShare } from '../share';
@@ -10,6 +10,10 @@ import { useUi } from './App';
 import { RatingSlider, Segmented, Stepper, Toggle } from './components';
 import { Icon } from './icons';
 import { InstallSettings } from './InstallPrompt';
+import { SettingsFold } from './SettingsFold';
+
+const THEMES: Record<Theme, string> = { light: 'בהיר', dark: 'כהה', auto: 'לפי הטלפון' };
+const RULE_LABEL = { apart: 'לא באותה קבוצה', together: 'תמיד באותה קבוצה' } as const;
 
 export function SettingsScreen() {
   const { state, dispatch } = useStore();
@@ -23,6 +27,7 @@ export function SettingsScreen() {
   const { current } = useGroups();
   const set = (patch: Partial<typeof settings>) => dispatch({ type: 'setSettings', settings: { ...settings, ...patch } });
 
+  const ruleCount = constraints.together.length + constraints.apart.length;
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? '?';
   const sorted = [...players].sort((x, y) => x.name.localeCompare(y.name, 'he'));
 
@@ -49,39 +54,6 @@ export function SettingsScreen() {
 
   return (
     <section className="settings" aria-label="הגדרות">
-      <div className="group">
-        <h2>שוערים</h2>
-        <Segmented
-          label="שוערים"
-          value={settings.gkMode}
-          onChange={(gkMode) => set({ gkMode })}
-          options={[
-            { value: 'rotate', label: 'מתחלפים' },
-            { value: 'fixed', label: 'שוער קבוע' },
-          ]}
-        />
-        {settings.gkMode === 'rotate' ? (
-          <>
-            <p className="hint">כל קבוצה מקבלת סדר שוערים מוגרל. מתחלפים לפי מספר הגולים שספגו.</p>
-            <div className="field-row">
-              <span>מתחלפים כל</span>
-              <Segmented
-                label="מתחלפים כל"
-                value={settings.gkSwitchGoals}
-                onChange={(gkSwitchGoals) => set({ gkSwitchGoals })}
-                options={[
-                  { value: 1, label: 'גול' },
-                  { value: 2, label: '2 גולים' },
-                  { value: 3, label: '3' },
-                ]}
-              />
-            </div>
-          </>
-        ) : (
-          <p className="hint">מסמנים בכרטיס השחקן ״שוער קבוע״, ואם יש מספיק, כל קבוצה מקבלת אחד.</p>
-        )}
-      </div>
-
       <div className="group">
         <h2>משחק</h2>
         <div className="field-row">
@@ -123,32 +95,7 @@ export function SettingsScreen() {
         <p className="hint small">שריקת שופט בפתיחה ובסיום, וצופר כשמבקיעים גול. אפשר להשתיק גם ממסך המשחק.</p>
       </div>
 
-      <div className="group">
-        <h2>גופיות</h2>
-        <p className="hint">מסמנים את הצבעים שיש לכם. הקבוצות מקבלות אותם לפי הסדר שסימנתם.</p>
-        <div className="bibs">
-          {BIBS.map((bib) => {
-            const idx = settings.bibs.indexOf(bib.id);
-            return (
-              <button
-                key={bib.id}
-                type="button"
-                className={`bib ${idx >= 0 ? 'on' : ''}`}
-                aria-pressed={idx >= 0}
-                onClick={() => toggleBib(bib.id)}
-                style={{ '--team': bib.color } as React.CSSProperties}
-              >
-                <span className="swatch" aria-hidden="true" />
-                {bib.name}
-                {idx >= 0 && <span className="order">{idx + 1}</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="group">
-        <h2>מראה</h2>
+      <SettingsFold id="look" title="מראה" value={THEMES[settings.theme]}>
         <Segmented
           label="מצב תצוגה"
           value={settings.theme}
@@ -176,22 +123,102 @@ export function SettingsScreen() {
             </button>
           ))}
         </div>
-      </div>
+      </SettingsFold>
 
-      <div className="group">
-        <h2>זוגות</h2>
-        <p className="hint">״בנפרד״ – אף פעם לא באותה קבוצה (למשל שני האחים). ״יחד״ – תמיד ביחד (למשל באים באותו אוטו).</p>
+      <SettingsFold id="gk" title="שוערים" value={settings.gkMode === 'fixed' ? 'שוער קבוע' : `מתחלפים ${goalsEvery(settings.gkSwitchGoals)}`}>
+        <Segmented
+          label="שוערים"
+          value={settings.gkMode}
+          onChange={(gkMode) => set({ gkMode })}
+          options={[
+            { value: 'rotate', label: 'מתחלפים' },
+            { value: 'fixed', label: 'שוער קבוע' },
+          ]}
+        />
+        {settings.gkMode === 'rotate' ? (
+          <>
+            <p className="hint">כל קבוצה מקבלת סדר שוערים מוגרל. מתחלפים לפי מספר הגולים שספגו.</p>
+            <div className="field-row">
+              <span>מתחלפים כל</span>
+              <Segmented
+                label="מתחלפים כל"
+                value={settings.gkSwitchGoals}
+                onChange={(gkSwitchGoals) => set({ gkSwitchGoals })}
+                options={[
+                  { value: 1, label: 'גול' },
+                  { value: 2, label: '2 גולים' },
+                  { value: 3, label: '3' },
+                ]}
+              />
+            </div>
+          </>
+        ) : (
+          <p className="hint">מסמנים בכרטיס השחקן 🧤 ״טוב בשער״, ואם יש מספיק, כל קבוצה מקבלת אחד כזה שעומד בשער כל המשחק.</p>
+        )}
+      </SettingsFold>
+
+      <SettingsFold id="bibs" title="גופיות" value={settings.hasBibs ? `${settings.bibs.length} צבעים` : 'אין'}>
+        <Toggle
+          label="יש לכם גופיות?"
+          hint={settings.hasBibs ? 'הקבוצות נקראות לפי צבע הגופיות.' : 'בלי גופיות הקבוצות נקראות לפי מספר, וכל אחת מקבלת צבע משלה במסך:'}
+          checked={settings.hasBibs}
+          onChange={(hasBibs) => set({ hasBibs })}
+        />
+        {settings.hasBibs ? (
+          <>
+            <p className="hint">מסמנים את הצבעים שיש לכם. הקבוצות מקבלות אותם לפי הסדר שסימנתם.</p>
+            <div className="bibs">
+              {BIBS.map((bib) => {
+                const idx = settings.bibs.indexOf(bib.id);
+                return (
+                  <button
+                    key={bib.id}
+                    type="button"
+                    className={`bib ${idx >= 0 ? 'on' : ''}`}
+                    aria-pressed={idx >= 0}
+                    onClick={() => toggleBib(bib.id)}
+                    style={{ '--team': bib.color } as React.CSSProperties}
+                  >
+                    <span className="swatch" aria-hidden="true" />
+                    {bib.name}
+                    {idx >= 0 && <span className="order">{idx + 1}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <p className="team-preview" aria-hidden="true">
+            {[0, 1, 2].map((t) => (
+              <span key={t} style={{ '--team': teamLook(settings, t).color } as React.CSSProperties}>
+                <span className="dot" /> {teamLook(settings, t).name}
+              </span>
+            ))}
+          </p>
+        )}
+      </SettingsFold>
+
+      <SettingsFold id="rules" title="כללים בין שחקנים" value={ruleCount ? String(ruleCount) : 'אין'}>
+        <p className="hint">אפשר לבקש שני שחקנים שתמיד יהיו בקבוצות שונות, או תמיד באותה קבוצה. החלוקה תשמור על זה.</p>
+        <ul className="rule-examples">
+          <li>
+            <strong>לא באותה קבוצה</strong>: למשל שני אחים שתמיד רבים, או שני השוערים.
+          </li>
+          <li>
+            <strong>תמיד באותה קבוצה</strong>: למשל באו באותו אוטו ויוצאים יחד.
+          </li>
+        </ul>
         {players.length < 2 ? (
           <p className="muted">צריך לפחות שני שחקנים.</p>
         ) : (
           <form className="pair-form" onSubmit={addPair}>
             <Segmented
-              label="סוג"
+              label="סוג הכלל"
               value={kind}
               onChange={setKind}
               options={[
-                { value: 'apart', label: 'בנפרד' },
-                { value: 'together', label: 'יחד' },
+                { value: 'apart', label: 'לא באותה קבוצה' },
+                { value: 'together', label: 'תמיד באותה קבוצה' },
               ]}
             />
             <div className="row-2">
@@ -215,7 +242,7 @@ export function SettingsScreen() {
               </select>
             </div>
             <button type="submit" className="btn btn-quiet btn-block">
-              הוספת זוג
+              הוספת כלל
             </button>
           </form>
         )}
@@ -225,11 +252,9 @@ export function SettingsScreen() {
               {constraints[k].map(([x, y], i) => (
                 <li key={`${x}-${y}`}>
                   <span>
-                    {nameOf(x)} {k === 'together' ? 'יחד עם' : 'בנפרד מ'}
-                    {k === 'together' ? ' ' : ''}
-                    {nameOf(y)}
+                    {nameOf(x)} ו{nameOf(y)} <span className="muted">· {RULE_LABEL[k]}</span>
                   </span>
-                  <button type="button" className="icon-btn" aria-label={`הסרה: ${nameOf(x)} ו${nameOf(y)}`} onClick={() => dispatch({ type: 'removeConstraint', kind: k, index: i })}>
+                  <button type="button" className="icon-btn" aria-label={`הסרת הכלל: ${nameOf(x)} ו${nameOf(y)}`} onClick={() => dispatch({ type: 'removeConstraint', kind: k, index: i })}>
                     ✕
                   </button>
                 </li>
@@ -237,11 +262,12 @@ export function SettingsScreen() {
             </ul>
           ) : null,
         )}
-      </div>
+      </SettingsFold>
+
+      <InstallSettings />
 
       {sync.configured && (
-        <div className="group account">
-          <h2>חשבון וסנכרון</h2>
+        <SettingsFold id="account" title="חשבון וסנכרון" value={sync.email ? 'מחוברים' : 'לא מחוברים'}>
           {sync.email ? (
             <>
               <p className="account-who">
@@ -269,11 +295,10 @@ export function SettingsScreen() {
               </button>
             </>
           )}
-        </div>
+        </SettingsFold>
       )}
 
-      <div className="group">
-        <h2>גיבוי ושיתוף הסגל</h2>
+      <SettingsFold id="backup" title="גיבוי ושיתוף הסגל" value={undefined}>
         <p className="hint">
           {current.synced ? 'הקבוצה מסונכרנת עם החשבון. ' : 'הכול נשמר רק בטלפון הזה. '}
           כדאי לשמור גיבוי, או לשלוח קישור למארגן נוסף. שימו לב: הקישור והקובץ כוללים את הדירוגים. הקובץ שומר גם את היסטוריית הערבים.
@@ -292,12 +317,9 @@ export function SettingsScreen() {
           </button>
         </div>
         <p className="hint small">שחזור מקובץ: במסך השחקנים, ״ייבוא רשימה״.</p>
-      </div>
+      </SettingsFold>
 
-      <InstallSettings />
-
-      <details className="group fold">
-        <summary>מתקדם: משקלים באיזון</summary>
+      <SettingsFold id="advanced" title="מתקדם" value="משקלים באיזון">
         <p className="hint">כמה כל תכונה חשובה כשמשווים בין הקבוצות. 0 = להתעלם.</p>
         <div className="sliders">
           {ATTR_KEYS.map((k) => (
@@ -317,10 +339,9 @@ export function SettingsScreen() {
         <button type="button" className="btn btn-quiet btn-block" onClick={() => dispatch({ type: 'resetWeights' })}>
           חזרה לברירת המחדל
         </button>
-      </details>
+      </SettingsFold>
 
-      <div className="group">
-        <h2>נתונים</h2>
+      <SettingsFold id="data" title="נתונים" value={undefined}>
         {current.synced && <p className="hint">הקבוצה מסונכרנת: מחיקה כאן תמחק את השחקנים גם אצל שאר המארגנים.</p>}
         <div className="stack">
           <button type="button" className="btn btn-quiet btn-block" onClick={() => dispatch({ type: 'loadSample', now: Date.now() })}>
@@ -344,7 +365,8 @@ export function SettingsScreen() {
             </button>
           )}
         </div>
-      </div>
+      </SettingsFold>
+
     </section>
   );
 }

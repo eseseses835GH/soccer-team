@@ -60,7 +60,7 @@ export function BorrowCard({ m, r, set }: { m: MatchState; r: GameResult; set: (
     return (
       <p className="borrow-done" style={{ '--team': shortLook.color } as React.CSSProperties}>
         <span>
-          🔁 {names(m.borrow.ids.map(name))} {many ? 'משחקים' : 'משחק'} עם ה{shortLook.name} במשחק הזה
+          🔁 {names(m.borrow.ids.map(name))} {many ? 'משחקים' : 'משחק'} עם {shortLook.the} במשחק הזה
         </span>
         <button type="button" className="text-btn inline" onClick={() => set(setBorrow(m, null))}>
           שינוי
@@ -85,12 +85,12 @@ export function BorrowCard({ m, r, set }: { m: MatchState; r: GameResult; set: (
   return (
     <section className="borrow" aria-label="השלמה מהמפסידה" style={{ '--team': shortLook.color } as React.CSSProperties}>
       <h3>
-        משלימים את ה{shortLook.name} מה{fromLook.name}
+        משלימים את {shortLook.the} {fromLook.from}
       </h3>
       <p className="borrow-why">
         {isSuggested ? (
           <>
-            מומלץ: <strong>{names(suggested.map(name))}</strong> {moves} ל{shortLook.name}, כך המשחק הבא הכי שווה.
+            מומלץ: <strong>{names(suggested.map(name))}</strong> {moves} {shortLook.to}, כך המשחק הבא הכי שווה.
           </>
         ) : (
           <>
@@ -98,7 +98,7 @@ export function BorrowCard({ m, r, set }: { m: MatchState; r: GameResult; set: (
           </>
         )}
       </p>
-      <div className="borrow-picks" role="group" aria-label={`שחקני ה${fromLook.name}`}>
+      <div className="borrow-picks" role="group" aria-label={`שחקני ${fromLook.the}`}>
         {plan.donorIds.map((id) => {
           const on = chosen.includes(id);
           return (
