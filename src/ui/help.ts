@@ -31,6 +31,8 @@ export interface HelpItem {
   legend?: LegendRow[];
   /** Show the live "add to home screen" steps (or install button) under the answer. */
   install?: boolean;
+  /** A button under the answer that opens this Settings section (fold id, or 'game'). */
+  settings?: { label: string; section: string };
 }
 
 export interface HelpSection {
@@ -93,12 +95,14 @@ export const HELP: HelpSection[] = [
       {
         id: 'rules',
         q: 'מה זה ״מי עם מי״?',
-        a: ['״לא באותה קבוצה״ (למשל שני החזקים) או ״תמיד ביחד״ (למשל שניים שבאו באותו אוטו). מגדירים בהגדרות ← ״מי עם מי״.'],
+        a: ['״לא באותה קבוצה״ (למשל שני החזקים) או ״תמיד ביחד״ (למשל שניים שבאו באותו אוטו).'],
+        settings: { label: 'להגדרת מי עם מי', section: 'rules' },
       },
       {
         id: 'draw',
         q: 'מה קורה בתיקו?',
-        a: ['כשהזמן נגמר בתיקו יש שריקה ו־2 דקות תוספת. עדיין תיקו? בוחרים מי ניצחה בפנדלים.'],
+        a: ['ברירת המחדל: כשהזמן נגמר בתיקו יש 2 דקות תוספת, ואם עדיין תיקו, פנדלים. אצלכם החוק אחר? אפשר לשנות את התוספת או לבטל אותה.'],
+        settings: { label: 'לשינוי', section: 'game' },
       },
       {
         id: 'privacy',

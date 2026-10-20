@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ATTR_KEYS, type Constraints } from '../engine';
 import { ATTR_LABELS, goalsEvery } from '../i18n';
 import { IMPORT_HASH, encodeBackup, makeBackup } from '../state/io';
@@ -14,9 +14,13 @@ import { SettingsFold } from './SettingsFold';
 
 const RULE_LABEL = { apart: 'לא באותה קבוצה', together: 'תמיד באותה קבוצה' } as const;
 
-export function SettingsScreen() {
+export function SettingsScreen({ focus }: { focus?: string }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
+  // Opened from a help answer (#settings/<section>): scroll to that section.
+  useEffect(() => {
+    if (focus) document.getElementById(`set-${focus}`)?.scrollIntoView({ block: 'start' });
+  }, [focus]);
   const { settings, constraints, players } = state;
   const [a, setA] = useState('');
   const [b, setB] = useState('');
@@ -54,7 +58,7 @@ export function SettingsScreen() {
   return (
     <section className="settings" aria-label="הגדרות">
       <HelpLink />
-      <div className="group">
+      <div className="group" id="set-game">
         <h2>משחק</h2>
         <div className="field-row">
           <span>אורך משחק</span>

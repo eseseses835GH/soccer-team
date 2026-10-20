@@ -4,6 +4,11 @@ import { loadJSON, saveJSON } from '../state/storage';
 /** Which Settings folds are open on this phone (never synced, not in the backup). */
 const OPEN_KEY = 'kochot:settings-open';
 
+/** Open a fold before navigating to Settings (used by links from the help screen). */
+export function openSettingsFold(id: string) {
+  if (!openIds().includes(id)) saveJSON(OPEN_KEY, [...openIds(), id]);
+}
+
 function openIds(): string[] {
   const v = loadJSON<unknown>(OPEN_KEY);
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
@@ -17,6 +22,7 @@ export function SettingsFold({ id, title, value, children }: { id: string; title
   const [open, setOpen] = useState(() => openIds().includes(id));
   return (
     <details
+      id={`set-${id}`}
       className="group fold settings-fold"
       open={open}
       onToggle={(e) => {

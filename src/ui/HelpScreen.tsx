@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUi } from './App';
 import { InstallHelp } from './InstallPrompt';
+import { openSettingsFold } from './SettingsFold';
 import { searchHelp, type HelpItem, type LegendMark } from './help';
 import { Icon } from './icons';
 
@@ -37,6 +38,7 @@ function Question({ item, open }: { item: HelpItem; open: boolean }) {
           </ul>
         )}
         {item.install && <InstallHelp />}
+        {item.settings && <SettingsJump {...item.settings} />}
       </div>
     </details>
   );
@@ -69,6 +71,23 @@ export function HelpScreen({ focus }: { focus: string }) {
       ))}
       {!sections.length && <p className="hint center">לא מצאנו שאלה כזו. נסו מילה אחרת.</p>}
     </section>
+  );
+}
+
+/** "לשינוי" under an answer: opens that Settings section. */
+function SettingsJump({ label, section }: { label: string; section: string }) {
+  const { go } = useUi();
+  return (
+    <button
+      type="button"
+      className="btn btn-quiet help-jump"
+      onClick={() => {
+        if (section !== 'game') openSettingsFold(section);
+        go('settings', section);
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

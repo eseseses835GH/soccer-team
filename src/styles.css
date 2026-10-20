@@ -1722,17 +1722,13 @@ thead th {
 .sheet .hint.small {
   margin-block: 10px 0;
 }
-.g-mark {
-  inline-size: 22px;
-  block-size: 22px;
-  display: grid;
-  place-items: center;
+.g-logo {
+  inline-size: 26px;
+  block-size: 26px;
+  padding: 4px;
   border-radius: 50%;
-  background: var(--surface);
-  color: #4285f4;
-  font-weight: 800;
-  font-size: 0.85rem;
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: #fff; /* white behind the logo in dark mode too */
+  flex: none;
 }
 .account-who {
   font-weight: 600;
@@ -2693,4 +2689,13 @@ thead th {
   color: var(--ink-3);
   font-size: 0.85rem;
   font-weight: 700;
+}
+
+/* ---------- help: jump to a Settings section ---------- */
+.help-jump {
+  margin-block-start: 6px;
+}
+#set-game,
+.settings-fold {
+  scroll-margin-top: 72px;
 }

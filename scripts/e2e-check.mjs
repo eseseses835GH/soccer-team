@@ -727,6 +727,15 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await hp.getByRole('button', { name: /^חזרה$/ }).click();
   await hp.getByRole('button', { name: 'שאלות ותשובות' }).click();
   assert(hp.url().endsWith('#help'), 'help: top bar "?" opens #help');
+  // Answers that point to a setting open it: "מי עם מי" unfolds that section, the draw rule goes to משחק.
+  await hp.locator('details.help-q summary', { hasText: 'מי עם מי' }).click();
+  await hp.getByRole('button', { name: 'להגדרת מי עם מי' }).click();
+  assert(hp.url().endsWith('#settings/rules') && (await hp.locator('#set-rules').getAttribute('open')) !== null, 'help: "מי עם מי" opens its settings section');
+  await hp.goto(base + '#help');
+  await hp.locator('details.help-q summary', { hasText: 'מה קורה בתיקו?' }).click();
+  await hp.getByRole('button', { name: 'לשינוי' }).click();
+  assert(hp.url().endsWith('#settings/game') && (await hp.locator('#set-game').isVisible()), 'help: the draw answer opens the game settings');
+  await hp.goto(base + '#help');
   assert((await hp.locator('details.help-q[open]').count()) === 0, 'help: questions start folded');
   const q = hp.locator('details.help-q').filter({ hasText: 'מה קורה בתיקו?' });
   await q.locator('summary').click();

@@ -432,3 +432,8 @@ User: "add questions and answers: what the icons are, and an explanation of thin
 - Renames: "כללים בין שחקנים" → **"מי עם מי"**; "גיבוי ושיתוף הסגל" → **"שיתוף הסגל וגיבוי"**; "מתקדם" → **"הנוסחה לחלוקה"** (summary: "כמה כל תכונה שוקלת"); "חשבון וסנכרון" → **"חשבון"**, with a one-line "why" (only needed when another organizer manages the group from their phone).
 - **"סנכרון עכשיו" removed**: syncing is automatic (on open, focus, back online, every minute and after each change), so the button only raised questions.
 - **"Add to home screen" moved out of Settings** into the help screen as "איך מוסיפים למסך הבית?", showing the live steps / install button (`InstallHelp`). The main-screen prompt on the second use is unchanged.
+
+## Login polish and help links (v7, user feedback)
+- **Sign-up with a password asks for it twice** ("סיסמה שוב"); a mismatch says "הסיסמאות לא זהות". Sign-in stays one field.
+- **"המשך עם Google" shows Google's four-colour G** (inline SVG on a white circle, so it reads in dark mode too) instead of a blue letter.
+- **Help answers can open the right Settings section:** "מי עם מי" → button "להגדרת מי עם מי" unfolds that section (`#settings/rules`); "מה קורה בתיקו?" says the default (2 minutes extra, then penalties) and "לשינוי" goes to the game settings (`#settings/game`). Settings scrolls to `set-<section>`.

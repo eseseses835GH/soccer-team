@@ -223,7 +223,7 @@ export function App() {
         {safeRoute === 'teams' && <TeamsScreen />}
         {safeRoute === 'match' && <MatchScreen />}
         {safeRoute === 'players' && <PlayersScreen />}
-        {safeRoute === 'settings' && <SettingsScreen />}
+        {safeRoute === 'settings' && <SettingsScreen focus={param} />}
         {safeRoute === 'history' && <HistoryScreen />}
         {safeRoute === 'evening' && evening && <EveningScreen record={evening} />}
         {safeRoute === 'help' && <HelpScreen focus={param} />}
