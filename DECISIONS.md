@@ -421,3 +421,8 @@ User: "add questions and answers: what the icons are, and an explanation of thin
 - **Written for the new behaviour being built in parallel:** no bibs by default ("קבוצה 1, 2, 3" with automatic colours, bibs switched on in Settings) and "כללים בין שחקנים" instead of "זוגות". *(manager to check the wording against the merged UI.)*
 - **Ranges are written in words** ("מ־0 עד 100", "בין 80 ל־95"): a "0–100" in an RTL line renders as "100–0" and looks like a score.
 - The Settings change is one `<HelpLink />` line plus its import, so it merges with the Settings reorganisation.
+
+## Help screen trimmed (v7, user feedback)
+- **The user found the help screen far too long ("יותר מדי").** It now has only: **דירוג שחקנים** (level 1–10, positions, strengths, weaknesses — the legends still come from the data) and **עוד** (the 0–100 score, rules between players, what happens on a draw, who sees ratings, why add to the home screen), each one or two lines. Removed everything obvious from using the app (winner stays, borrowing, subs, keeper modes, detailed rating, team numbers, history, sync steps, icons legends for teams/history/top bar).
+- **Top bar order (RTL, right → left):** history · ? · players · settings, so the "?" sits right of the players icon and settings is at the far left.
+- Rule for the future: help covers only what isn't obvious from the screen itself; keep answers to one or two lines.

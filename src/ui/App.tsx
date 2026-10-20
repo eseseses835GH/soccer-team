@@ -196,14 +196,14 @@ export function App() {
                   <Icon name="history" />
                 </button>
               )}
+              <button type="button" className="icon-btn help-btn" aria-label="שאלות ותשובות" onClick={() => go('help')}>
+                <Icon name="help" size={20} />
+              </button>
               <button type="button" className="icon-btn" aria-label="השחקנים" onClick={() => go('players')}>
                 <Icon name="users" />
               </button>
               <button type="button" className="icon-btn" aria-label="הגדרות" onClick={() => go('settings')}>
                 <Icon name="gear" />
-              </button>
-              <button type="button" className="icon-btn help-btn" aria-label="שאלות ותשובות" onClick={() => go('help')}>
-                <Icon name="help" size={20} />
               </button>
             </nav>
           </>

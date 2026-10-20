@@ -43,11 +43,11 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: 'שאלות ותשובות' }).click();
   await shot('02c-help');
   await checkLayout('help');
-  await page.locator('#help-how > summary').click();
+  await page.locator('#help-level > summary').click();
   await page.locator('#help-score > summary').click();
-  await page.locator('#help-how').scrollIntoViewIfNeeded();
+  await page.locator('#help-level').scrollIntoViewIfNeeded();
   await shot('02d-help-open');
-  for (const id of ['icons-positions', 'icons-strengths', 'icons-weaknesses', 'icons-teams', 'icons-history', 'icons-top']) await page.locator(`#help-${id} > summary`).click();
+  for (const id of ['icons-positions', 'icons-strengths', 'icons-weaknesses']) await page.locator(`#help-${id} > summary`).click();
   await page.evaluate(() => scrollTo(0, 0));
   await shot('02e-help-legend');
   await shot('02f-help-legend-full', true);
