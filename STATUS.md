@@ -179,3 +179,7 @@
 - **Built:** cards are clear animals/symbols: strengths 🦍 גורילה, 🐆 צ'יטה, 🎯 מדויק, 🪄 קוסם, 🧠 מוח, ⭐ כוכב; weaknesses 🫏 חמור, 🦥 עצלן, 🐢, 😮‍💨, 🙅, 🥶, 🌱. Stored ids kept; 🧱 dropped (→ 🛡️ position); untouched ratings follow the new deltas. 🧤 is "טוב בשער"; rotating keepers are random again. See DECISIONS → Animal cards and "good in goal" (v7).
 - **Tested:** unit (set balance, deltas, opposites, migration of old ratings / hand-tuned / rock, idempotence, old and new import words, keeper order both modes); e2e (new card and chip names, an old stored player with `rock` + `captain` loads as ⭐ only); screenshots `03a`/`03b`/`03` (light + dark).
 - **Open:** Settings fixed-keeper hint still says ״שוער קבוע״ (owned by the settings rework).
+
+# v7: help screen
+- **Built:** `#help` "שאלות ותשובות": a "?" in the main top bar, a row at the top of Settings, a "?" next to the balance score (opens that question). Folded questions in four sections, a search box, and an icon legend generated from the cards and positions (DECISIONS → Help screen (v7)). Content in `src/ui/help.ts`.
+- **Tested:** `src/ui/help.test.ts` (legend = every card and position, unique ids, search); e2e help step (top bar → question opens → legend has every card/position chip from the add form → search → Settings row and back → score "?" opens #help/score → back to the teams); screenshots `02c`–`02g` (light + dark).

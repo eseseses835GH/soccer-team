@@ -714,6 +714,52 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await ac.close();
 }
 
+// Help screen: "?" in the top bar, a question opens, and the icon legend lists every card and position
+// (read from the add form's chips, so this doesn't need updating when the cards change).
+{
+  const hp = await (await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'he-IL' })).newPage();
+  hp.on('pageerror', (e) => errors.push(`help: ${e.message}`));
+  await hp.goto(base);
+  await hp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await hp.getByRole('button', { name: 'השחקנים' }).click();
+  await hp.getByText('עוד על השחקן').click();
+  const chipNames = (sel) => hp.locator(sel).evaluateAll((bs) => bs.map((b) => [b.querySelector('.card-emoji')?.textContent ?? '', [...b.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim()]));
+  const cards = await chipNames('form.add .card-group .card-chip');
+  const positions = await chipNames('form.add .pos-picker .card-chip');
+  assert(cards.length >= 6 && positions.length >= 4, `help: read ${cards.length} cards and ${positions.length} positions from the add form`);
+  await hp.getByRole('button', { name: /^חזרה$/ }).click();
+  await hp.getByRole('button', { name: 'שאלות ותשובות' }).click();
+  assert(hp.url().endsWith('#help'), 'help: top bar "?" opens #help');
+  assert((await hp.locator('details.help-q[open]').count()) === 0, 'help: questions start folded');
+  const q = hp.locator('details.help-q').filter({ hasText: 'מה זה ״מנצחת נשארת״?' });
+  await q.locator('summary').click();
+  assert(await q.getByText('המנצחת נשארת, המפסידה').isVisible(), 'help: a question opens with its answer');
+  await hp.locator('details.help-q summary', { hasText: 'כרטיסיות: חוזקות' }).click();
+  await hp.locator('details.help-q summary', { hasText: 'כרטיסיות: חולשות' }).click();
+  await hp.locator('details.help-q summary', { hasText: 'עמדות: איפה הוא חזק' }).click();
+  const legend = await hp.locator('.legend li').evaluateAll((ls) => ls.map((l) => [l.querySelector('.legend-emoji')?.textContent ?? '', l.querySelector('strong')?.textContent ?? '']));
+  const has = ([e, n]) => legend.some(([le, ln]) => le === e && ln === n);
+  const missing = [...cards, ...positions].filter((c) => !has(c));
+  assert(!missing.length, `help: legend is missing ${missing.map((m) => m.join(' ')).join(', ')}`);
+  // Search narrows the list and opens the matches.
+  await hp.getByLabel('חיפוש בשאלות').fill('פנדלים');
+  assert((await hp.locator('details.help-q').count()) < 10 && (await hp.locator('details.help-q[open]').count()) > 0, 'help: search filters and opens matches');
+  // Back returns home; Settings has a row; the teams screen's score "?" opens that question.
+  await hp.getByRole('button', { name: /^חזרה$/ }).click();
+  await hp.getByRole('button', { name: 'הגדרות' }).click();
+  await hp.locator('.help-link').click();
+  await hp.getByRole('button', { name: /^חזרה$/ }).click();
+  assert(hp.url().endsWith('#settings'), 'help: back goes to Settings when opened from there');
+  await hp.getByRole('button', { name: /^חזרה$/ }).click();
+  await hp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await hp.waitForSelector('.team');
+  await hp.getByRole('button', { name: 'מה זה מדד האיזון?' }).click();
+  assert(await hp.locator('#help-score[open]').isVisible(), 'help: score "?" opens the score question');
+  await hp.getByRole('button', { name: 'לקבוצות' }).click();
+  assert(hp.url().endsWith('#teams'), 'help: back returns to the teams');
+  await hp.context().close();
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {

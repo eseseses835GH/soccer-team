@@ -6,6 +6,7 @@ import { AccountSheet } from './AccountSheet';
 import { Sheet, Toast } from './components';
 import { EveningScreen, HistoryScreen } from './HistoryScreen';
 import { GroupsSheet } from './GroupsSheet';
+import { HelpScreen } from './HelpScreen';
 import { HomeScreen } from './HomeScreen';
 import { useRecordUse } from './InstallPrompt';
 import { Icon } from './icons';
@@ -14,8 +15,8 @@ import { PlayersScreen } from './PlayersScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
 
-export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening';
-const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening'];
+export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help';
+const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening', 'help'];
 const TITLES: Record<Route, string> = {
   home: '',
   teams: 'הקבוצות',
@@ -24,9 +25,12 @@ const TITLES: Record<Route, string> = {
   settings: 'הגדרות',
   history: 'ערבים קודמים',
   evening: 'סיכום הערב',
+  help: 'שאלות ותשובות',
 };
 /** Where "back" goes from each screen. */
-const PARENT: Record<Route, Route> = { home: 'home', teams: 'home', match: 'teams', players: 'home', settings: 'home', history: 'home', evening: 'history' };
+const PARENT: Record<Route, Route> = { home: 'home', teams: 'home', match: 'teams', players: 'home', settings: 'home', history: 'home', evening: 'history', help: 'home' };
+/** Help can be opened from several screens; "back" returns to the one it came from. */
+const HELP_FROM: Route[] = ['home', 'teams', 'match', 'players', 'settings'];
 
 const isRoute = (s: string): s is Route => (ROUTES as string[]).includes(s);
 
@@ -62,7 +66,11 @@ export function App() {
   const timer = useRef<number>(undefined);
   useRecordUse(state.players.length > 0);
 
+  const routeNow = useRef(route);
+  routeNow.current = route;
+  const helpFrom = useRef<Route>('home');
   const go = useCallback((r: Route, p = '') => {
+    if (r === 'help' && HELP_FROM.includes(routeNow.current)) helpFrom.current = routeNow.current;
     setRoute(r);
     setParam(p);
     const hash = p ? `${r}/${encodeURIComponent(p)}` : r;
@@ -141,6 +149,8 @@ export function App() {
         ? 'history'
         : route;
 
+  const backTo = safeRoute === 'help' ? helpFrom.current : PARENT[safeRoute];
+
   const doImport = () => {
     if (!incoming) return;
     const m = mergePlayers(state.players, incoming.players);
@@ -192,13 +202,16 @@ export function App() {
               <button type="button" className="icon-btn" aria-label="הגדרות" onClick={() => go('settings')}>
                 <Icon name="gear" />
               </button>
+              <button type="button" className="icon-btn help-btn" aria-label="שאלות ותשובות" onClick={() => go('help')}>
+                <Icon name="help" size={20} />
+              </button>
             </nav>
           </>
         ) : (
           <>
-            <button type="button" className="back-btn" onClick={() => go(PARENT[safeRoute])}>
+            <button type="button" className="back-btn" onClick={() => go(backTo)}>
               <Icon name="back" />
-              <span>{PARENT[safeRoute] === 'teams' ? 'לקבוצות' : 'חזרה'}</span>
+              <span>{backTo === 'teams' ? 'לקבוצות' : 'חזרה'}</span>
             </button>
             <h1 className="topbar-title">{TITLES[safeRoute]}</h1>
             <span className="topbar-spacer" />
@@ -213,6 +226,7 @@ export function App() {
         {safeRoute === 'settings' && <SettingsScreen />}
         {safeRoute === 'history' && <HistoryScreen />}
         {safeRoute === 'evening' && evening && <EveningScreen record={evening} />}
+        {safeRoute === 'help' && <HelpScreen focus={param} />}
       </main>
       {incoming && (
         <Sheet title="ייבוא סגל" onClose={() => setIncoming(null)}>

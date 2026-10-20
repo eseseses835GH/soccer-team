@@ -202,7 +202,7 @@ export function TeamsScreen() {
         </div>
       )}
 
-      <ScoreMeter score={ev.score} animateKey={animKey} />
+      <ScoreMeter score={ev.score} animateKey={animKey} onHelp={() => go('help', 'score')} />
 
       {violations.length > 0 && (
         <ul className="notice list" role="status">

@@ -9,6 +9,7 @@ import { copyText, downloadText, nativeShare } from '../share';
 import { useUi } from './App';
 import { RatingSlider, Segmented, Stepper, Toggle } from './components';
 import { Icon } from './icons';
+import { HelpLink } from './HelpScreen';
 import { InstallSettings } from './InstallPrompt';
 import { SettingsFold } from './SettingsFold';
 
@@ -54,6 +55,7 @@ export function SettingsScreen() {
 
   return (
     <section className="settings" aria-label="הגדרות">
+      <HelpLink />
       <div className="group">
         <h2>משחק</h2>
         <div className="field-row">

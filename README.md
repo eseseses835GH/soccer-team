@@ -60,6 +60,8 @@ and a nudge when one team keeps winning.
    becomes an organizer, with full access including ratings. Edits merge between phones, and offline edits sync when the
    phone is back online. Tonight's attendance, teams and match stay on each phone.
 
+**שאלות ותשובות** (the "?" in the top bar): short answers and a legend of every icon, generated from the cards and positions.
+
 A new game day (12 h after the last activity) starts with an empty attendance list and offers
 **כמו בפעם הקודמת** ("same as last time").
 
