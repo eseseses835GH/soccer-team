@@ -22,6 +22,7 @@ function swapCost(pr: Problem, asg: Assignment, i: number, j: number): number {
  * Up to `maxSwaps` best-improvement swaps from the current split. Used when a
  * late arrival completes a team: fix the balance with a couple of changes
  * instead of reshuffling everyone. Returns null if nothing improves by `minGain`.
+ * `locked` teams are left alone (e.g. the two teams in the middle of a match).
  */
 export function suggestSwaps(
   players: Player[],
@@ -30,7 +31,7 @@ export function suggestSwaps(
   options: EngineOptions,
   constraints: Constraints,
   sizes?: number[],
-  { maxSwaps = 2, minGain = 0.03 } = {},
+  { maxSwaps = 2, minGain = 0.03, locked = [] as number[] } = {},
 ): SwapSuggestion | null {
   const pr = buildProblem(players, k, options, constraints, sizes);
   const asg = [...assignment];
@@ -42,7 +43,7 @@ export function suggestSwaps(
     let bestCost = cur - minGain;
     for (let i = 0; i < asg.length; i++)
       for (let j = i + 1; j < asg.length; j++) {
-        if (asg[i] === asg[j]) continue;
+        if (asg[i] === asg[j] || locked.includes(asg[i]) || locked.includes(asg[j])) continue;
         const c = swapCost(pr, asg, i, j);
         if (c < bestCost) {
           bestCost = c;

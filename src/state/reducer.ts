@@ -1,7 +1,8 @@
 import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solution } from '../engine';
 import { addTeam, type MatchState } from '../match/match';
-import { DEFAULT_SETTINGS, INITIAL_STATE, type AppState, type GameResult, type Player, type Settings } from './model';
+import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, type AppState, type GameResult, type Player, type Settings } from './model';
 import { addEvening, buildEvening, mergeHistory, stampSides, type EveningRecord } from './history';
+import { leaveEarly, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
 export type Action =
@@ -34,6 +35,10 @@ export type Action =
   | { type: 'applyAssignment'; assignment: number[]; swaps: [number, number][] }
   | { type: 'resetSwaps' }
   | { type: 'lateJoin'; player?: Player; id: string; result: GameResult; now: number }
+  /** Someone left early (leave.ts): out of the teams and today's attendance, nobody reshuffled. */
+  | { type: 'leave'; id: string; now: number }
+  /** A sub joins a team that is short (after someone left). */
+  | { type: 'subIn'; subId: string; team: number }
   | { type: 'clearResult' }
   | { type: 'setMatch'; match: MatchState | null; now: number }
   /** End the evening: save it to the history (as `id`) and close the match session. */
@@ -58,6 +63,16 @@ function reorderKeepers(orders: string[][], playerIds: string[], asg: number[], 
   return Array.from({ length: k }, (_, t) =>
     playerIds.filter((_, i) => asg[i] === t).sort((a, b) => (slot.get(a) ?? 99) - (slot.get(b) ?? 99)),
   );
+}
+
+export function leaveCtx(state: AppState): LeaveCtx {
+  return {
+    players: state.players,
+    options: engineOptions(state.settings),
+    constraints: state.constraints,
+    rotate: state.settings.gkMode === 'rotate',
+    every: state.settings.gkSwitchGoals,
+  };
 }
 
 /** Save the current match session as an evening record. */
@@ -235,6 +250,18 @@ function baseReducer(state: AppState, action: Action): AppState {
         result: action.result,
         match: state.match && grew ? addTeam(state.match, action.result.numTeams - 1) : state.match,
       };
+    }
+    case 'leave': {
+      if (!state.result) return state;
+      const l = leaveEarly(state.result, state.match, action.id, leaveCtx(state));
+      if (!l || l.outcome === 'blocked') return state;
+      // Attendance follows the teams, so the result isn't "changed since the split".
+      return { ...state, presentIds: state.presentIds.filter((x) => x !== action.id), dayAt: action.now, result: l.result, match: l.match };
+    }
+    case 'subIn': {
+      if (!state.result) return state;
+      const result = subIn(state.result, state.match, action.subId, action.team, leaveCtx(state));
+      return result === state.result ? state : { ...state, result };
     }
     case 'clearResult':
       return { ...state, result: null, match: null };

@@ -73,7 +73,6 @@
 - **First visit needs a connection:** the service worker caches on first use, so if the very first visit is offline, nothing is cached yet. Also, iOS only stops evicting local data once the app is added to the home screen; the app doesn't prompt for that yet.
 - **Swap suggestions aren't browser-tested:** the "teams filled" suggestion and the dominance hint are unit-tested, but the browser flow doesn't trigger them.
 - **History is per phone:** past evenings (results, scorers, who played) are saved on the phone that ran the match and in the backup *file*, not in the backup link. Who was borrowed from the losing team isn't recorded, so borrowers' wins aren't counted.
-- **No way to mark someone as left:** you untick them at home, which flags the teams as out of date.
 - **Fixed design limits:** the main screen offers 3–7 per team (larger sizes aren't reachable), there are 8 bib colours, and cards are a fixed list (12).
 - **The backup link can get long** for very large rosters (it's roughly 1–2 KB for 25 players, which is fine for WhatsApp).
 
@@ -82,7 +81,7 @@
 ## Next steps, most valuable first
 1. **Try it at a real game** on 2–3 phones (iOS and Android): share, wake lock, install, offline. Then fix what hurts.
 2. **"Add to home screen" prompt** after the second use, so iOS keeps the data.
-3. **"Left early" button** on the teams and match screens: remove a player and suggest one swap.
+3. **"Left early" button:** done (v6, see below).
 4. **History across evenings:** done (v3: evening summary, list of past evenings, all-time leaders). Next: use results to nudge levels, and sync the history between organizers.
 5. **Shared roster for two organizers** without a backend: re-import a backup link to merge changes. A real sync (Supabase) only if they actually need it.
 
@@ -162,3 +161,7 @@
 # v5: multi-delete, swipe tip, fold arrows
 - **Built:** select mode on the players list with one confirmation and one `deletePlayers` reducer action; a one-time swipe tip with a nudge of the first row; the swiped row keeps the name in place; fold chevrons fixed (a nested fold was flipped by its open parent).
 - **Tested:** reducer (several players at once: teams cancelled, pairs and attendance cleaned, the evening archived once; players outside the teams keep them; a deleted sub cancels them). e2e: mouse-drag swipe (name stays put), tip dismiss survives reload, select mode (tap selects, no swipe, count, confirmation lists names, deletes, leaves select mode, select all + cancel), nested fold chevrons differ. Screenshots `03-players-tip`, `03e`/`03f` folds, `03g` select mode, `03h` multi confirm, `05c` teams fold open, `11b` settings fold open (light + dark).
+
+# v6: left early
+- **Built:** "עזב באמצע" (teams screen) / "מישהו עזב?" (match screen): pick → confirm → he's off his team, the bench, the keeper rotation, the borrow and today's attendance, without reshuffling; then the best sub is offered, or (no subs) up to 2 swaps that never touch a match under way. A tiny short team outside goes to the bench; nobody goes below 2. Not flagged as stale. See DECISIONS → Left early (v6).
+- **Tested:** 17 unit tests (`src/state/leave.test.ts`); e2e step 11b (sample squad, a match, 2 late arrivals, one leaves → sub suggestion accepted, not stale, attendance and history right, the evening continues, a second leave from the match screen); screenshots `16a`–`16f` (light + dark).
