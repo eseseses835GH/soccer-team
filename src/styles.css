@@ -2332,3 +2332,69 @@ thead th {
   margin: 14px auto 4px;
   font-weight: 600;
 }
+
+/* ---------- organizers and invite links (v6) ---------- */
+.back-link {
+  margin-block: -6px 4px;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org-state {
+  margin-block: 28px;
+}
+.org-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.org-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-block-size: 58px;
+  padding-block: 6px;
+  border-block-end: 1px solid var(--line);
+}
+.org-list .group-text {
+  flex: 1;
+}
+.org-list.invites .group-text strong {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.org-avatar {
+  inline-size: 34px;
+  block-size: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 800;
+}
+.org-avatar.link {
+  background: var(--sunk);
+  color: var(--ink-2);
+}
+.org-me {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.org-actions {
+  display: flex;
+  flex: none;
+  gap: 10px;
+}
+.org-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  inline-size: 100%;
+  font-size: 0.92rem;
+}
+.org-list.invites .group-text strong {
+  white-space: normal;
+}

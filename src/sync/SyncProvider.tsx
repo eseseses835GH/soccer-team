@@ -9,6 +9,7 @@ import { sanitize } from '../state/model';
 import { localKV, useGroups, useStore } from '../state/store';
 import { applyDoc, docFromState, mergeDocs, sanitizeDoc } from './doc';
 import { EMPTY_META, hasLocalChanges, loadMeta, saveMeta, syncGroup } from './engine';
+import { JOIN_HASH, inviteUrl } from './organizers';
 import { SyncError, getClient, hasStoredAuth, redirectUrl, remoteApi, syncConfigured } from './supabase';
 
 export type SyncStatus = 'local' | 'signedOut' | 'syncing' | 'pending' | 'synced' | 'offline' | 'error' | 'gone';
@@ -51,7 +52,7 @@ interface SyncApi {
 
 const SyncCtx = createContext<SyncApi | null>(null);
 const PENDING_JOIN = 'kochot:pendingJoin';
-export const JOIN_HASH = '#join=';
+export { JOIN_HASH };
 
 const errCode = (e: unknown) => (e instanceof SyncError ? e.code : typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'other');
 
@@ -331,7 +332,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         }
         try {
           const token = await remoteApi(c).createInvite(gid);
-          return `${redirectUrl()}${JOIN_HASH}${token}`;
+          return inviteUrl(token, redirectUrl());
         } catch (e) {
           say(errCode(e) === 'offline' ? 'צריך אינטרנט כדי ליצור הזמנה' : 'יצירת ההזמנה לא הצליחה');
           return null;

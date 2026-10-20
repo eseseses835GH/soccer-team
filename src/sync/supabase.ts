@@ -4,6 +4,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SyncDoc } from './doc';
 import type { RemoteApi, RemoteGroup } from './engine';
+import { parseInvites, parseOrganizers, type Invite, type Organizer } from './organizers';
 
 const URL_ = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
 const KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() ?? '';
@@ -83,6 +84,9 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
   createInvite(groupId: string): Promise<string>;
   joinGroup(token: string): Promise<{ id: string; name: string }>;
   leaveGroup(groupId: string): Promise<void>;
+  listOrganizers(groupId: string): Promise<Organizer[]>;
+  listInvites(groupId: string): Promise<Invite[]>;
+  revokeInvite(token: string): Promise<void>;
 } {
   return {
     async fetchGroup(id) {
@@ -116,6 +120,27 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
     },
     async leaveGroup(groupId) {
       const { error } = await sb.rpc('leave_group', { p_group_id: groupId });
+      if (error) fail(error);
+    },
+    async listOrganizers(groupId) {
+      const { data, error } = await sb.rpc('group_organizers', { p_group_id: groupId });
+      if (error) fail(error);
+      return parseOrganizers(data);
+    },
+    async listInvites(groupId) {
+      const { data, error } = await sb
+        .from('group_invites')
+        .select('token,created_by,created_at,expires_at,revoked_at')
+        .eq('group_id', groupId)
+        .is('revoked_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) fail(error);
+      return parseInvites(data);
+    },
+    async revokeInvite(token) {
+      const { error } = await sb.rpc('revoke_invite', { p_token: token });
       if (error) fail(error);
     },
   };

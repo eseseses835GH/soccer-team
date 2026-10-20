@@ -6,8 +6,9 @@ import { copyText, nativeShare } from '../share';
 import { useUi } from './App';
 import { Sheet } from './components';
 import { Icon } from './icons';
+import { OrganizersSheet } from './OrganizersSheet';
 
-type Mode = 'list' | 'new' | 'rename' | 'remove';
+type Mode = 'list' | 'new' | 'rename' | 'remove' | 'organizers';
 
 /** Switch between groups (שכונה, בסיס, משרד…), add one, and manage the open one. */
 export function GroupsSheet({ onClose }: { onClose: () => void }) {
@@ -66,6 +67,10 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
     }
     setMode('list');
   };
+
+  if (mode === 'organizers' && cur.synced && sync.email) {
+    return <OrganizersSheet onBack={() => setMode('list')} onClose={onClose} />;
+  }
 
   if (mode === 'new' || mode === 'rename') {
     return (
@@ -148,6 +153,11 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
               <button type="button" className="btn btn-quiet btn-block" disabled={busy} onClick={invite}>
                 <Icon name="link" size={20} /> הזמנת מארגן
               </button>
+              {sync.email && (
+                <button type="button" className="btn btn-quiet btn-block" onClick={() => setMode('organizers')}>
+                  <Icon name="users" size={20} /> מארגנים והזמנות
+                </button>
+              )}
               <p className="hint small">מי שמקבל את הקישור ומתחבר יראה ויערוך את כל הקבוצה, כולל הדירוגים. הקישור תקף לשבועיים.</p>
             </>
           ) : (
