@@ -10,7 +10,7 @@
   - Animated 0–100 balance score, and bib-coloured team columns that "deal" in.
   - A keeper rotation order per team, and a subs bench.
   - Tap-to-swap, including subs, with undo.
-  - Re-roll, WhatsApp share, copy.
+  - Re-roll; share sends a picture of the teams (desktop: saves it and copies a short text).
   - **Late arrival** without reshuffling, plus a swap suggestion when the teams fill up.
   - Rule warnings, and a folded table of per-team averages.
 - **Match night:**

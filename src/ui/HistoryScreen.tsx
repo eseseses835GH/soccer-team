@@ -239,9 +239,6 @@ export function EveningScreen({ record: rec }: { record: EveningRecord }) {
   const share = async () => {
     const text = buildEveningShareText({
       date: new Date(rec.startedAt),
-      matches: s.matches,
-      goals: s.goals,
-      minutes: s.minutes,
       champion: champLook ? `${champLook.emoji} ${champTitle(champLook)}` : undefined,
       table: s.table.map(
         (r) => `${lookOf(rec, r.team).emoji} ${lookOf(rec, r.team).name}: ${r.won} נ׳${r.pensWon ? ` (${r.pensWon} בפנדלים)` : ''} · ${r.drawn} ת׳ · ${r.lost} ה׳`,

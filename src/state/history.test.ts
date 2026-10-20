@@ -301,20 +301,17 @@ describe('history storage', () => {
 });
 
 describe('evening share text', () => {
-  it('has the totals, the winner, the table and highlights', () => {
+  it('has the winner, the table and highlights, one line each', () => {
     const text = buildEveningShareText({
       date: new Date(2026, 9, 15),
-      matches: 6,
-      goals: 14,
-      minutes: 48,
       champion: '🔴 האדומים לקחו את הערב',
       table: ['🔴 אדומים: 4 נ׳', '🔵 כחולים: 1 נ׳'],
       highlights: ['👑 מלך השערים: אבי (4)'],
     });
-    expect(text).toContain('6 משחקים · 14 שערים · 48 דקות');
     expect(text).toContain('🏆 🔴 האדומים לקחו את הערב');
-    expect(text).toContain('1. 🔴 אדומים: 4 נ׳');
+    expect(text).toContain('🔴 אדומים: 4 נ׳');
     expect(text).toContain('👑 מלך השערים: אבי (4)');
+    expect(text.split('\n')).toHaveLength(5);
   });
 });
 

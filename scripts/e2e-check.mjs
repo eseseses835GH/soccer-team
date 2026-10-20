@@ -1,5 +1,7 @@
 // Functional smoke test of the main flows against `vite preview` (see README).
 import { chromium } from '@playwright/test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -11,6 +13,33 @@ page.on('pageerror', (e) => errors.push(e.message));
 const assert = (c, m) => {
   if (!c) errors.push(m);
 };
+// The share picture: stub the share sheet, keep the file, check it's a 1080-wide PNG and save it to look at.
+const shareOut = process.env.SHARE_OUT ?? `${tmpdir()}/kochot-share`;
+async function sharePicture(pg, file) {
+  await pg.evaluate(() => {
+    window.__share = null;
+    navigator.canShare = (d) => !!d?.files?.length;
+    navigator.share = async (d) => {
+      const f = d.files[0];
+      const url = await new Promise((r) => {
+        const fr = new FileReader();
+        fr.onload = () => r(fr.result);
+        fr.readAsDataURL(f);
+      });
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      window.__share = { name: f.name, type: f.type, text: d.text, url, width: img.naturalWidth, height: img.naturalHeight };
+    };
+  });
+  await pg.getByRole('button', { name: 'שיתוף', exact: true }).click();
+  await pg.waitForFunction(() => window.__share, null, { timeout: 10000 });
+  const sh = await pg.evaluate(() => window.__share);
+  assert(sh.type === 'image/png' && sh.width === 1080 && sh.height > 400, `share picture: ${sh.type} ${sh.width}x${sh.height}`);
+  assert(sh.text === 'הכוחות להערב ⚽', `share text with the picture: ${sh.text}`);
+  mkdirSync(shareOut, { recursive: true });
+  writeFileSync(`${shareOut}/${file}`, Buffer.from(sh.url.split(',')[1], 'base64'));
+}
 const back = () => page.getByRole('button', { name: /^חזרה$/ }).click();
 const teamSizes = () => page.locator('.team').evaluateAll((cs) => cs.map((c) => c.querySelectorAll('.member').length));
 const teamOf = (name) =>
@@ -276,6 +305,21 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   assert(JSON.stringify(await pg.locator('.team h2').allInnerTexts()) === '["קבוצה 1","קבוצה 2","קבוצה 3"]', `numbered teams: ${await pg.locator('.team h2').allInnerTexts()}`);
   const colours = await pg.locator('.team').evaluateAll((ts) => ts.map((t) => getComputedStyle(t).getPropertyValue('--team')));
   assert(new Set(colours).size === 3, `numbered teams have different colours: ${colours}`);
+  assert((await pg.getByRole('button', { name: /העתקה/ }).count()) === 0, 'no separate copy button');
+  await sharePicture(pg, 'teams-share.png');
+  // No file sharing (desktop): the picture is saved and the short text copied.
+  await pg.evaluate(() => {
+    navigator.canShare = () => false;
+    navigator.clipboard.writeText = async (t) => {
+      window.__copied = t;
+    };
+  });
+  const dl = pg.waitForEvent('download');
+  await pg.getByRole('button', { name: 'שיתוף', exact: true }).click();
+  assert((await dl).suggestedFilename() === 'kochot.png', 'fallback saves the picture');
+  await pg.waitForFunction(() => window.__copied);
+  const short = (await pg.evaluate(() => window.__copied)).split('\n');
+  assert(short.length === 4 && /^\u200f🔵 \*קבוצה 1\*: /.test(short[1]) && !short.join().includes('מדד'), `short text: ${short.join(' | ')}`);
   await pg.goto(base + '#settings');
   await pg.locator('summary', { hasText: 'גופיות' }).click();
   assert((await pg.locator('button.bib[aria-pressed]').count()) === 0, 'no bib picker while bibs are off');
@@ -285,6 +329,7 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   assert(/גופיות\s*· 7 צבעים/.test(await pg.locator('summary', { hasText: 'גופיות' }).innerText()), 'bibs summary counts colours');
   await pg.goto(base + '#teams');
   assert(JSON.stringify(await pg.locator('.team h2').allInnerTexts()) === '["אדומים","כחולים","ירוקים"]', `bib names: ${await pg.locator('.team h2').allInnerTexts()}`);
+  await sharePicture(pg, 'teams-share-bibs.png');
   await pg.getByRole('button', { name: /התחלת משחק/ }).click();
   await pg.getByRole('button', { name: '+ גול' }).first().click();
   assert((await pg.getByRole('dialog').locator('h2').innerText()) === 'מי הבקיע לאדומים?', 'scorer sheet with a bib name');

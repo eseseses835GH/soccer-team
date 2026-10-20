@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ATTR_KEYS, evaluate, randomSeed, scoreFromCost, suggestSwaps, type SwapSuggestion } from '../engine';
 import { ATTR_LABELS, goalsEvery } from '../i18n';
 import { startSession } from '../match/match';
@@ -7,7 +7,8 @@ import { FIELD_POSITIONS } from '../state/positions';
 import { lateJoin } from '../state/late';
 import { engineOptions, newId, teamLook, type AppState, type GameResult, type Player } from '../state/model';
 import { isResultStale, useStore } from '../state/store';
-import { buildShareText, copyText, nativeShare, whatsappUrl } from '../share';
+import { buildShareText, copyText, downloadBlob, shareFile, TEAMS_TITLE, type ShareTeam } from '../share';
+import { teamsImage, type ImageTeam } from '../shareImage';
 import { useUi } from './App';
 import { CardBadges, Empty, LevelPicker, ScoreMeter, Sheet } from './components';
 import { Icon } from './icons';
@@ -50,27 +51,32 @@ export function evaluateResult(state: AppState, r: GameResult, assignment = r.as
   };
 }
 
-export function teamsForShare(state: AppState, r: GameResult, score: number) {
+/** Names only, keeper first, for the picture and the short text. */
+export function shareData(state: AppState, r: GameResult): { teams: (ShareTeam & ImageTeam)[]; subs: string[] } {
   const byId = new Map(state.players.map((p) => [p.id, p]));
-  const counts = teamCounts(r);
+  const indexOf = new Map(r.playerIds.map((id, i) => [id, i]));
+  const rotate = state.settings.gkMode === 'rotate';
   const name = (id: string) => byId.get(id)?.name ?? '?';
-  return buildShareText({
+  return {
     teams: Array.from({ length: r.numTeams }, (_, t) => {
       const look = teamLook(state.settings, t);
-      const order = r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t);
+      const order = (r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t)).filter(
+        (id) => r.assignment[indexOf.get(id) ?? -1] === t,
+      );
       return {
         name: look.name,
         emoji: look.emoji,
+        color: look.color,
+        sub: t < 2 ? undefined : r.numTeams === 3 ? 'בחוץ' : `בתור #${t - 1}`,
         names: order.map(name),
-        keepers: order.map(name),
-        borrows: t >= 2 && counts[t] < r.teamSize ? r.teamSize - counts[t] : 0,
+        keeper: order.length > 0 && (rotate || !!byId.get(order[0])?.canGK),
       };
     }),
     subs: r.subIds.map(name),
-    score,
-    gkSwitchGoals: state.settings.gkMode === 'rotate' ? state.settings.gkSwitchGoals : undefined,
-  });
+  };
 }
+
+const pngOf = (d: ReturnType<typeof shareData>) => teamsImage(d).then((b) => (b ? new File([b], 'kochot.png', { type: 'image/png' }) : null));
 
 export function TeamsScreen() {
   const { state, dispatch } = useStore();
@@ -82,6 +88,17 @@ export function TeamsScreen() {
   const [suggestion, setSuggestion] = useState<SwapSuggestion | null>(null);
   const r = state.result;
   const data = useMemo(() => (r ? evaluateResult(state, r) : null), [state, r]);
+  const shared = useMemo(() => (r ? shareData(state, r) : null), [state, r]);
+  const sharedKey = JSON.stringify(shared);
+  // Drawn ahead, so the tap opens the share sheet right away (iOS wants it inside the tap).
+  const png = useRef<{ key: string; file: Promise<File | null> } | null>(null);
+  useEffect(() => {
+    if (!shared) return;
+    const t = setTimeout(() => {
+      png.current = { key: sharedKey, file: pngOf(shared) };
+    }, 300);
+    return () => clearTimeout(t);
+  }, [sharedKey]);
 
   if (!r || !data) {
     return (
@@ -150,15 +167,16 @@ export function TeamsScreen() {
     }
   };
 
-  const text = () => teamsForShare(state, r, ev.score);
   const share = async () => {
-    const t = text();
-    if (await nativeShare({ text: t })) return;
-    if (window.open(whatsappUrl(t), '_blank', 'noopener')) return;
-    // Pop-ups blocked (some in-app browsers): copy instead.
-    notify((await copyText(t)) ? 'הטקסט הועתק, מדביקים בוואטסאפ' : 'השיתוף לא זמין כאן');
+    const d = shared!;
+    if (png.current?.key !== sharedKey) png.current = { key: sharedKey, file: pngOf(d) };
+    const file = await png.current.file;
+    if (file && (await shareFile(file, TEAMS_TITLE)) === 'shared') return;
+    // Desktop / no file sharing: save the picture and copy the short text.
+    if (file) downloadBlob('kochot.png', file);
+    const copied = await copyText(buildShareText(d));
+    notify(file ? (copied ? 'התמונה נשמרה והטקסט הועתק' : 'התמונה נשמרה') : copied ? 'הטקסט הועתק' : 'השיתוף לא זמין כאן');
   };
-  const copy = async () => notify((await copyText(text())) ? 'הועתק' : 'ההעתקה נכשלה');
 
   const startMatch = () => {
     if (!state.match) dispatch({ type: 'setMatch', match: startSession(k), now: Date.now() });
@@ -294,9 +312,6 @@ export function TeamsScreen() {
           </button>
           <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
             <Icon name="leave" size={18} /> עזב באמצע
-          </button>
-          <button type="button" className="text-btn" onClick={copy}>
-            <Icon name="copy" size={18} /> העתקה
           </button>
           {edited && (
             <button type="button" className="text-btn" onClick={() => dispatch({ type: 'resetSwaps' })}>

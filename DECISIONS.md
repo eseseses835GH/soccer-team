@@ -437,3 +437,10 @@ User: "add questions and answers: what the icons are, and an explanation of thin
 - **Sign-up with a password asks for it twice** ("סיסמה שוב"); a mismatch says "הסיסמאות לא זהות". Sign-in stays one field.
 - **"המשך עם Google" shows Google's four-colour G** (inline SVG on a white circle, so it reads in dark mode too) instead of a blue letter.
 - **Help answers can open the right Settings section:** "מי עם מי" → button "להגדרת מי עם מי" unfolds that section (`#settings/rules`); "מה קורה בתיקו?" says the default (2 minutes extra, then penalties) and "לשינוי" goes to the game settings (`#settings/game`). Settings scrolls to `set-<section>`.
+
+## Share as a picture (v8)
+- **"שיתוף" on the teams screen shares a PNG of the teams** with one line, "הכוחות להערב ⚽". The picture is 1080 px wide and always light: a card per team in its colour with the name ("קבוצה 1" or the bib name), "בחוץ" / "בתור #N" for teams waiting, the players (🧤 on whoever starts in goal, same rule as the screen), the subs, and a small "כוחות". No ratings, cards or score. Drawn on a `<canvas>` (`src/shareImage.ts`, RTL, Heebo), up to three teams side by side, more in rows of two.
+- **The picture is drawn ahead** (300 ms after the teams change), so the tap opens the share sheet straight away; iOS only allows sharing inside the tap.
+- **No file sharing (most desktops):** the PNG is downloaded and the short text copied ("התמונה נשמרה והטקסט הועתק"). The separate "העתקה" button and the wa.me fallback are gone. *(my call: one button covers it.)*
+- **Shorter text:** a title line, one line per team (`🔵 *קבוצה 1*: אבי, בן…`) and the subs. Keeper order, borrow lines, the date and the balance score are dropped. RLM on every line stays.
+- **Evening summary:** text only, shortened: date line, the winner, the table, the highlights; no blank lines, numbering or totals. *(my call: the summary is already short; a picture there wasn't worth the code.)*

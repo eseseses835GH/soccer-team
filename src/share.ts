@@ -1,46 +1,51 @@
-import { goalsEvery } from './i18n';
-
 /** Right-to-left mark: pins the direction of each line in WhatsApp even when a name is in Latin letters. */
-const RLM = '‏';
+const RLM = '\u200f';
+
+/** The one line that goes with the picture. */
+export const TEAMS_TITLE = 'הכוחות להערב ⚽';
 
 export interface ShareTeam {
   name: string;
   emoji: string;
   names: string[];
-  /** Keeper rotation (names), first starts in goal. */
-  keepers?: string[];
-  /** How many players this team borrows from the losing team. */
-  borrows?: number;
 }
 
-export interface ShareInput {
-  teams: ShareTeam[];
-  subs?: string[];
-  score: number;
-  gkSwitchGoals?: number;
-  date?: Date;
-}
-
-export function buildShareText({ teams, subs = [], score, gkSwitchGoals, date = new Date() }: ShareInput): string {
-  const d = date.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
-  const lines: string[] = [`${RLM}⚽ הכוחות להיום – ${d}`, ''];
-  teams.forEach((t) => {
-    const extra = t.borrows ? ` · משלימים ${t.borrows} מהמפסידה` : '';
-    lines.push(`${RLM}${t.emoji} *${t.name}* (${t.names.length}${extra})`);
-    t.names.forEach((n, j) => lines.push(`${RLM}${j + 1}. ${n}${RLM}`));
-    if (t.keepers?.length) {
-      const every = gkSwitchGoals ? ` (מתחלפים ${goalsEvery(gkSwitchGoals)})` : '';
-      lines.push(`${RLM}🧤 בשער: ${t.keepers.join(' ← ')}${every}${RLM}`);
-    }
-    lines.push('');
-  });
-  if (subs.length) lines.push(`${RLM}🔁 מחליפים: ${subs.join(', ')}${RLM}`, '');
-  lines.push(`${RLM}מדד איזון: ${score}/100`);
+/** Short text: one line per team, then the subs. No ratings, keepers or score. */
+export function buildShareText({ teams, subs = [] }: { teams: ShareTeam[]; subs?: string[] }): string {
+  const lines = [`${RLM}${TEAMS_TITLE}`];
+  teams.forEach((t) => lines.push(`${RLM}${t.emoji} *${t.name}*: ${t.names.join(', ')}${RLM}`));
+  if (subs.length) lines.push(`${RLM}🔁 מחליפים: ${subs.join(', ')}${RLM}`);
   return lines.join('\n');
 }
 
-export function whatsappUrl(text: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+/**
+ * Shares a picture through the native share sheet when it can take files.
+ * 'shared' (or cancelled by the user), or 'unsupported'.
+ */
+export async function shareFile(file: File, text?: string): Promise<'shared' | 'unsupported'> {
+  if (typeof navigator === 'undefined' || typeof navigator.share !== 'function' || !navigator.canShare?.({ files: [file] })) return 'unsupported';
+  try {
+    await navigator.share({ files: [file], ...(text ? { text } : {}) });
+  } catch (e) {
+    if ((e as Error)?.name !== 'AbortError') return 'unsupported';
+  }
+  return 'shared';
+}
+
+/** Save a file (an image, a backup) to the device. */
+export function downloadBlob(filename: string, blob: Blob): void {
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Native share sheet if available. Returns false if not supported or cancelled. */
@@ -83,25 +88,11 @@ export async function copyText(text: string): Promise<boolean> {
 
 /** Save text as a file (backup / template). */
 export function downloadText(filename: string, text: string, type = 'text/plain'): void {
-  try {
-    const url = URL.createObjectURL(new Blob([text], { type: `${type};charset=utf-8` }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch {
-    /* ignore */
-  }
+  downloadBlob(filename, new Blob([text], { type: `${type};charset=utf-8` }));
 }
 
 export interface EveningShareInput {
   date: Date;
-  matches: number;
-  goals: number;
-  minutes?: number | null;
   /** "🔴 האדומים לקחו את הערב" / "🔵 קבוצה 1 לקחה את הערב", if one team clearly won the evening. */
   champion?: string;
   /** Standings, best first: "🔴 אדומים 4 נ׳ · 1 ת׳ · 1 ה׳". */
@@ -111,12 +102,10 @@ export interface EveningShareInput {
 }
 
 /** Short recap of an evening for the group chat: no ratings, names only. */
-export function buildEveningShareText({ date, matches, goals, minutes, champion, table, highlights }: EveningShareInput): string {
+export function buildEveningShareText({ date, champion, table, highlights }: EveningShareInput): string {
   const d = date.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
-  const totals = [`${matches} משחקים`, `${goals} שערים`, ...(minutes ? [`${minutes} דקות`] : [])].join(' · ');
-  const lines = [`${RLM}⚽ סיכום הערב – ${d}`, `${RLM}${totals}`, ''];
-  if (champion) lines.push(`${RLM}🏆 ${champion}`, '');
-  table.forEach((t, i) => lines.push(`${RLM}${i + 1}. ${t}${RLM}`));
-  if (highlights.length) lines.push('', ...highlights.map((h) => `${RLM}${h}${RLM}`));
+  const lines = [`${RLM}⚽ סיכום הערב – ${d}`];
+  if (champion) lines.push(`${RLM}🏆 ${champion}`);
+  lines.push(...table.map((t) => `${RLM}${t}${RLM}`), ...highlights.map((h) => `${RLM}${h}${RLM}`));
   return lines.join('\n');
 }
