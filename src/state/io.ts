@@ -11,12 +11,13 @@ export interface ParsedRoster {
   skipped: { line: string; reason: string }[];
 }
 
-const GK_WORDS = ['שוער', 'gk', 'goalkeeper', 'כן'];
+// "טוב בשער" (the 🧤 chip's label) is read through its second word.
+const GK_WORDS = ['שוער', 'בשער', 'gk', 'goalkeeper', 'כן'];
 const HEADER_WORDS = ['שם', 'name'];
 
 /**
  * Parse a roster typed or pasted by hand, one player per line:
- *   "אבי 8", "אבי, 8", "דני הקטן, 6, שוער, החיה", "נועם 7 הגנה קישור", "יוסי" (level 5).
+ *   "אבי 8", "אבי, 8", "דני הקטן, 6, שוער, גורילה", "נועם 7 הגנה קישור", "יוסי" (level 5).
  * Works with CSV (comma/semicolon/tab) as exported from Excel or Sheets.
  */
 export function parseRoster(text: string, existingNames: string[] = []): ParsedRoster {
@@ -65,7 +66,7 @@ export function parseRoster(text: string, existingNames: string[] = []): ParsedR
 }
 
 export const ROSTER_TEMPLATE =
-  '﻿שם,רמה,שוער,עמדות,כרטיסיות\nאבי,8,,קישור,הקפטן\nדני,5,שוער,הגנה,איטי\nנועם,7,,התקפה,הקוסם לא חוזר להגנה\nליאור,6,,הגנה קישור,החיה\nגיל,3,,,מתחיל\n';
+  '\uFEFFשם,רמה,טוב בשער,עמדות,כרטיסיות\nאבי,8,,קישור,כוכב\nדני,5,כן,הגנה,איטי\nנועם,7,,התקפה,קוסם עצלן\nליאור,6,,הגנה קישור,גורילה\nגיל,3,,,מתחיל\n';
 
 /**
  * Card names (or short aliases) in the order they appear in the text. Longer terms are

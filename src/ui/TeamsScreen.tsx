@@ -188,7 +188,7 @@ export function TeamsScreen() {
   const violations = [
     ...ev.violations.together.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים לשחק יחד`),
     ...ev.violations.apart.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים להיות בנפרד`),
-    ...(ev.penalties.goalkeeper > 0 ? ['יש קבוצה בלי שוער קבוע, למרות שיש מספיק'] : []),
+    ...(ev.penalties.goalkeeper > 0 ? ['יש קבוצה בלי שחקן שטוב בשער, למרות שיש מספיק'] : []),
   ];
 
   return (

@@ -39,7 +39,7 @@ describe('positions on a player', () => {
 
 describe('roster import with positions', () => {
   it('reads position words (and synonyms) in free text and CSV', () => {
-    const { players } = parseRoster('אבי 8 הגנה קישור\nדני, 6, שוער, חלוץ, החיה\nנועם 7 בלם כנף\nיוסי 5 קשר\nגיל, 5, , לא חוזר להגנה');
+    const { players } = parseRoster('אבי 8 הגנה קישור\nדני, 6, שוער, חלוץ, גורילה\nנועם 7 בלם כנף\nיוסי 5 קשר\nגיל, 5, , לא חוזר להגנה\nרון, 6, טוב בשער, הסלע');
     const byName = Object.fromEntries(players.map((p) => [p.name, p]));
     expect(byName['אבי'].positions).toEqual(['def', 'mid']);
     expect(byName['דני'].positions).toEqual(['att']);
@@ -50,6 +50,10 @@ describe('roster import with positions', () => {
     // "לא חוזר להגנה" is a card, not the defence position.
     expect(byName['גיל'].positions ?? []).toEqual([]);
     expect(byName['גיל'].cards).toEqual(['noDefense']);
+    // "טוב בשער" is the 🧤 chip's label; the old card "הסלע" now means defence.
+    expect(byName['רון'].canGK).toBe(true);
+    expect(byName['רון'].positions).toEqual(['def']);
+    expect(byName['רון'].cards).toEqual([]);
   });
 
   it('the downloadable template parses as documented', () => {
@@ -66,13 +70,23 @@ describe('roster import with positions', () => {
 });
 
 describe('keeper order', () => {
-  it('rotating keepers: someone good in goal starts, everyone still takes a turn', () => {
+  it('rotating keepers: random order, 🧤 does not jump the queue (v7), everyone takes a turn', () => {
     const team = [pl('a'), pl('b'), pl('k', true), pl('c')];
-    for (let seed = 1; seed < 20; seed++) {
+    const firsts = new Set<string>();
+    for (let seed = 1; seed < 40; seed++) {
       const order = keeperOrder(team, 'rotate', createRng(seed));
-      expect(order[0]).toBe('k');
       expect([...order].sort()).toEqual(['a', 'b', 'c', 'k']);
+      firsts.add(order[0]);
     }
+    expect(firsts.size).toBeGreaterThan(2);
+    // Same order as a team without anyone good in goal.
+    const plain = [pl('a'), pl('b'), pl('k'), pl('c')];
+    expect(keeperOrder(team, 'rotate', createRng(7))).toEqual(keeperOrder(plain, 'rotate', createRng(7)));
+  });
+
+  it('fixed keepers: players good in goal go first', () => {
+    const team = [pl('a'), pl('b'), pl('k', true), pl('c')];
+    for (let seed = 1; seed < 10; seed++) expect(keeperOrder(team, 'fixed', createRng(seed))[0]).toBe('k');
   });
 
   it('rotating keepers without a keeper stays random', () => {

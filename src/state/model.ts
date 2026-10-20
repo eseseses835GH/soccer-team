@@ -11,7 +11,7 @@ import {
   type Solution,
   type Weights,
 } from '../engine';
-import { sanitizeCards, type CardId } from './cards';
+import { migrateCards, type CardId } from './cards';
 import { sanitizePositions } from './positions';
 import type { MatchState } from '../match/match';
 import { sanitizeMatch } from '../match/match';
@@ -193,11 +193,12 @@ export function sanitizePlayer(p: unknown): Player | null {
     const v = Number(raw);
     if (Number.isFinite(v)) attrs[k] = Math.min(10, Math.max(1, Math.round(v)));
   }
-  const cards = sanitizeCards(r.cards);
+  // v7: old card deltas → today's (unless hand-tuned); the dropped 🧱 card becomes 🛡️ הגנה.
+  const m = migrateCards(r.cards, attrs);
   // No positions (and players from before positions existed) = the field is left out, so such a
   // player looks exactly as before: synced docs and backups don't change for nothing.
-  const positions = sanitizePositions(r.positions);
-  return { id: r.id, name: r.name.trim().slice(0, 24), attrs, canGK: !!r.canGK, cards, ...(positions.length ? { positions } : {}) };
+  const positions = sanitizePositions([...(Array.isArray(r.positions) ? r.positions : []), ...(m.addDef ? ['def'] : [])]);
+  return { id: r.id, name: r.name.trim().slice(0, 24), attrs: m.attrs, canGK: !!r.canGK, cards: m.cards, ...(positions.length ? { positions } : {}) };
 }
 
 export function sanitizeSettings(raw: unknown): Settings {

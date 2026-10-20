@@ -1,21 +1,23 @@
 import { ATTR_KEYS, type AttrKey, type Attributes } from '../engine';
 
 /**
- * Card ids are stored with every player, so they must never change.
- * The six v2 ids (beast, sniper, magician, noPass, rock, captain) keep their exact deltas.
+ * Card ids are stored with every player, so they never change, even when a card's look does:
+ * since v7 'beast' is 🦍 גורילה, 'sniper' is 🎯 מדויק, 'captain' is ⭐ כוכב and 'noDefense' is 🦥 עצלן.
+ * The v3 🧱 'rock' is gone (defence is a position now); see migrateCards.
  */
 export type CardId =
   // strengths
   | 'beast'
+  | 'cheetah'
   | 'sniper'
   | 'magician'
   | 'brain'
-  | 'rock'
   | 'captain'
   // weaknesses
+  | 'donkey'
+  | 'noDefense'
   | 'slow'
   | 'tired'
-  | 'noDefense'
   | 'noPass'
   | 'scared'
   | 'beginner';
@@ -36,16 +38,17 @@ export interface Card {
 }
 
 export const CARDS: Card[] = [
-  { id: 'beast', kind: 'strength', emoji: '🦍', name: 'החיה', blurb: 'רץ 90 דקות ומגיע לכל כדור', delta: { stamina: 4, defense: 1, teamwork: 1 } },
-  { id: 'sniper', kind: 'strength', emoji: '🎯', name: 'הצלף', blurb: 'פעם במשחק מוציא מספרת של החיים', delta: { shooting: 4, passing: -1 } },
-  { id: 'magician', kind: 'strength', emoji: '🪄', name: 'הקוסם', blurb: 'עובר שלושה, מאבד ברביעי', delta: { dribbling: 4, passing: -2, teamwork: -2 } },
-  { id: 'brain', kind: 'strength', emoji: '🧠', name: 'המוח', blurb: 'רואה את כל המגרש ומחלק כדורים', delta: { passing: 4, teamwork: 2 } },
-  { id: 'rock', kind: 'strength', emoji: '🧱', name: 'הסלע', blurb: 'מחזיק את ההגנה ומסדר מאחור', delta: { defense: 4, leadership: 2, dribbling: -1 } },
-  { id: 'captain', kind: 'strength', emoji: '📣', name: 'הקפטן', blurb: 'צועק, מסדר ומרים את כולם', delta: { leadership: 4, teamwork: 1 } },
+  { id: 'beast', kind: 'strength', emoji: '🦍', name: 'גורילה', blurb: 'גדול, חזק, ואף אחד לא עובר אותו בכתף', delta: { defense: 3, stamina: 2, shooting: 1, dribbling: -1 }, aliases: ['הגורילה', 'החיה'] },
+  { id: 'cheetah', kind: 'strength', emoji: '🐆', name: "צ'יטה", blurb: 'עד שהסתובבת, הוא כבר ליד השער', delta: { stamina: 2, dribbling: 2, defense: 1 }, aliases: ['צ׳יטה', 'ציטה', 'מהיר'] },
+  { id: 'sniper', kind: 'strength', emoji: '🎯', name: 'מדויק', blurb: 'מסירה לרגל, בעיטה לפינה', delta: { passing: 3, shooting: 3 }, aliases: ['מדוייק', 'המדויק', 'הצלף', 'צלף'] },
+  { id: 'magician', kind: 'strength', emoji: '🪄', name: 'קוסם', blurb: 'עובר שלושה, מאבד ברביעי', delta: { dribbling: 4, passing: -2, teamwork: -2 }, aliases: ['הקוסם'] },
+  { id: 'brain', kind: 'strength', emoji: '🧠', name: 'מוח', blurb: 'רואה את כל המגרש ומחלק כדורים', delta: { passing: 4, teamwork: 2 }, aliases: ['המוח'] },
+  { id: 'captain', kind: 'strength', emoji: '⭐', name: 'כוכב', blurb: 'מסדר, מעודד ומרים את כולם', delta: { leadership: 4, teamwork: 1 }, aliases: ['הכוכב', 'הקפטן', 'קפטן'] },
 
+  { id: 'donkey', kind: 'weakness', emoji: '🫏', name: 'חמור', blurb: 'לב זהב, אבל ליד השער שלנו הכול יכול לקרות', delta: { defense: -2, teamwork: -2, passing: -1 }, aliases: ['החמור'] },
+  { id: 'noDefense', kind: 'weakness', emoji: '🦥', name: 'עצלן', blurb: 'שומר כוחות להתקפה הבאה', delta: { defense: -4, stamina: -1, teamwork: -1 }, aliases: ['העצלן', 'לא חוזר להגנה', 'לא חוזר'] },
   { id: 'slow', kind: 'weakness', emoji: '🐢', name: 'איטי', blurb: 'מגיע לכל כדור. בסוף.', delta: { stamina: -2, dribbling: -2, defense: -1 } },
   { id: 'tired', kind: 'weakness', emoji: '😮‍💨', name: 'נגמר אחרי 5 דקות', blurb: 'מתחיל כמו טיל, ואז מחפש את הבקבוק', delta: { stamina: -4, defense: -1 }, aliases: ['נגמר'] },
-  { id: 'noDefense', kind: 'weakness', emoji: '🏖️', name: 'לא חוזר להגנה', blurb: 'מחכה למעלה לכדור הבא', delta: { defense: -4, teamwork: -1 }, aliases: ['לא חוזר'] },
   { id: 'noPass', kind: 'weakness', emoji: '🙅', name: 'לא מוסר', blurb: 'הכדור נכנס אליו ולא יוצא', delta: { passing: -3, teamwork: -3 } },
   { id: 'scared', kind: 'weakness', emoji: '🥶', name: 'מפחד מהכדור', blurb: 'הכדור מגיע, והוא כבר בצד השני', delta: { dribbling: -2, shooting: -2, defense: -2 }, aliases: ['מפחד'] },
   { id: 'beginner', kind: 'weakness', emoji: '🌱', name: 'מתחיל', blurb: 'עוד לומד איפה לעמוד, אבל בא עם המון מרץ', delta: { passing: -1, teamwork: -2, leadership: -2 } },
@@ -62,9 +65,10 @@ export const MAX_CARDS = 3;
 
 /** Cards that say the opposite of each other; picking one drops the other. */
 const OPPOSITES: [CardId, CardId][] = [
-  ['beast', 'tired'],
+  ['beast', 'scared'],
+  ['cheetah', 'slow'],
+  ['sniper', 'donkey'],
   ['brain', 'noPass'],
-  ['rock', 'noDefense'],
   ['captain', 'beginner'],
 ];
 
@@ -88,10 +92,14 @@ export function opposite(id: CardId): CardId | undefined {
 
 /** Every attribute starts at the player's level; cards push some up or down. */
 export function applyCards(level: number, cards: CardId[]): Attributes {
+  return applyDeltas(level, cards.map((c) => BY_ID.get(c)?.delta ?? {}));
+}
+
+function applyDeltas(level: number, deltas: Card['delta'][]): Attributes {
   const attrs = {} as Attributes;
   for (const k of ATTR_KEYS) {
     let v = level;
-    if (k !== 'overall') for (const c of cards) v += BY_ID.get(c)?.delta[k] ?? 0;
+    if (k !== 'overall') for (const d of deltas) v += d[k] ?? 0;
     attrs[k] = Math.min(10, Math.max(1, Math.round(v)));
   }
   return attrs;
@@ -110,4 +118,29 @@ export function sanitizeCards(raw: unknown): CardId[] {
   let out: CardId[] = [];
   for (const id of raw) if (isCardId(id) && !out.includes(id)) out = toggleCard(out, id);
   return out;
+}
+
+/** v3–v6 deltas of the cards whose effect changed in v7, and of the dropped 🧱 'rock'. */
+const LEGACY_DELTAS: Record<string, Card['delta']> = {
+  beast: { stamina: 4, defense: 1, teamwork: 1 },
+  sniper: { shooting: 4, passing: -1 },
+  noDefense: { defense: -4, teamwork: -1 },
+  rock: { defense: 4, leadership: 2, dribbling: -1 },
+};
+
+/**
+ * A stored player's cards, from any version. Ids stay as they are; 🧱 'rock' is dropped and
+ * becomes the 🛡️ position (`addDef`). If the ratings are exactly what level + cards gave with
+ * the old deltas (nobody tuned them by hand), they're recomputed with today's deltas, so the
+ * card means what it says now. Hand-tuned ratings are never touched.
+ */
+export function migrateCards(raw: unknown, attrs: Attributes): { cards: CardId[]; attrs: Attributes; addDef: boolean } {
+  const cards = sanitizeCards(raw);
+  const list = Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : [];
+  const addDef = list.includes('rock');
+  if (!list.some((id) => id in LEGACY_DELTAS)) return { cards, attrs, addDef };
+  const old = [...new Set(list)].map((id) => LEGACY_DELTAS[id] ?? cardById(id)?.delta ?? {});
+  const was = applyDeltas(attrs.overall, old);
+  const untouched = ATTR_KEYS.every((k) => was[k] === attrs[k]);
+  return { cards, attrs: untouched ? applyCards(attrs.overall, cards) : attrs, addDef };
 }

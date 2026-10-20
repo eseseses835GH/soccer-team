@@ -1,7 +1,8 @@
 import { POSITIONS, type Position } from '../engine';
 
 /**
- * Where a player is strong. 🧤 שוער is the same thing as `canGK` (one control, one field);
+ * Where a player is strong. 🧤 טוב בשער is the same thing as `canGK` (one control, one field);
+ * it means "good in goal", not "our keeper": when keepers rotate everyone takes a turn.
  * the three field positions are `positions` and the split spreads them across teams.
  */
 export interface PositionInfo {
@@ -12,10 +13,11 @@ export interface PositionInfo {
   words: string[];
 }
 
-export const GK_INFO: PositionInfo = { id: 'gk', emoji: '🧤', name: 'שוער', words: ['שוער', 'gk', 'goalkeeper'] };
+export const GK_INFO: PositionInfo = { id: 'gk', emoji: '🧤', name: 'טוב בשער', words: ['שוער', 'gk', 'goalkeeper'] };
 
 export const FIELD_POSITIONS: (PositionInfo & { id: Position })[] = [
-  { id: 'def', emoji: '🛡️', name: 'הגנה', words: ['הגנה', 'מגן', 'בלם', 'def'] },
+  // 'הסלע' was a v3–v6 card ("holds the defence"); in an imported roster it now means defence.
+  { id: 'def', emoji: '🛡️', name: 'הגנה', words: ['הגנה', 'מגן', 'בלם', 'def', 'הסלע'] },
   { id: 'mid', emoji: '🔄', name: 'קישור', words: ['קישור', 'קשר', 'mid'] },
   { id: 'att', emoji: '⚡', name: 'התקפה', words: ['התקפה', 'חלוץ', 'כנף', 'att'] },
 ];

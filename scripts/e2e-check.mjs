@@ -22,7 +22,7 @@ await page.goto(base);
 await page.getByRole('button', { name: 'הוספת שחקנים' }).click();
 const more = page.locator('form.add details.more');
 assert(!(await more.evaluate((d) => d.open)), '"more about the player" starts folded');
-for (const [n, lvl, positions, cards] of [['אלון', '7', ['התקפה'], ['החיה']], ['Ben', '4', ['שוער', 'הגנה', 'קישור'], ['איטי', 'מפחד מהכדור']], ['גיא', '9', [], ['הקוסם']]]) {
+for (const [n, lvl, positions, cards] of [['אלון', '7', ['התקפה'], ['גורילה']], ['Ben', '4', ['טוב בשער', 'הגנה', 'קישור'], ['איטי', 'מפחד מהכדור']], ['גיא', '9', [], ['קוסם']]]) {
   await page.getByPlaceholder('איך קוראים לו?').fill(n);
   await page.getByRole('radio', { name: lvl, exact: true }).click();
   for (const pos of positions) await page.getByRole('button', { name: pos, exact: true }).click();
@@ -41,7 +41,7 @@ const ben = await page.evaluate(() => JSON.parse(localStorage.getItem(`kochot:gr
 assert(JSON.stringify(ben.cards) === '["slow","scared"]', `Ben's cards ${JSON.stringify(ben.cards)}`);
 assert(ben.attrs.shooting === 6 && ben.attrs.stamina === 2 && ben.attrs.overall === 4, `Ben's ratings ${JSON.stringify(ben.attrs)}`);
 assert(ben.canGK === true && JSON.stringify(ben.positions) === '["def","mid"]', `Ben's positions ${ben.canGK} ${JSON.stringify(ben.positions)}`);
-assert((await page.locator('.roster li', { hasText: 'Ben' }).locator('.pos-badges').getAttribute('aria-label')) === 'שוער, הגנה, קישור', 'position emojis in the roster');
+assert((await page.locator('.roster li', { hasText: 'Ben' }).locator('.pos-badges').getAttribute('aria-label')) === 'טוב בשער, הגנה, קישור', 'position emojis in the roster');
 // The edit sheet opens "more" (he has cards) and the sliders (hand-tuned); removing a position saves.
 await page.locator('.roster li', { hasText: 'Ben' }).locator('.swipe-content > button').click();
 assert(await page.locator('.sheet details.more').evaluate((d) => d.open), 'edit sheet opens "more" for a player with cards');
@@ -355,12 +355,14 @@ await old.evaluate(() => {
   localStorage.clear();
   localStorage.setItem(
     'kochot:v1',
-    JSON.stringify({ version: 2, players: [{ id: 'x1', name: 'ותיק', attrs: { overall: 7 }, canGK: false, cards: [] }], presentIds: ['x1'], dayAt: Date.now(), teamSize: 5, settings: {}, constraints: { together: [], apart: [] }, result: null, match: null }),
+    JSON.stringify({ version: 2, players: [{ id: 'x1', name: 'ותיק', attrs: { overall: 7 }, canGK: false, cards: [] }, { id: 'x2', name: 'סלע', attrs: { overall: 6 }, canGK: false, cards: ['rock', 'captain'] }], presentIds: ['x1'], dayAt: Date.now(), teamSize: 5, settings: {}, constraints: { together: [], apart: [] }, result: null, match: null }),
   );
 });
 await old.reload();
 assert(await old.getByRole('button', { name: /קבוצה: הקבוצה שלי/ }).isVisible(), 'migrated group name');
 assert(await old.getByText('ותיק').isVisible(), 'migrated player shown');
+// v7 cards: the old 🧱 card is dropped (it becomes 🛡️), 'captain' is now ⭐ כוכב.
+assert((await old.locator('[aria-label="כוכב"]').count()) === 1, 'old card ids load with the new names');
 assert(!(await old.evaluate(() => localStorage.getItem('kochot:v1'))), 'old key moved');
 // No network to Supabase without an account.
 const sbCalls = [];

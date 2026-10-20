@@ -17,14 +17,14 @@ and a nudge when one team keeps winning.
 
 ## How it works for the group
 1. **Players (once).** Each player needs a name and a level (1 = just started, 10 = the best in the
-   group). Optionally, tap where he's strong: 🧤 שוער (goalkeeper), 🛡️ הגנה (defence), 🔄 קישור (midfield),
+   group). Optionally, tap where he's strong: 🧤 טוב בשער (good in goal), 🛡️ הגנה (defence), 🔄 קישור (midfield),
    ⚡ התקפה (attack), as many as fit. The split spreads defenders, midfielders and attackers across the teams;
-   🧤 means "one per team" in fixed-keeper mode and "starts in goal" when keepers rotate.
+   🧤 means "one per team" in fixed-keeper mode; when keepers rotate everyone takes a turn in random order.
    Folded under **עוד על השחקן** ("more about the player") you can pick up to three player *cards*, in two rows:
-   - **חוזקות (strengths):** 🦍 החיה (the beast), 🎯 הצלף (the sniper), 🪄 הקוסם (the magician),
-     🧠 המוח (the brain), 🧱 הסלע (the rock), 📣 הקפטן (the captain).
-   - **חולשות (weaknesses):** 🐢 איטי (slow), 😮‍💨 נגמר אחרי 5 דקות (done after 5 minutes),
-     🏖️ לא חוזר להגנה (doesn't track back), 🙅 לא מוסר (doesn't pass), 🥶 מפחד מהכדור (afraid of the
+   - **חוזקות (strengths):** 🦍 גורילה (big and physical), 🐆 צ'יטה (fast), 🎯 מדויק (accurate passing
+     and shooting), 🪄 קוסם (dribbler), 🧠 מוח (vision), ⭐ כוכב (the captain type).
+   - **חולשות (weaknesses):** 🫏 חמור (costly mistakes), 🦥 עצלן (lazy, doesn't track back), 🐢 איטי (slow),
+     😮‍💨 נגמר אחרי 5 דקות (done after 5 minutes), 🙅 לא מוסר (doesn't pass), 🥶 מפחד מהכדור (afraid of the
      ball), 🌱 מתחיל (beginner).
 
    Cards shape the eight ratings used for balancing (stamina, passing, dribbling, shooting, defence,
@@ -87,15 +87,16 @@ node scripts/icons.mjs                 # regenerate PWA PNG icons from public/fa
 ```
 
 ## Importing a roster
-One player per line: a name, then optionally the level, the word `שוער` ("goalkeeper"), positions
+One player per line: a name, then optionally the level, `שוער` or `טוב בשער` (good in goal), positions
 (`הגנה`/`מגן`/`בלם`, `קישור`/`קשר`, `התקפה`/`חלוץ`/`כנף`) and card names
-(any of the twelve; `נגמר`, `לא חוזר` and `מפחד` also work as short forms).
+(any of the thirteen; `נגמר`, `לא חוזר` and `מפחד` also work as short forms, and the old names
+like `החיה`, `הצלף`, `הקפטן` still work).
 Commas, semicolons, tabs or spaces all work, and a header line is ignored:
 ```
-שם,רמה,שוער,עמדות,כרטיסיות
-אבי,8,,קישור,הקפטן
+שם,רמה,טוב בשער,עמדות,כרטיסיות
+אבי,8,,קישור,כוכב
 דני הקטן 6 שוער הגנה
-נועם, 7, התקפה, הקוסם, לא חוזר להגנה
+נועם, 7, התקפה, קוסם, עצלן
 יוסי
 ```
 Duplicate names and levels outside 1–10 are skipped and listed. A backup `.json` file can be imported

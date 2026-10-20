@@ -113,7 +113,7 @@ export function CardBadges({ cards, all = false }: { cards: CardId[]; all?: bool
 }
 
 /**
- * Where he's strong: 🧤 שוער (stored as `canGK`) and the three field positions, any number of them.
+ * Where he's strong: 🧤 טוב בשער (stored as `canGK`) and the three field positions, any number of them.
  * `fixedKeepers` only changes what the keeper hint says.
  */
 export function PositionPicker({
@@ -148,7 +148,7 @@ export function PositionPicker({
           );
         })}
       </div>
-      {canGK && <p className="hint small pos-hint">{fixedKeepers ? '🧤 שוער קבוע: יתחלק שוער אחד לכל קבוצה' : '🧤 השוערים מתחלפים, והוא יעמוד ראשון בשער'}</p>}
+      {canGK && <p className="hint small pos-hint">{fixedKeepers ? '🧤 במצב שוער קבוע, האפליקציה תדאג שבכל קבוצה יהיה אחד כזה (אם יש מספיק)' : '🧤 לא חייב לעמוד בשער. כשהשוערים מתחלפים כולם נכנסים בתורם.'}</p>}
     </div>
   );
 }

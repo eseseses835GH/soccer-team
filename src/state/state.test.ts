@@ -68,12 +68,13 @@ describe('cards', () => {
     const a = applyCards(8, ['beast', 'noPass']);
     expect(a.overall).toBe(8);
     expect(a.stamina).toBe(10);
+    expect(a.defense).toBe(10);
     expect(a.passing).toBe(5);
-    expect(a.teamwork).toBe(6);
+    expect(a.teamwork).toBe(5);
     expect(applyCards(1, ['noPass']).passing).toBe(1);
   });
   it('at most three cards', () => {
-    expect(toggleCard(['beast', 'rock', 'slow'], 'sniper')).toEqual(['rock', 'slow', 'sniper']);
+    expect(toggleCard(['beast', 'cheetah', 'tired'], 'sniper')).toEqual(['cheetah', 'tired', 'sniper']);
     expect(toggleCard(['beast'], 'beast')).toEqual([]);
   });
 });
@@ -179,7 +180,7 @@ describe('roster import', () => {
     expect(m.players.find((x) => x.name === 'Bob')!.id).toBe('b');
   });
   it('backup link round-trips', async () => {
-    const b = makeBackup([{ ...p('a', 7), name: 'אבי', cards: ['rock'] }], { together: [], apart: [] }, INITIAL_STATE.settings, 5);
+    const b = makeBackup([{ ...p('a', 7), name: 'אבי', cards: ['cheetah'] }], { together: [], apart: [] }, INITIAL_STATE.settings, 5);
     const enc = await encodeBackup(b);
     expect(enc).toMatch(/^[zj]\./);
     expect(await decodeBackup(enc)).toEqual(b);

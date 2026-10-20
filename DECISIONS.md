@@ -251,7 +251,7 @@ The user's structure for a player (after talking it over with friends): **level 
 ### The profile
 - **Level 1–10 stays the main thing.** Quick add at the pitch is still: name, level, add. Positions are one optional tap row; everything else is folded.
 - **"איפה הוא חזק?" (where is he strong): 🧤 שוער, 🛡️ הגנה, 🔄 קישור, ⚡ התקפה, any number of them.** Engine ids: `def`, `mid`, `att` in `Player.positions`. Stored in a fixed order (def, mid, att); unknown values and duplicates are dropped by `sanitizePositions`.
-- **🧤 שוער *is* `canGK`.** One control, one field, no duplicate data. The old "שוער קבוע" toggle (only shown in fixed-keeper mode) is gone: the 🧤 chip is always there. It still matters for the split only in fixed-keeper mode (the existing rule: one declared keeper per team). When keepers rotate *(my call, the user said "the keeper usually rotates")*: a 🧤 player starts in goal for his team, and everyone else still takes their turn in random order (one keeper first, not all of them, so the rotation still feels like a rotation). A one-line hint under the chips says which of the two applies.
+- **🧤 שוער *is* `canGK`.** One control, one field, no duplicate data. The old "שוער קבוע" toggle (only shown in fixed-keeper mode) is gone: the 🧤 chip is always there. It still matters for the split only in fixed-keeper mode (the existing rule: one declared keeper per team). When keepers rotate *(my call, the user said "the keeper usually rotates"; **superseded in v7: the rotation is plain random again**)*: a 🧤 player starts in goal for his team, and everyone else still takes their turn in random order (one keeper first, not all of them, so the rotation still feels like a rotation). A one-line hint under the chips says which of the two applies.
 - **"עוד על השחקן" (more about the player), folded by default:** the 12 strength/weakness cards, unchanged, and inside it another fold, **"דירוג מפורט מתקדם"** (advanced detailed rating) with the per-attribute sliders. Level and cards still recompute the sliders. The edit sheet opens "more" when the player has cards or hand-tuned sliders, and the sliders fold when they're hand-tuned; the open state is only the initial one, so removing the last card doesn't snap the fold shut. The summary line shows the picked cards' emojis.
 - **No positions = the `positions` field is left out** (not stored as `[]`). Old players and players without positions keep exactly their previous shape, so the synced doc and backups don't change for nothing and a phone still on the previous version sees identical player records. *(my call)* Caveat: a phone still running the previous version that edits a player and pushes would drop that player's positions (its `sanitizePlayer` doesn't know the field). Phones update the PWA on the next open, so this is a short window.
 - **Shown small and quiet:** tiny faded position emojis after the name in the roster list and the import preview. On the teams screen each team header gets a compact line, e.g. `🛡️2 🔄1 ⚡2` (players strong in each field position; a two-position player counts in both; a zero is greyed). It only appears when someone in the split has a position. No ratings are shown anywhere new; positions aren't shown on the home (attendance) screen or in the WhatsApp text.
@@ -366,3 +366,37 @@ The mirror of late arrivals: someone leaving never reshuffles everyone. Pure log
 ## Email login on the free plan (v6)
 - **Supabase's free plan doesn't allow editing the email templates without custom SMTP**, so the default "Magic link" email has a link and no code. The login option is therefore labelled "קישור למייל": the app sends the email and says to open it **on the same phone** and tap the link (the PKCE link only completes in the browser that asked for it). The code field stays, for when Resend/SMTP is set up and the template includes `{{ .Token }}`.
 - Deployed at https://soccer-team-tau.vercel.app (Vercel, auto-deploys the `claude/loving-allen-zp89uf` branch). Supabase Site URL and redirect URLs set by the user (2026-10-20).
+
+## Animal cards and "good in goal" (v7)
+The user: cards should be clear animals/symbols ("🧱 לבנים isn't clear"), and "not everyone marked goalkeeper has to be the goalkeeper; he's good in goal but may not want to, because we rotate". This supersedes the v3 card list and the v4 "a 🧤 player starts in goal" rule.
+
+### The cards
+Short names without the "ה" prefix, as the user wrote them. 6 strengths, 7 weaknesses (the user's list; the count no longer has to match, the *size* of a card does, see below).
+
+| | card (id) | blurb | deltas | sum | opposite |
+|---|---|---|---|---|---|
+| 💪 | 🦍 גורילה (`beast`) | גדול, חזק, ואף אחד לא עובר אותו בכתף | defence +3, stamina +2, shooting +1, dribbling −1 | +5 | 🥶 מפחד מהכדור |
+| | 🐆 צ'יטה (`cheetah`, new) | עד שהסתובבת, הוא כבר ליד השער | stamina +2, dribbling +2, defence +1 | +5 | 🐢 איטי |
+| | 🎯 מדויק (`sniper`) | מסירה לרגל, בעיטה לפינה | passing +3, shooting +3 | +6 | 🫏 חמור |
+| | 🪄 קוסם (`magician`) | עובר שלושה, מאבד ברביעי | dribbling +4, passing −2, teamwork −2 (unchanged) | 0 | – |
+| | 🧠 מוח (`brain`) | רואה את כל המגרש ומחלק כדורים | passing +4, teamwork +2 (unchanged) | +6 | 🙅 לא מוסר |
+| | ⭐ כוכב (`captain`) | מסדר, מעודד ומרים את כולם | leadership +4, teamwork +1 (unchanged) | +5 | 🌱 מתחיל |
+| 🩹 | 🫏 חמור (`donkey`, new) | לב זהב, אבל ליד השער שלנו הכול יכול לקרות | defence −2, teamwork −2, passing −1 | −5 | 🎯 מדויק |
+| | 🦥 עצלן (`noDefense`) | שומר כוחות להתקפה הבאה | defence −4, stamina −1, teamwork −1 | −6 | – |
+| | 🐢 איטי, 😮‍💨 נגמר אחרי 5 דקות, 🙅 לא מוסר, 🥶 מפחד מהכדור, 🌱 מתחיל | unchanged | unchanged | −5/−5/−6/−6/−5 | צ'יטה / – / מוח / גורילה / כוכב |
+
+- **Balance of the set:** every card except the style card 🪄 moves the player by 5 or 6 points in total; strengths average +5.4 (without 🪄), weaknesses −5.43. So one strength and one weakness roughly cancel, whichever two. Tested. No single delta is bigger than 4, as before.
+- **Why these deltas:** 🦍 is size and duels (defence first, a heavy shot, not nimble). 🐆 is the exact mirror of 🐢 (fast both ways, so also back in defence). 🎯 is the user's "passes right *and* shoots accurately", so both equally (the old sniper was shooting +4, passing −1). ⭐ is the old captain's role, so its deltas stay. 🫏 "critical mistakes": defence and teamwork (losing the ball in our half, the wrong pass), a little passing. 🦥 is the old "doesn't track back" plus a bit of work rate (stamina −1).
+- **Opposites** (picking one drops the other): 🦍↔🥶, 🐆↔🐢, 🎯↔🫏 (precise vs. the costly mistake), 🧠↔🙅, ⭐↔🌱. 😮‍💨 lost its partner (the old 🦍 "runs 90 minutes" was stamina; the gorilla is size): a 🐆 who's 😮‍💨 is a real type ("starts like a rocket"). 🦥 and 🪄 have none: a lazy star or a lazy magician exist. *(my call)*
+
+### Migration (stored ids never change)
+- **Ids kept, labels changed:** `beast` → 🦍 גורילה, `sniper` → 🎯 מדויק, `captain` → ⭐ כוכב, `noDefense` → 🦥 עצלן, the rest as they were. New ids `cheetah`, `donkey`. Players from older phones, backups and synced docs load as before.
+- **🧱 `rock` is dropped; it becomes the 🛡️ הגנה position** (its meaning was "holds the defence", which positions now cover). *(my call: not mapped to 🦍, because the rock was about position and organising, not size.)*
+- **Ratings:** ratings are stored, so cards whose deltas changed (beast, sniper, noDefense, rock) would otherwise look "hand-tuned" and still carry the old meaning. `migrateCards` (called from `sanitizePlayer`) recomputes level + today's cards **only if the stored ratings are exactly what level + cards gave with the old deltas**; hand-tuned ratings are never touched (the card is dropped/renamed, the numbers stay). It's idempotent and deterministic, so every phone migrates the same way and the 3-way sync merge sees no conflict. A phone still on v6 sees a migrated player as "hand-tuned" until it updates; if it re-levels him, the next v7 load migrates him again.
+- **Old v6 combinations that are now opposites** (e.g. old החיה + מפחד מהכדור) keep the later card, as an import does.
+- **Import:** old words still work as aliases: החיה, הצלף, הקפטן, הקוסם, המוח, לא חוזר להגנה / לא חוזר. Also הגורילה, הכוכב, קפטן, צלף, מדוייק, צ׳יטה (Hebrew geresh), ציטה, מהיר, העצלן, החמור. `הסלע` now reads as the defence position.
+
+### 🧤 "טוב בשער" (good in goal)
+- **The chip is now "🧤 טוב בשער"** (still `canGK`). Hint under the chips: rotating mode "לא חייב לעמוד בשער. כשהשוערים מתחלפים כולם נכנסים בתורם."; fixed-keeper mode "במצב שוער קבוע, האפליקציה תדאג שבכל קבוצה יהיה אחד כזה (אם יש מספיק)".
+- **Rotating keepers: the order is random again** (`keeperOrder`). A 🧤 player no longer starts in goal; he's just one of the turns. The random stream is unchanged (same shuffle), so the order equals that of a team without a 🧤. Fixed mode is unchanged (🧤 players first, one per team when possible).
+- **Wording:** the teams-screen "why not 100" line now says "יש קבוצה בלי שחקן שטוב בשער, למרות שיש מספיק". Import accepts "טוב בשער" (and still שוער / כן / gk); the template column is "טוב בשער" with "כן". *Not changed (another worker owns it): Settings → fixed keeper still says "מסמנים בכרטיס השחקן ״שוער קבוע״"; it should say "״טוב בשער״".*

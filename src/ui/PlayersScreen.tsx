@@ -422,8 +422,8 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet title="ייבוא רשימה" onClose={onClose}>
-      <p className="lead">שחקן בכל שורה: שם, ואחריו רמה (לא חובה). אפשר להוסיף עמדות (״שוער״, ״הגנה״, ״קישור״, ״התקפה״) ושמות של כרטיסיות, למשל ״הקוסם״ או ״איטי״.</p>
-      <pre className="example" dir="rtl">{'אבי 8 קישור\nדני הקטן, 6, שוער, הגנה\nנועם, 7, התקפה, הקוסם, לא חוזר להגנה\nיוסי'}</pre>
+      <p className="lead">שחקן בכל שורה: שם, ואחריו רמה (לא חובה). אפשר להוסיף עמדות (״טוב בשער״, ״הגנה״, ״קישור״, ״התקפה״) ושמות של כרטיסיות, למשל ״קוסם״ או ״איטי״.</p>
+      <pre className="example" dir="rtl">{'אבי 8 קישור\nדני הקטן, 6, טוב בשער, הגנה\nנועם, 7, התקפה, קוסם, עצלן\nיוסי'}</pre>
       <textarea className="input textarea" rows={6} placeholder="מדביקים כאן…" value={text} onChange={(e) => setText(e.target.value)} aria-label="רשימת שחקנים" />
       <div className="row-links">
         <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>

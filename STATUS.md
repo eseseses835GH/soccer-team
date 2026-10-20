@@ -146,7 +146,7 @@
 
 ## What was built
 - **Player form (quick add and edit):** level → "איפה הוא חזק?" (🧤 שוער, 🛡️ הגנה, 🔄 קישור, ⚡ התקפה; 🧤 is the old `canGK`, now one control in both keeper modes) → folded "עוד על השחקן" with the 12 cards → folded inside it "דירוג מפורט מתקדם" (sliders).
-- **Balancing:** a position-spread term (weight 0.15, beyond what's unavoidable) so defenders/midfielders/attackers spread across teams; borrowing and swap suggestions see it too. With rotating keepers a 🧤 player starts in goal.
+- **Balancing:** a position-spread term (weight 0.15, beyond what's unavoidable) so defenders/midfielders/attackers spread across teams; borrowing and swap suggestions see it too. With rotating keepers a 🧤 player starts in goal (v7: no longer; random).
 - **Display:** tiny position emojis in the roster and import preview; a compact `🛡️2 🔄1 ⚡2` line per team on the teams screen.
 - **Import:** position words in pasted lists/CSV; the template has an `עמדות` column.
 
@@ -173,3 +173,8 @@
 # v6: left early
 - **Built:** "עזב באמצע" (teams screen) / "מישהו עזב?" (match screen): pick → confirm → he's off his team, the bench, the keeper rotation, the borrow and today's attendance, without reshuffling; then the best sub is offered, or (no subs) up to 2 swaps that never touch a match under way. A tiny short team outside goes to the bench; nobody goes below 2. Not flagged as stale. See DECISIONS → Left early (v6).
 - **Tested:** 17 unit tests (`src/state/leave.test.ts`); e2e step 11b (sample squad, a match, 2 late arrivals, one leaves → sub suggestion accepted, not stale, attendance and history right, the evening continues, a second leave from the match screen); screenshots `16a`–`16f` (light + dark).
+
+# v7: animal cards, "good in goal"
+- **Built:** cards are clear animals/symbols: strengths 🦍 גורילה, 🐆 צ'יטה, 🎯 מדויק, 🪄 קוסם, 🧠 מוח, ⭐ כוכב; weaknesses 🫏 חמור, 🦥 עצלן, 🐢, 😮‍💨, 🙅, 🥶, 🌱. Stored ids kept; 🧱 dropped (→ 🛡️ position); untouched ratings follow the new deltas. 🧤 is "טוב בשער"; rotating keepers are random again. See DECISIONS → Animal cards and "good in goal" (v7).
+- **Tested:** unit (set balance, deltas, opposites, migration of old ratings / hand-tuned / rock, idempotence, old and new import words, keeper order both modes); e2e (new card and chip names, an old stored player with `rock` + `captain` loads as ⭐ only); screenshots `03a`/`03b`/`03` (light + dark).
+- **Open:** Settings fixed-keeper hint still says ״שוער קבוע״ (owned by the settings rework).
