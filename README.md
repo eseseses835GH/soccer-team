@@ -5,7 +5,7 @@ Nobody wants to be the captain who picks teams. Kochot is a small, mobile-first 
 to get balanced teams. It then runs the whole "winner stays" evening: timer, goals, who comes on next,
 and a nudge when one team keeps winning.
 
-- No signup needed. Data stays on the phone (`localStorage`), with a backup file or link.
+- No signup needed. Data stays on the phone (`localStorage`), with a backup file.
 - **Groups:** keep separate rosters for each group you play with (the neighbourhood, the army base, the office).
 - **Optional login** (Google, email code, or email + password) syncs a group between organizers' phones and lets you invite organizers with a link (Supabase).
 - Installable to the home screen and works offline at the pitch (PWA).
@@ -82,7 +82,7 @@ Remove those variables, and the app is local-only and hides login. The database 
 Browser checks against `npm run preview` (Playwright; set `CHROMIUM_PATH` if needed):
 ```bash
 npm run screenshots -- ./screenshots   # 390px, light + dark; fails on console errors / overflow
-npm run e2e                            # add, import, split 22, re-roll, late arrival, match, player rules, bibs on/off, end evening + summary + history, new day, backup link
+npm run e2e                            # add, import, split 22, re-roll, late arrival, match, player rules, bibs on/off, end evening + summary + history, new day, backup file restore
 npm run sounds-check                   # whistles/horn fire at the right moments (spies on Web Audio), never speech
 npm run render-sounds -- ./sounds      # offline-render horn + whistles to WAV, check peak levels
 node scripts/icons.mjs                 # regenerate PWA PNG icons from public/favicon.svg
@@ -102,7 +102,7 @@ Commas, semicolons, tabs or spaces all work, and a header line is ignored:
 יוסי
 ```
 Duplicate names and levels outside 1–10 are skipped and listed. A backup `.json` file can be imported
-from the same screen.
+from the same screen: players with new names are added, with the file's rules between players and its evenings.
 
 ## Project layout
 ```
@@ -162,8 +162,8 @@ old cache; pages are network-first, so users get the new version on the next ope
 For login on a new host, add its address to the Supabase redirect URLs (Authentication → URL Configuration).
 
 ## Privacy
-- **Without an account, nothing leaves the phone**, unless you deliberately send a backup link or file.
-  Both include ratings, and the app warns you about this. The app doesn't even contact the server.
+- **Without an account, nothing leaves the phone**, unless you deliberately send the backup file
+  (it includes ratings). The app doesn't even contact the server.
 - **When you log in and sync a group,** its roster goes to the Supabase project (EU, Frankfurt). That includes
   names, ratings, cards, pair rules, the group's settings and (when available) the evenings history.
   Your email is stored for the login.

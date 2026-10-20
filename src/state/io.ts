@@ -148,6 +148,39 @@ export function mergePlayers(current: Player[], incoming: Player[]): { players: 
   return { players: out, added, updated, idMap };
 }
 
+/**
+ * Restore a backup file into the roster: players whose name is new are added (with fresh ids), names
+ * already here are kept as they are, and the backup's pair rules come along, pointed at the right
+ * players. A rule that contradicts one already here (together vs apart) is skipped.
+ */
+export function restoreBackup(current: Player[], constraints: Constraints, b: Backup): { players: Player[]; constraints: Constraints; added: number } {
+  const byName = new Map(current.map((p) => [p.name.trim(), p.id]));
+  const idMap = new Map<string, string>();
+  const added: Player[] = [];
+  for (const p of b.players) {
+    const have = byName.get(p.name.trim());
+    if (have) idMap.set(p.id, have);
+    else {
+      const np = { ...p, id: newId() };
+      byName.set(p.name.trim(), np.id);
+      idMap.set(p.id, np.id);
+      added.push(np);
+    }
+  }
+  const same = (x: [string, string], y: [string, string]) => (x[0] === y[0] && x[1] === y[1]) || (x[0] === y[1] && x[1] === y[0]);
+  const out: Constraints = { together: [...constraints.together], apart: [...constraints.apart] };
+  for (const kind of ['together', 'apart'] as const) {
+    const other = kind === 'together' ? 'apart' : 'together';
+    for (const [a, c] of b.constraints[kind]) {
+      const pr: [string, string] = [idMap.get(a) ?? '', idMap.get(c) ?? ''];
+      if (!pr[0] || !pr[1] || pr[0] === pr[1]) continue;
+      if (out[kind].some((x) => same(x, pr)) || out[other].some((x) => same(x, pr))) continue;
+      out[kind].push(pr);
+    }
+  }
+  return { players: [...current, ...added], constraints: out, added: added.length };
+}
+
 // ---------- link encoding (#import=...) ----------
 
 function toBase64Url(bytes: Uint8Array): string {

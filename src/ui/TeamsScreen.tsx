@@ -8,7 +8,7 @@ import { isResultStale, useStore } from '../state/store';
 import { buildShareText, copyText, downloadBlob, shareFile, TEAMS_TITLE, type ShareTeam } from '../share';
 import { teamsImage, type ImageTeam } from '../shareImage';
 import { useUi } from './App';
-import { CardBadges, Empty, ScoreMeter } from './components';
+import { CardBadges, Empty, ScoreMeter, Sheet } from './components';
 import { Icon } from './icons';
 import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
@@ -84,6 +84,8 @@ export function TeamsScreen() {
   const [busy, setBusy] = useState(false);
   const [late, setLate] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  /** A re-split while an evening is on ends it (it's saved to the history): ask first, like the main screen. */
+  const [confirmResplit, setConfirmResplit] = useState(false);
   const r = state.result;
   const data = useMemo(() => (r ? evaluateResult(state, r) : null), [state, r]);
   const shared = useMemo(() => (r ? shareData(state, r) : null), [state, r]);
@@ -156,6 +158,7 @@ export function TeamsScreen() {
   };
 
   const resplit = async () => {
+    setConfirmResplit(false);
     setBusy(true);
     try {
       if (!(await splitTeams(state, dispatch))) go('home');
@@ -192,7 +195,7 @@ export function TeamsScreen() {
       {stale && (
         <div className="notice">
           <span>הנוכחות או גודל הקבוצה השתנו מאז החלוקה.</span>
-          <button type="button" className="btn btn-small" disabled={busy} onClick={resplit}>
+          <button type="button" className="btn btn-small" disabled={busy} onClick={() => (state.match ? setConfirmResplit(true) : resplit())}>
             חלוקה מחדש
           </button>
         </div>
@@ -336,6 +339,23 @@ export function TeamsScreen() {
             setSel(null);
           }}
         />
+      )}
+      {confirmResplit && state.match && (
+        <Sheet title="לחלק מחדש?" onClose={() => setConfirmResplit(false)}>
+          <p className="hint">
+            {state.match.history.length
+              ? `הערב הנוכחי (${state.match.history.length === 1 ? 'משחק אחד' : `${state.match.history.length} משחקים`}) יישמר בערבים הקודמים, והמשחקים יתחילו מהתחלה עם קבוצות חדשות.`
+              : 'הקבוצות של עכשיו יוחלפו בקבוצות חדשות, והמשחק יתחיל מהתחלה.'}
+          </p>
+          <div className="stack">
+            <button type="button" className="btn btn-primary btn-block" onClick={resplit}>
+              חלוקה מחדש
+            </button>
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => setConfirmResplit(false)}>
+              ביטול
+            </button>
+          </div>
+        </Sheet>
       )}
       {late && (
         <LateSheet

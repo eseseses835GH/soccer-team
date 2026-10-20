@@ -186,3 +186,14 @@
 # v7: help screen
 - **Built:** `#help` "שאלות ותשובות": a "?" in the main top bar, a row at the top of Settings, a "?" next to the balance score (opens that question). Folded questions in four sections, a search box, and an icon legend generated from the cards and positions (DECISIONS → Help screen (v7)). Content in `src/ui/help.ts`.
 - **Tested:** `src/ui/help.test.ts` (legend = every card and position, unique ids, search); e2e help step (top bar → question opens → legend has every card/position chip from the add form → search → Settings row and back → score "?" opens #help/score → back to the teams); screenshots `02c`–`02g` (light + dark).
+
+# v8: QA pass
+- **Fixed:** the roster link removed from Settings (fold "גיבוי"; old `#import=` links still open); the backup file restore keeps the rules between players; the teams-screen re-split asks first during an evening; the new game day also starts when the app returns to the screen; singular Hebrew for one player. Details in DECISIONS → "QA pass (v8)". Tested: unit (`restoreBackup`), e2e (file restore, old link, re-split question, new day without reload, singular strings).
+- **Known issues (found, not fixed):**
+  1. **"הגרלה מחדש" during an evening** (teams screen, after a match) reshuffles the teams at once, without asking and without undo ("ביטול החלפות" can't bring them back). The standings keep counting by team number, so "קבוצה 1" is now other people. Nothing is lost (finished matches keep who played). Repro: make teams → play a match → teams → re-roll.
+  2. **Ticking a late player at home during an evening** makes the teams screen offer "חלוקה מחדש" (now with a question) instead of pointing to "הגיע מאוחר". Left to the late-arrival rework.
+  3. **"ביטול החלפות" doesn't undo a sub swap** (only swaps between teams). Repro: swap two players between teams, then tap a sub and a player → "ביטול החלפות" reverts the first swap but leaves the sub in (after a sub swap alone the link doesn't show).
+  4. **Back while a sheet is open** (scorer, penalties, length) leaves the screen instead of closing the sheet; the goal/match stays as it was, nothing is lost.
+  5. **Two groups can have the same name** ("בבסיס" twice).
+  6. **The countdown rounds down:** it shows 7:59 right after "התחלה" and 0:00 for the last second before time-up. Cosmetic.
+  7. Deleting a group says "השחקנים וההגדרות יימחקו" but its evenings history goes too.

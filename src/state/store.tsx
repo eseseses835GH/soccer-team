@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type Dispatch, type ReactNode } from 'react';
 import { loadJSON, removeKey, saveJSON } from './storage';
-import { type AppState } from './model';
+import { NEW_DAY_MS, sanitize, type AppState } from './model';
 import { reducer, type Action } from './reducer';
 import {
   addGroup,
@@ -72,6 +72,25 @@ export function StoreProvider({ children, kv = localKV }: { children: ReactNode;
   }, [kv, root]);
 
   const dispatch = useCallback((a: Action) => dispatchRoot(a), []);
+
+  // A new game day also starts when the app comes back to the screen without a reload (a phone that
+  // kept the app open since last time): the same reset as on load (yesterday's evening is saved).
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState === 'hidden') return;
+      const { gid, app } = rootRef.current;
+      if (!app.dayAt || Date.now() - app.dayAt <= NEW_DAY_MS || !(app.presentIds.length || app.result)) return;
+      const next = { gid, app: sanitize(app) };
+      rootRef.current = next;
+      dispatchRoot({ type: '__set', ...next });
+    };
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('pageshow', check);
+    return () => {
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('pageshow', check);
+    };
+  }, []);
 
   /** Open a group. The look (theme, accent) is per phone, so it comes along. */
   const open = useCallback((id: string, app: AppState) => {

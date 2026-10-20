@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyCards, toggleCard } from './cards';
 import { INITIAL_STATE, NEW_DAY_MS, defaultAttrs, defaultMatchMs, sanitize, sanitizeSettings, type AppState, type GameResult, type Player } from './model';
-import { decodeBackup, encodeBackup, makeBackup, mergePlayers, parseRoster } from './io';
+import { decodeBackup, encodeBackup, makeBackup, mergePlayers, parseRoster, restoreBackup } from './io';
 import { reducer } from './reducer';
 import { orderBySize } from './split';
 
@@ -144,6 +144,20 @@ describe('roster import', () => {
     expect(m.updated).toBe(1);
     expect(m.players.find((x) => x.name === 'Bob')!.attrs.overall).toBe(9);
     expect(m.players.find((x) => x.name === 'Bob')!.id).toBe('b');
+  });
+  it('restoring a backup file keeps its pair rules and leaves existing names alone', () => {
+    const file = makeBackup([{ ...p('x1', 9), name: 'אבי' }, { ...p('x2'), name: 'בני' }, { ...p('x3'), name: 'גיל' }], { together: [['x2', 'x3']], apart: [['x1', 'x2']] }, INITIAL_STATE.settings, 5);
+    const here = [{ ...p('a', 3), name: 'אבי' }, { ...p('c'), name: 'גיל' }];
+    const r = restoreBackup(here, { together: [], apart: [['a', 'c']] }, file);
+    expect(r.added).toBe(1);
+    expect(r.players.find((x) => x.name === 'אבי')).toEqual(here[0]);
+    const bni = r.players.find((x) => x.name === 'בני')!.id;
+    expect(bni).not.toBe('x2');
+    expect(r.constraints.apart).toEqual([['a', 'c'], ['a', bni]]);
+    expect(r.constraints.together).toEqual([[bni, 'c']]);
+    // A rule that contradicts one already here is skipped.
+    const r2 = restoreBackup(here, { together: [['a', 'c']], apart: [] }, makeBackup(file.players, { together: [], apart: [['x1', 'x3']] }, INITIAL_STATE.settings, 5));
+    expect(r2.constraints).toEqual({ together: [['a', 'c']], apart: [] });
   });
   it('backup link round-trips', async () => {
     const b = makeBackup([{ ...p('a', 7), name: 'אבי', cards: ['cheetah'] }], { together: [], apart: [] }, INITIAL_STATE.settings, 5);
