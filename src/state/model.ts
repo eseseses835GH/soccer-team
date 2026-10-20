@@ -64,7 +64,9 @@ export interface Settings {
   matchNoLimit: boolean;
   /** Level when the time runs out: this many minutes of extra time are added once (0 = off). */
   drawExtraMinutes: number;
-  /** Bib colours the group owns, in the order teams get them. */
+  /** The group has bibs: teams are named after them. Off = "קבוצה 1", "קבוצה 2"… in fixed colours. */
+  hasBibs: boolean;
+  /** Bib colours the group owns, in the order teams get them (kept while `hasBibs` is off). */
   bibs: BibId[];
   /** Look of the app on this phone (not taken from an imported backup). */
   theme: Theme;
@@ -118,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   matchMinutes: 8,
   matchNoLimit: false,
   drawExtraMinutes: 2,
+  hasBibs: false,
   bibs: BIBS.map((b) => b.id),
   theme: 'auto',
   accent: 'green',
@@ -165,17 +168,71 @@ export function newId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+/**
+ * How a team is called. With bibs a team is a plural noun ("האדומים ניצחו"), without bibs
+ * it's "קבוצה 1", singular feminine ("קבוצה 1 ניצחה"). Build sentences from these fields and
+ * `verb()` instead of gluing "ה" to the name.
+ */
 export interface TeamLook {
+  /** Headers and lists: "אדומים" / "קבוצה 1". */
   name: string;
+  /** Subject or object, with the article: "האדומים" / "קבוצה 1". */
+  the: string;
+  /** "לאדומים" / "לקבוצה 1". */
+  to: string;
+  /** "מהאדומים" / "מקבוצה 1". */
+  from: string;
+  /** "באדומים" / "בקבוצה 1". */
+  in: string;
+  /** Plural noun (bibs) or a singular "קבוצה N". */
+  plural: boolean;
   emoji: string;
   color: string;
 }
 
-export function teamLook(settings: Settings, t: number): TeamLook {
-  const id = settings.bibs[t];
-  const bib = BIBS.find((b) => b.id === id);
-  return bib ? { name: bib.name, emoji: bib.emoji, color: bib.color } : { name: `קבוצה ${t + 1}`, emoji: '⚪', color: 'var(--bib-none)' };
+/** Colours of numbered teams (no bibs): clearly different from each other in light and dark. */
+const NUMBERED = [
+  { emoji: '🔵', color: 'var(--bib-blue)' },
+  { emoji: '🟠', color: 'var(--bib-orange)' },
+  { emoji: '🟣', color: 'var(--bib-purple)' },
+  { emoji: '🟢', color: 'var(--bib-green)' },
+  { emoji: '🔴', color: 'var(--bib-red)' },
+  { emoji: '🟡', color: 'var(--bib-yellow)' },
+  { emoji: '⚫', color: 'var(--bib-black)' },
+  { emoji: '⚪', color: 'var(--bib-white)' },
+] as const;
+
+/** Stored in history records for a numbered team ("n1" = קבוצה 1). */
+export const numberedBib = (t: number) => `n${t + 1}`;
+
+function numberedLook(t: number): TeamLook {
+  const name = `קבוצה ${t + 1}`;
+  const c = NUMBERED[t % NUMBERED.length];
+  return { name, the: name, to: `ל${name}`, from: `מ${name}`, in: `ב${name}`, plural: false, emoji: c.emoji, color: c.color };
 }
+
+/**
+ * Look of a stored bib id: a bib colour, "n2" (numbered team 2), or anything else (old records with
+ * more teams than bibs, '' ) → numbered by the team's position `t`.
+ */
+export function bibLook(bib: string | undefined, t: number): TeamLook {
+  const b = BIBS.find((x) => x.id === bib);
+  if (b) return { name: b.name, the: `ה${b.name}`, to: `ל${b.name}`, from: `מה${b.name}`, in: `ב${b.name}`, plural: true, emoji: b.emoji, color: b.color };
+  const n = /^n(\d+)$/.exec(bib ?? '');
+  return numberedLook(n ? Number(n[1]) - 1 : t);
+}
+
+/** Bib id of each team position as stored in the history (`n1`, `n2`… without bibs). */
+export function teamBibs(settings: Settings, numTeams: number): string[] {
+  return Array.from({ length: numTeams }, (_, t) => (settings.hasBibs ? (settings.bibs[t] ?? numberedBib(t)) : numberedBib(t)));
+}
+
+export function teamLook(settings: Settings, t: number): TeamLook {
+  return bibLook(teamBibs(settings, t + 1)[t], t);
+}
+
+/** Verb agreeing with the team: `verb(look, 'ניצחו', 'ניצחה')`. */
+export const verb = (look: TeamLook, plural: string, singular: string) => (look.plural ? plural : singular);
 
 const num = (v: unknown, lo: number, hi: number, dflt: number) => {
   const n = Number(v);
@@ -205,6 +262,7 @@ export function sanitizeSettings(raw: unknown): Settings {
   const weights = { ...DEFAULT_WEIGHTS };
   for (const k of ATTR_KEYS) weights[k] = num(r.weights?.[k], 0, 10, DEFAULT_WEIGHTS[k]);
   const bibs = Array.isArray(r.bibs) ? r.bibs.filter((b): b is BibId => BIB_IDS.has(b)) : [];
+  const cleanBibs = bibs.length >= 2 ? [...new Set(bibs)] : DEFAULT_SETTINGS.bibs;
   return {
     weights,
     leadershipThreshold: num(r.leadershipThreshold, 1, 10, DEFAULT_SETTINGS.leadershipThreshold),
@@ -213,7 +271,10 @@ export function sanitizeSettings(raw: unknown): Settings {
     matchMinutes: Math.round(num(r.matchMinutes, 1, 60, DEFAULT_SETTINGS.matchMinutes)),
     matchNoLimit: r.matchNoLimit === true,
     drawExtraMinutes: Math.round(num(r.drawExtraMinutes, 0, 10, 2)),
-    bibs: bibs.length >= 2 ? [...new Set(bibs)] : DEFAULT_SETTINGS.bibs,
+    // Before v7 everyone had bibs. Whoever changed the list (picked their colours) keeps them on;
+    // the untouched default list means they never set it up, so they get numbered teams.
+    hasBibs: typeof r.hasBibs === 'boolean' ? r.hasBibs : cleanBibs.join() !== DEFAULT_SETTINGS.bibs.join(),
+    bibs: cleanBibs,
     theme: r.theme === 'light' || r.theme === 'dark' ? r.theme : 'auto',
     accent: typeof r.accent === 'string' && ACCENT_IDS.has(r.accent) ? r.accent : 'green',
     // Older versions had 'all' (crowd + announcer) and 'crowd': both mean sound on.
@@ -279,7 +340,7 @@ export function sanitize(raw: unknown, now = Date.now()): AppState {
     // Nobody pressed "end the evening": save it to the history before it's cleared.
     const evening =
       state.match && state.result
-        ? buildEvening({ match: state.match, result: state.result, players, bibs: state.settings.bibs, now: state.dayAt })
+        ? buildEvening({ match: state.match, result: state.result, players, bibs: teamBibs(state.settings, state.result.numTeams), now: state.dayAt })
         : null;
     state = {
       ...state,

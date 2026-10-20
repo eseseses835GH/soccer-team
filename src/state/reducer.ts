@@ -1,6 +1,6 @@
 import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solution } from '../engine';
 import { addTeam, type MatchState } from '../match/match';
-import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, type AppState, type GameResult, type Player, type Settings } from './model';
+import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, teamBibs, type AppState, type GameResult, type Player, type Settings } from './model';
 import { addEvening, buildEvening, mergeHistory, stampSides, type EveningRecord } from './history';
 import { leaveEarly, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
@@ -78,7 +78,7 @@ export function leaveCtx(state: AppState): LeaveCtx {
 /** Save the current match session as an evening record. */
 function archive(state: AppState, now: number, id?: string): EveningRecord[] {
   if (!state.match || !state.result) return state.history;
-  const rec = buildEvening({ match: state.match, result: state.result, players: state.players, bibs: state.settings.bibs, now, id });
+  const rec = buildEvening({ match: state.match, result: state.result, players: state.players, bibs: teamBibs(state.settings, state.result.numTeams), now, id });
   return addEvening(state.history, rec);
 }
 

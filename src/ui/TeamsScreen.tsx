@@ -171,10 +171,10 @@ export function TeamsScreen() {
     setLate(false);
     const look = j.team !== null ? teamLook(state.settings, j.team) : null;
     if (j.outcome === 'bench') notify(`${player.name} מחכה בחוץ כמחליף`);
-    else if (j.outcome === 'newTeam') notify(`נפתחה קבוצה חדשה: ה${look!.name}`);
-    else if (j.outcome === 'waiting') notify(`${player.name} הצטרף ל${look!.name}`);
+    else if (j.outcome === 'newTeam') notify(`נפתחה קבוצה חדשה: ${look!.the}`);
+    else if (j.outcome === 'waiting') notify(`${player.name} הצטרף ${look!.to}`);
     else {
-      notify(`${player.name} השלים את ה${look!.name}`);
+      notify(`${player.name} השלים את ${look!.the}`);
       const roster = isNew ? [...state.players, player] : state.players;
       const map = new Map(roster.map((p) => [p.id, p]));
       const ps = j.result.playerIds.map((id) => map.get(id)!);
@@ -186,8 +186,8 @@ export function TeamsScreen() {
   };
 
   const violations = [
-    ...ev.violations.together.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים לשחק יחד`),
-    ...ev.violations.apart.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים להיות בנפרד`),
+    ...ev.violations.together.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים להיות באותה קבוצה`),
+    ...ev.violations.apart.map(([a, b]) => `${nameOf(a)} ו${nameOf(b)} אמורים להיות בקבוצות שונות`),
     ...(ev.penalties.goalkeeper > 0 ? ['יש קבוצה בלי שוער קבוע, למרות שיש מספיק'] : []),
   ];
 
@@ -229,7 +229,7 @@ export function TeamsScreen() {
           // With a queue, any short team (the one outside, or one that lost a player) borrows from the loser.
           const short = counts[t] < r.teamSize && k > 2;
           return (
-            <article key={t} className={`team ${t >= 2 ? 'waiting' : ''}`} style={{ '--team': look.color } as React.CSSProperties} aria-label={`ה${look.name}`}>
+            <article key={t} className={`team ${t >= 2 ? 'waiting' : ''}`} style={{ '--team': look.color } as React.CSSProperties} aria-label={look.the}>
               <header>
                 <h2>{look.name}</h2>
                 <span className="team-sub">

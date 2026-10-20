@@ -35,7 +35,7 @@ and a nudge when one team keeps winning.
    - 14 → `5 נגד 5 · 4 בחוץ, משלימים 1 מהמפסידה` (5 vs 5, 4 wait outside and borrow 1 from the losing team)
    - 11 → `5 נגד 5 · מחליף אחד` (5 vs 5, one sub)
    - 8 → `אין מספיק ל-5 בקבוצה, אז 4 נגד 4` (not enough for 5-a-side, so 4 vs 4)
-3. **Teams.** You get bib-coloured teams and the 0–100 balance score.
+3. **Teams.** You get numbered, colour-coded teams (or named after your bibs, if you have them) and the 0–100 balance score.
    - Every team gets a random **goalkeeper rotation**: 🧤 first, then 2, 3… Keepers swap every goal
      (or every 2–3 goals) conceded. A "fixed keeper" mode is available.
    - Tap two players to swap them. The score updates live.
@@ -80,7 +80,7 @@ Remove those variables, and the app is local-only and hides login. The database 
 Browser checks against `npm run preview` (Playwright; set `CHROMIUM_PATH` if needed):
 ```bash
 npm run screenshots -- ./screenshots   # 390px, light + dark; fails on console errors / overflow
-npm run e2e                            # add, import, split 22, re-roll, late arrival, match, pairs, end evening + summary + history, new day, backup link
+npm run e2e                            # add, import, split 22, re-roll, late arrival, match, player rules, bibs on/off, end evening + summary + history, new day, backup link
 npm run sounds-check                   # whistles/horn fire at the right moments (spies on Web Audio), never speech
 npm run render-sounds -- ./sounds      # offline-render horn + whistles to WAV, check peak levels
 node scripts/icons.mjs                 # regenerate PWA PNG icons from public/favicon.svg

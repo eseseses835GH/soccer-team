@@ -30,9 +30,10 @@
   - **Swipe to delete (v4):** drag a row to the right to reveal a red "מחיקה"; it (and the edit sheet's delete) asks "למחוק את …?" first. Covered by `npm run e2e` (real touch swipe, vertical scroll, cancel, confirm).
 - **Settings:**
   - Rotating vs. fixed keepers, and switch every 1/2/3 goals.
-  - Match length and bib colours (which you own, in order).
+  - Match length. Bibs are optional (v7, off by default): without them teams are "קבוצה 1", "קבוצה 2"… in fixed colours; with them, the bib colours you own, in order.
   - Look: light, dark or follow the phone, and a main colour (green, blue, purple, orange, pink).
-  - Keep-apart / keep-together pairs.
+  - "כללים בין שחקנים": "לא באותה קבוצה" / "תמיד באותה קבוצה" (stored as keep-apart / keep-together pairs).
+  - v7 layout: only "משחק" is open; the rest are folds with a one-line value (remembered per phone in `kochot:settings-open`). Install help is "גישה מהירה".
   - Backup link for a second organizer, backup file download.
   - Advanced weights and leadership threshold; sample squad; wipe.
 - **Under the hood:**

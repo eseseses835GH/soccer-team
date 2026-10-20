@@ -102,7 +102,7 @@ export interface EveningShareInput {
   matches: number;
   goals: number;
   minutes?: number | null;
-  /** "🔴 אדומים" of the team that won the evening, if there was a clear one. */
+  /** "🔴 האדומים לקחו את הערב" / "🔵 קבוצה 1 לקחה את הערב", if one team clearly won the evening. */
   champion?: string;
   /** Standings, best first: "🔴 אדומים 4 נ׳ · 1 ת׳ · 1 ה׳". */
   table: string[];
@@ -115,7 +115,7 @@ export function buildEveningShareText({ date, matches, goals, minutes, champion,
   const d = date.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
   const totals = [`${matches} משחקים`, `${goals} שערים`, ...(minutes ? [`${minutes} דקות`] : [])].join(' · ');
   const lines = [`${RLM}⚽ סיכום הערב – ${d}`, `${RLM}${totals}`, ''];
-  if (champion) lines.push(`${RLM}🏆 ${champion} לקחו את הערב`, '');
+  if (champion) lines.push(`${RLM}🏆 ${champion}`, '');
   table.forEach((t, i) => lines.push(`${RLM}${i + 1}. ${t}${RLM}`));
   if (highlights.length) lines.push('', ...highlights.map((h) => `${RLM}${h}${RLM}`));
   return lines.join('\n');
