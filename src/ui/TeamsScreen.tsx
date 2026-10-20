@@ -86,6 +86,8 @@ export function TeamsScreen() {
   const [leaving, setLeaving] = useState(false);
   /** A re-split while an evening is on ends it (it's saved to the history): ask first, like the main screen. */
   const [confirmResplit, setConfirmResplit] = useState(false);
+  /** Re-rolling once matches were played reshuffles who is "קבוצה 1" in tonight's table: ask first. */
+  const [confirmReroll, setConfirmReroll] = useState(false);
   const r = state.result;
   const data = useMemo(() => (r ? evaluateResult(state, r) : null), [state, r]);
   const shared = useMemo(() => (r ? shareData(state, r) : null), [state, r]);
@@ -147,7 +149,9 @@ export function TeamsScreen() {
     setSel(sel?.kind === 'sub' && sel.id === id ? null : { kind: 'sub', id });
   };
 
+  const eveningStarted = !!state.match && (state.match.history.length > 0 || state.match.goals.length > 0 || state.match.clock.elapsedMs > 0 || state.match.clock.running);
   const reroll = async () => {
+    setConfirmReroll(false);
     setSel(null);
     setBusy(true);
     try {
@@ -284,7 +288,7 @@ export function TeamsScreen() {
           <button type="button" className="btn btn-wa" onClick={share}>
             <Icon name="share" size={20} /> שיתוף
           </button>
-          <button type="button" className="btn btn-quiet" onClick={reroll} disabled={busy}>
+          <button type="button" className="btn btn-quiet" onClick={() => (eveningStarted ? setConfirmReroll(true) : reroll())} disabled={busy}>
             <Icon name="dice" size={20} /> הגרלה מחדש
           </button>
         </div>
@@ -339,6 +343,19 @@ export function TeamsScreen() {
             setSel(null);
           }}
         />
+      )}
+      {confirmReroll && (
+        <Sheet title="להגריל מחדש?" onClose={() => setConfirmReroll(false)}>
+          <p className="hint">הערב כבר התחיל. הגרלה מחדש תערבב את כל הקבוצות, והטבלה תמשיך לפי מספרי הקבוצות.</p>
+          <div className="stack">
+            <button type="button" className="btn btn-primary btn-block" onClick={reroll}>
+              הגרלה מחדש
+            </button>
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => setConfirmReroll(false)}>
+              ביטול
+            </button>
+          </div>
+        </Sheet>
       )}
       {confirmResplit && state.match && (
         <Sheet title="לחלק מחדש?" onClose={() => setConfirmResplit(false)}>

@@ -29,9 +29,13 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
+  /** Two groups with the same name would be impossible to tell apart in the list. */
+  const taken = (n: string, except?: string) => groups.index.groups.some((g) => g.id !== except && g.name.trim() === n.trim());
+
   const create = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    if (taken(name)) return notify('כבר יש קבוצה בשם הזה');
     groups.create(name);
     notify(`נוצרה הקבוצה ״${name.trim()}״`);
     onClose();
@@ -40,6 +44,7 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
   const rename = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    if (taken(name, cur.id)) return notify('כבר יש קבוצה בשם הזה');
     groups.rename(cur.id, name);
     setMode('list');
   };

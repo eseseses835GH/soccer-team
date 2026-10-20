@@ -15,10 +15,10 @@ type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean 
  * "הגיע מאוחר" / "מישהו הגיע?": pick who arrived → he goes in now (the suggested team, or
  * another with a tap) or waits on the side → if he completed the teams, an optional swap or two.
  */
-export function LateSheet({ onClose }: { onClose: () => void }) {
+export function LateSheet({ onClose, arrived }: { onClose: () => void; arrived?: Player }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
-  const [step, setStep] = useState<Step>({ kind: 'pick' });
+  const [step, setStep] = useState<Step>(arrived ? { kind: 'choose', player: arrived, isNew: false } : { kind: 'pick' });
   const r = state.result;
   if (!r) return null;
   const m = state.match;

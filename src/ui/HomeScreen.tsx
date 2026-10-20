@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { MIN_TEAM_SIZE, planFormat, type FormatPlan } from '../engine';
+import type { Player } from '../state/model';
 import { presentPlayers, useStore } from '../state/store';
 import { useUi } from './App';
 import { shouldOfferInstall } from '../state/install';
 import { CardBadges, Empty, Sheet } from './components';
 import { InstallCard, useInstall } from './InstallPrompt';
+import { LateSheet } from './LateSheet';
 import { splitTeams } from './split';
 
 const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
@@ -31,6 +33,13 @@ export function HomeScreen() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
   const [confirmResplit, setConfirmResplit] = useState(false);
+  const [arrived, setArrived] = useState<Player | null>(null);
+  // Teams are already made: someone ticked now arrived late. Don't reshuffle; ask "in now or wait".
+  const inTeams = new Set(state.result ? [...state.result.playerIds, ...state.result.subIds] : []);
+  const tick = (p: Player, on: boolean) => {
+    if (!on && state.result && !inTeams.has(p.id)) return setArrived(p);
+    dispatch({ type: 'togglePresent', id: p.id, now: now() });
+  };
   const install = useInstall();
 
   const present = presentPlayers(state);
@@ -141,7 +150,7 @@ export function HomeScreen() {
           return (
             <li key={p.id}>
               <label className={on ? 'on' : ''}>
-                <input type="checkbox" checked={on} onChange={() => dispatch({ type: 'togglePresent', id: p.id, now: now() })} />
+                <input type="checkbox" checked={on} onChange={() => tick(p, on)} />
                 <span className="tick" aria-hidden="true" />
                 <span className="name">{p.name}</span>
                 <CardBadges cards={p.cards} />
@@ -184,6 +193,7 @@ export function HomeScreen() {
         )}
       </div>
 
+      {arrived && <LateSheet arrived={arrived} onClose={() => setArrived(null)} />}
       {confirmResplit && (
         <Sheet title="לחלק מחדש?" onClose={() => setConfirmResplit(false)}>
           <p className="hint">

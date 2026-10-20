@@ -903,9 +903,10 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await qp.getByRole('button', { name: '+ גול' }).first().tap();
   await qp.getByRole('button', { name: 'דילוג' }).tap();
   await qp.getByRole('button', { name: 'סיום משחק' }).tap();
-  // Someone is ticked at home instead of "הגיע מאוחר": the teams screen offers a re-split, which asks first.
+  // Someone is unticked at home instead of "עזב באמצע": the teams screen offers a re-split, which asks first.
+  // (Ticking someone new during an evening opens "in now or wait" instead — checked in step 17.)
   await qp.goto(base + '#home');
-  await qp.locator('.attend label', { hasText: 'יחיד' }).tap();
+  await qp.locator('.attend li', { has: qp.locator('input:checked') }).first().locator('label').tap();
   await qp.goto(base + '#teams');
   await qp.locator('.notice').getByRole('button', { name: 'חלוקה מחדש' }).tap();
   const ask = qp.getByRole('dialog', { name: 'לחלק מחדש?' });
@@ -921,6 +922,40 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   assert(later.presentIds.length === 0 && !later.match && !later.result && later.history.length === 1, `qa: new day on return: ${later.presentIds.length} present, history ${later.history.length}`);
   assert(await qp.getByRole('button', { name: /כמו בפעם הקודמת/ }).isVisible(), 'qa: main screen offers "same as last time" after the new day');
   await qc.close();
+}
+
+// 17. During an evening: ticking someone at home asks "in now or wait" (no reshuffle), a re-roll asks
+// first, and two groups can't share a name.
+{
+  const ev = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  ev.on('pageerror', (e) => errors.push(e.message));
+  await ev.goto(base);
+  await ev.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  const first = ev.locator('ul.attend li').first();
+  const who = (await first.locator('.name').innerText()).trim();
+  if (await first.locator('input').isChecked()) await first.locator('label').click(); // he isn't here yet
+  await ev.getByRole('button', { name: 'עושים כוחות' }).click();
+  await ev.waitForSelector('.team');
+  await ev.getByRole('button', { name: /התחלת משחק/ }).click();
+  await ev.getByRole('button', { name: 'סיום משחק' }).click();
+  if (await ev.locator('.pens-team').count()) await ev.locator('.pens-team').first().click();
+  await ev.goto(base + '#home');
+  await ev.locator('ul.attend li').first().locator('label').click();
+  assert(await ev.getByRole('dialog', { name: `${who} הגיע` }).isVisible(), 'evening: ticking someone at home opens "in now or wait"');
+  await ev.getByRole('button', { name: 'מחכה בצד' }).click();
+  await ev.goto(base + '#teams');
+  assert((await ev.locator('.stale, .notice', { hasText: 'השתנ' }).count()) === 0, 'evening: no re-split banner after a late tick');
+  assert(await ev.locator('.subs, .bench').getByText(who).first().isVisible(), 'evening: he waits on the bench');
+  await ev.getByRole('button', { name: /הגרלה מחדש/ }).click();
+  assert(await ev.getByRole('dialog', { name: 'להגריל מחדש?' }).isVisible(), 'evening: re-roll asks first');
+  await ev.getByRole('dialog').getByRole('button', { name: 'ביטול' }).click();
+  await ev.goto(base + '#home');
+  await ev.getByRole('button', { name: /החלפת קבוצה/ }).click();
+  await ev.getByRole('button', { name: /קבוצה חדשה/ }).click();
+  await ev.getByLabel('שם הקבוצה').fill('הקבוצה שלי');
+  await ev.getByRole('button', { name: 'יצירה' }).click();
+  assert(await ev.getByText('כבר יש קבוצה בשם הזה').isVisible(), 'groups: a duplicate name is refused');
+  await ev.context().close();
 }
 
 console.log(`split 22 players in ${dt}ms`);
