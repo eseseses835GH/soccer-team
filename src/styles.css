@@ -2699,3 +2699,13 @@ thead th {
 .settings-fold {
   scroll-margin-top: 72px;
 }
+
+/* ---------- late arrival: in now or wait (v8) ---------- */
+.late-team .dot {
+  background: var(--team);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.bench-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
