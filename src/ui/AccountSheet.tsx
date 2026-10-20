@@ -64,7 +64,7 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
       const { error } = await c.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: redirectUrl() } });
       if (error) throw error;
       setCodeSent(true);
-      setInfo('שלחנו קוד למייל. אפשר גם ללחוץ על הקישור שבמייל.');
+      setInfo('המייל בדרך. לפעמים זה לוקח דקה; כדאי לבדוק גם בספאם.');
     });
   };
 
@@ -123,7 +123,7 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
           setInfo(null);
         }}
         options={[
-          { value: 'code', label: 'קוד למייל' },
+          { value: 'code', label: 'קישור למייל' },
           { value: 'password', label: 'מייל וסיסמה' },
         ]}
       />
@@ -132,13 +132,13 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
           <form className="auth-form" onSubmit={sendCode}>
             <input className="input" type="email" inputMode="email" autoComplete="email" dir="ltr" placeholder="name@example.com" aria-label="מייל" value={email} onChange={(e) => setEmail(e.target.value)} />
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-              שליחת קוד
+              שליחת קישור למייל
             </button>
           </form>
         ) : (
           <form className="auth-form" onSubmit={verifyCode}>
             <p className="hint">
-              הקוד נשלח אל <bdi dir="ltr">{email.trim()}</bdi>
+              שלחנו מייל אל <bdi dir="ltr">{email.trim()}</bdi>. פותחים אותו <strong>בטלפון הזה</strong> ולוחצים על הקישור, וחוזרים לכאן מחוברים. אם במייל יש קוד, אפשר להקליד אותו כאן:
             </p>
             <input
               className="input input-big code-input"

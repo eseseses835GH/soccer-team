@@ -362,3 +362,7 @@ The mirror of late arrivals: someone leaving never reshuffles everyone. Pure log
   - Otherwise a team keeps playing short down to **2 players** (the split's minimum). One more leaving: the best sub comes in automatically; with no sub it's refused ("אי אפשר… צריך חלוקה מחדש"), since a re-split is the honest answer there.
 - **On the teams screen, any short team shows "משלימים N" when there is a queue** (before: only teams from the third on), because a team that lost a player also borrows from the loser.
 - **Known edge:** the evening id is derived from the players in the split (as after a late arrival), so ending an evening, starting again with the same teams, someone leaving and ending again saves two records instead of merging them.
+
+## Email login on the free plan (v6)
+- **Supabase's free plan doesn't allow editing the email templates without custom SMTP**, so the default "Magic link" email has a link and no code. The login option is therefore labelled "קישור למייל": the app sends the email and says to open it **on the same phone** and tap the link (the PKCE link only completes in the browser that asked for it). The code field stays, for when Resend/SMTP is set up and the template includes `{{ .Token }}`.
+- Deployed at https://soccer-team-tau.vercel.app (Vercel, auto-deploys the `claude/loving-allen-zp89uf` branch). Supabase Site URL and redirect URLs set by the user (2026-10-20).
