@@ -73,7 +73,6 @@
 - **First visit needs a connection:** the service worker caches on first use, so if the very first visit is offline, nothing is cached yet. Also, iOS only stops evicting local data once the app is added to the home screen; since v6 the app suggests that from the second use (see below).
 - **Swap suggestions aren't browser-tested:** the "teams filled" suggestion and the dominance hint are unit-tested, but the browser flow doesn't trigger them.
 - **History is per phone:** past evenings (results, scorers, who played) are saved on the phone that ran the match and in the backup *file*, not in the backup link. Who was borrowed from the losing team isn't recorded, so borrowers' wins aren't counted.
-- **No way to mark someone as left:** you untick them at home, which flags the teams as out of date.
 - **Fixed design limits:** the main screen offers 3–7 per team (larger sizes aren't reachable), there are 8 bib colours, and cards are a fixed list (12).
 - **The backup link can get long** for very large rosters (it's roughly 1–2 KB for 25 players, which is fine for WhatsApp).
 
@@ -83,6 +82,9 @@
 1. **Try it at a real game** on 2–3 phones (iOS and Android): share, wake lock, install, offline. Then fix what hurts.
 2. ~~**"Add to home screen" prompt** after the second use, so iOS keeps the data.~~ Done (v6).
 3. **"Left early" button** on the teams and match screens: remove a player and suggest one swap.
+
+2. **"Add to home screen" prompt** after the second use, so iOS keeps the data.
+3. **"Left early" button:** done (v6, see below).
 4. **History across evenings:** done (v3: evening summary, list of past evenings, all-time leaders). Next: use results to nudge levels, and sync the history between organizers.
 5. **Shared roster for two organizers** without a backend: re-import a backup link to merge changes. A real sync (Supabase) only if they actually need it.
 
@@ -167,3 +169,7 @@
 - **Built:** from the second use (opened again 12+ h after the first use began), a card at the top of the main screen: "התקנה" via Chrome's prompt, or illustrated Safari steps on iPhone/iPad (open in Safari first in Instagram/Facebook…); "אחר כך" (a week) / "לא להציג שוב"; never while a match clock runs or when already installed. Settings → "התקנה במסך הבית" keeps the steps. Manifest `id`, 180 px apple-touch-icon, status-bar meta (DECISIONS → Add to home screen (v6)).
 - **Tested:** unit (`src/state/install.test.ts`: use counting, the show rule, dismissals, junk flags, iPhone/iPad/in-app/Chrome-iOS/Android detection); e2e step 16 (not on the first use, shown on the second, iPhone steps + share icon, above the main button, "later" remembered and back after the week, hidden while the clock runs, "never" remembered, Settings steps, Instagram → open in Safari, standalone never, Android prompt one tap → installed). Screenshots `16a`–`16d` (light + dark).
 - **Not verified:** on real phones (Safari's menu wording in Hebrew, iOS 26 layout, Chrome's real prompt).
+
+# v6: left early
+- **Built:** "עזב באמצע" (teams screen) / "מישהו עזב?" (match screen): pick → confirm → he's off his team, the bench, the keeper rotation, the borrow and today's attendance, without reshuffling; then the best sub is offered, or (no subs) up to 2 swaps that never touch a match under way. A tiny short team outside goes to the bench; nobody goes below 2. Not flagged as stale. See DECISIONS → Left early (v6).
+- **Tested:** 17 unit tests (`src/state/leave.test.ts`); e2e step 11b (sample squad, a match, 2 late arrivals, one leaves → sub suggestion accepted, not stale, attendance and history right, the evening continues, a second leave from the match screen); screenshots `16a`–`16f` (light + dark).

@@ -11,6 +11,7 @@ import { buildShareText, copyText, nativeShare, whatsappUrl } from '../share';
 import { useUi } from './App';
 import { CardBadges, Empty, LevelPicker, ScoreMeter, Sheet } from './components';
 import { Icon } from './icons';
+import { LeaveSheet } from './LeaveSheet';
 import { rerollTeams, splitTeams } from './split';
 
 type Sel = { kind: 'team'; i: number } | { kind: 'sub'; id: string } | null;
@@ -77,6 +78,7 @@ export function TeamsScreen() {
   const [sel, setSel] = useState<Sel>(null);
   const [busy, setBusy] = useState(false);
   const [late, setLate] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [suggestion, setSuggestion] = useState<SwapSuggestion | null>(null);
   const r = state.result;
   const data = useMemo(() => (r ? evaluateResult(state, r) : null), [state, r]);
@@ -224,7 +226,8 @@ export function TeamsScreen() {
           const order = (r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t)).filter(
             (id) => r.assignment[indexOf.get(id) ?? -1] === t,
           );
-          const short = counts[t] < r.teamSize && t >= 2;
+          // With a queue, any short team (the one outside, or one that lost a player) borrows from the loser.
+          const short = counts[t] < r.teamSize && k > 2;
           return (
             <article key={t} className={`team ${t >= 2 ? 'waiting' : ''}`} style={{ '--team': look.color } as React.CSSProperties} aria-label={`ה${look.name}`}>
               <header>
@@ -289,6 +292,9 @@ export function TeamsScreen() {
           <button type="button" className="text-btn" onClick={() => setLate(true)}>
             <Icon name="plus" size={18} /> הגיע מאוחר
           </button>
+          <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
+            <Icon name="leave" size={18} /> עזב באמצע
+          </button>
           <button type="button" className="text-btn" onClick={copy}>
             <Icon name="copy" size={18} /> העתקה
           </button>
@@ -329,6 +335,14 @@ export function TeamsScreen() {
         <p className="hint small">משווים ממוצע לשחקן, כדי שקבוצה קצרה שמשלימה מהמפסידה תהיה הוגנת.</p>
       </details>
 
+      {leaving && (
+        <LeaveSheet
+          onClose={() => {
+            setLeaving(false);
+            setSel(null);
+          }}
+        />
+      )}
       {late && <LateSheet onClose={() => setLate(false)} onPick={onLate} />}
       {suggestion && (
         <SuggestSheet

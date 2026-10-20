@@ -37,6 +37,7 @@ import { BorrowCard } from './BorrowCard';
 import { Sheet, Stepper, Toggle } from './components';
 import { GoalBurst } from './GoalBurst';
 import { Icon } from './icons';
+import { LeaveSheet } from './LeaveSheet';
 import { celebrateGoal, playWhistle, stopSounds, unlockAudio, unlockOnNextTap } from './sounds';
 
 /** Quick picks in the match length sheet, in minutes. */
@@ -86,6 +87,7 @@ export function MatchScreen() {
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
   const [lengthOpen, setLengthOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const soundOn = useRef(true);
   soundOn.current = state.settings.goalSound !== 'off';
   // After a reload the time-up whistle has no tap of its own: unlock audio on any tap first.
@@ -346,7 +348,11 @@ export function MatchScreen() {
             <Icon name="undo" size={18} /> ביטול גול אחרון
           </button>
         )}
+        <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
+          <Icon name="leave" size={18} /> מישהו עזב?
+        </button>
       </div>
+      {leaving && <LeaveSheet onClose={() => setLeaving(false)} />}
 
       <BorrowCard m={m} r={r} set={set} />
 

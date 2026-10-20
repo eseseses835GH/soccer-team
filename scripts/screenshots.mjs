@@ -263,6 +263,65 @@ for (const scheme of ['light', 'dark']) {
     await c.close();
   }
   await ctx.close();
+
+  // Left early (v6): pick → confirm → the best sub comes in; then (no subs) a swap suggestion.
+  {
+    const lctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: scheme, isMobile: true, hasTouch: true, locale: 'he-IL', reducedMotion: 'reduce' });
+    const pg = await lctx.newPage();
+    pg.on('pageerror', (e) => errors.push(`${scheme} leave: ${e.message}`));
+    pg.on('console', (m) => m.type() === 'error' && !/fonts\.g/.test(m.text()) && errors.push(`${scheme} leave console: ${m.text()}`));
+    const lshot = async (name) => {
+      await pg.waitForTimeout(150);
+      await pg.screenshot({ path: `${out}/${scheme}-${name}.png` });
+      const sw = await pg.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    await pg.goto(base);
+    await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+    await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+    await pg.waitForSelector('.team');
+    await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+    await pg.getByRole('button', { name: 'התחלה' }).click();
+    await pg.getByRole('button', { name: '+ גול' }).first().click();
+    await pg.getByRole('button', { name: 'דילוג' }).click();
+    await pg.getByRole('button', { name: 'סיום משחק' }).click();
+    await pg.locator('.borrow').getByRole('button', { name: 'דילוג' }).click();
+    await pg.getByRole('button', { name: /לקבוצות/ }).click();
+    for (const name of ['אלון', 'ברק']) {
+      await pg.getByRole('button', { name: /הגיע מאוחר/ }).click();
+      await pg.getByPlaceholder('שם').fill(name);
+      await pg.getByRole('button', { name: 'הצטרף' }).click();
+      if (await pg.getByRole('button', { name: 'להשאיר ככה' }).isVisible()) await pg.getByRole('button', { name: 'להשאיר ככה' }).click();
+    }
+    await pg.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+    await pg.getByRole('button', { name: /עזב באמצע/ }).click();
+    await lshot('16a-leave-pick');
+    const outside = () => pg.getByRole('dialog').locator('.leave-team').filter({ hasNotText: 'על המגרש' }).filter({ hasNotText: 'מחליפים' }).first();
+    await outside().locator('.member').first().click();
+    await lshot('16b-leave-confirm');
+    await pg.getByRole('button', { name: 'כן, הוא עזב' }).click();
+    await lshot('16c-leave-sub');
+    await pg.getByRole('dialog').getByRole('button', { name: /נכנס$/ }).first().click();
+    await pg.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+    await lshot('16d-teams-after-leave');
+    await pg.getByRole('button', { name: /חזרה למשחק/ }).click();
+    await lshot('16e-match-leave-link');
+    // No subs left: try the team outside until a swap is suggested (at most 3 leave).
+    let swapShown = false;
+    for (let n = 0; n < 3 && !swapShown; n++) {
+      await pg.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+      await pg.getByRole('button', { name: 'מישהו עזב?' }).click();
+      await outside().locator('.member').last().click();
+      await pg.getByRole('button', { name: 'כן, הוא עזב' }).click();
+      if (await pg.getByRole('dialog').isVisible()) {
+        swapShown = true;
+        await lshot('16f-leave-swaps');
+        await pg.getByRole('button', { name: 'להשאיר ככה' }).click();
+      }
+    }
+    if (!swapShown) console.log(`${scheme}: no swap suggestion came up`);
+    await lctx.close();
+  }
 }
 await browser.close();
 if (errors.length) {
