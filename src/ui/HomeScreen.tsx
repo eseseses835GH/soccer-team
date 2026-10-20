@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { MIN_TEAM_SIZE, planFormat, type FormatPlan } from '../engine';
 import { presentPlayers, useStore } from '../state/store';
 import { useUi } from './App';
+import { shouldOfferInstall } from '../state/install';
 import { CardBadges, Empty, Sheet } from './components';
+import { InstallCard, useInstall } from './InstallPrompt';
 import { splitTeams } from './split';
 
 const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
@@ -29,6 +31,7 @@ export function HomeScreen() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
   const [confirmResplit, setConfirmResplit] = useState(false);
+  const install = useInstall();
 
   const present = presentPlayers(state);
   const plan = planFormat(present.length, state.teamSize);
@@ -76,8 +79,18 @@ export function HomeScreen() {
     );
   }
 
+  // Add to home screen (v6): from the second use on, never while a match clock runs.
+  const offerInstall = shouldOfferInstall(install.flags, {
+    now: Date.now(),
+    standalone: install.standalone,
+    canOffer: install.canOffer,
+    onHome: true,
+    clockRunning: !!state.match?.clock.running,
+  });
+
   return (
     <section className="home" aria-labelledby="home-h">
+      {offerInstall && <InstallCard install={install} />}
       <div className="hero">
         <h1 id="home-h">מי הגיע היום?</h1>
         <p className="hero-count" aria-live="polite">

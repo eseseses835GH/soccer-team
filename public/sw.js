@@ -10,7 +10,7 @@ const BUILD = '__BUILD_ID__';
 const PRECACHE = [/*__PRECACHE__*/];
 const CACHE = `kochot-${BUILD}`;
 const FONTS = 'kochot-fonts'; // kept across versions
-const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icon-192.png'];
+const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icon-192.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   // `reload` skips the HTTP cache so we never precache a stale index.html. If anything fails, the

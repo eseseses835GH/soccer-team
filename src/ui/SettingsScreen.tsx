@@ -9,6 +9,7 @@ import { copyText, downloadText, nativeShare } from '../share';
 import { useUi } from './App';
 import { RatingSlider, Segmented, Stepper, Toggle } from './components';
 import { Icon } from './icons';
+import { InstallSettings } from './InstallPrompt';
 
 export function SettingsScreen() {
   const { state, dispatch } = useStore();
@@ -292,6 +293,8 @@ export function SettingsScreen() {
         </div>
         <p className="hint small">שחזור מקובץ: במסך השחקנים, ״ייבוא רשימה״.</p>
       </div>
+
+      <InstallSettings />
 
       <details className="group fold">
         <summary>מתקדם: משקלים באיזון</summary>

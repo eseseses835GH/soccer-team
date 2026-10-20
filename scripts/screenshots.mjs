@@ -216,6 +216,52 @@ for (const scheme of ['light', 'dark']) {
   await checkLayout('settings');
   const dir = await page.evaluate(() => getComputedStyle(document.body).direction);
   if (dir !== 'rtl') errors.push(`${scheme}: direction is ${dir}`);
+
+  // Add to home screen (v6): the card on the second use, on iPhone Safari, Instagram on iOS, and Android Chrome.
+  const IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
+  const INSTA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 350.0.0.0.0';
+  for (const [name, ua] of [['16a-install-ios', IOS], ['16b-install-ios-inapp', INSTA], ['16c-install-android', null]]) {
+    const c = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      colorScheme: scheme,
+      isMobile: true,
+      hasTouch: true,
+      locale: 'he-IL',
+      reducedMotion: 'reduce',
+      ...(ua ? { userAgent: ua } : {}),
+    });
+    const p = await c.newPage();
+    p.on('pageerror', (e) => errors.push(`${scheme} ${name}: ${e.message}`));
+    await p.goto(base);
+    await p.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+    await p.evaluate(() => {
+      const f = JSON.parse(localStorage.getItem('kochot:install'));
+      localStorage.setItem('kochot:install', JSON.stringify({ ...f, useAt: Date.now() - 13 * 3600e3 }));
+    });
+    await p.reload();
+    if (!ua)
+      await p.evaluate(() => {
+        const e = new Event('beforeinstallprompt', { cancelable: true });
+        e.prompt = async () => {};
+        e.userChoice = new Promise(() => {});
+        window.dispatchEvent(e);
+      });
+    await p.waitForSelector('.install-card');
+    // A reload restores the scroll anchor (the title), which now sits below the card; a real launch starts at the top.
+    await p.evaluate(() => scrollTo(0, 0));
+    await p.waitForTimeout(150);
+    await p.screenshot({ path: `${out}/${scheme}-${name}.png` });
+    const sw = await p.evaluate(() => document.documentElement.scrollWidth);
+    if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    if (name === '16a-install-ios') {
+      await p.getByRole('button', { name: 'הגדרות' }).click();
+      await p.locator('.install-settings').scrollIntoViewIfNeeded();
+      await p.waitForTimeout(150);
+      await p.screenshot({ path: `${out}/${scheme}-16d-install-settings.png` });
+    }
+    await c.close();
+  }
   await ctx.close();
 }
 await browser.close();

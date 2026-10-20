@@ -2,6 +2,7 @@
   "name": "כוחות – חלוקה לקבוצות",
   "short_name": "כוחות",
   "description": "חלוקה הוגנת לקבוצות כדורגל בלחיצה אחת",
+  "id": "./",
   "lang": "he",
   "dir": "rtl",
   "start_url": "./",
@@ -9,9 +10,10 @@
   "display": "standalone",
   "background_color": "#f5f4ef",
   "theme_color": "#f5f4ef",
+  "categories": ["sports"],
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
