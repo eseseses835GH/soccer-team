@@ -70,7 +70,7 @@
 
 ## Known limitations
 - **Not tested on real phones:** the native share sheet, the iOS wake lock and vibration (iOS has no vibration API), and the install-to-home-screen flow were not checked on actual devices.
-- **First visit needs a connection:** the service worker caches on first use, so if the very first visit is offline, nothing is cached yet. Also, iOS only stops evicting local data once the app is added to the home screen; the app doesn't prompt for that yet.
+- **First visit needs a connection:** the service worker caches on first use, so if the very first visit is offline, nothing is cached yet. Also, iOS only stops evicting local data once the app is added to the home screen; since v6 the app suggests that from the second use (see below).
 - **Swap suggestions aren't browser-tested:** the "teams filled" suggestion and the dominance hint are unit-tested, but the browser flow doesn't trigger them.
 - **History is per phone:** past evenings (results, scorers, who played) are saved on the phone that ran the match and in the backup *file*, not in the backup link. Who was borrowed from the losing team isn't recorded, so borrowers' wins aren't counted.
 - **No way to mark someone as left:** you untick them at home, which flags the teams as out of date.
@@ -81,7 +81,7 @@
 
 ## Next steps, most valuable first
 1. **Try it at a real game** on 2–3 phones (iOS and Android): share, wake lock, install, offline. Then fix what hurts.
-2. **"Add to home screen" prompt** after the second use, so iOS keeps the data.
+2. ~~**"Add to home screen" prompt** after the second use, so iOS keeps the data.~~ Done (v6).
 3. **"Left early" button** on the teams and match screens: remove a player and suggest one swap.
 4. **History across evenings:** done (v3: evening summary, list of past evenings, all-time leaders). Next: use results to nudge levels, and sync the history between organizers.
 5. **Shared roster for two organizers** without a backend: re-import a backup link to merge changes. A real sync (Supabase) only if they actually need it.
@@ -162,3 +162,8 @@
 # v5: multi-delete, swipe tip, fold arrows
 - **Built:** select mode on the players list with one confirmation and one `deletePlayers` reducer action; a one-time swipe tip with a nudge of the first row; the swiped row keeps the name in place; fold chevrons fixed (a nested fold was flipped by its open parent).
 - **Tested:** reducer (several players at once: teams cancelled, pairs and attendance cleaned, the evening archived once; players outside the teams keep them; a deleted sub cancels them). e2e: mouse-drag swipe (name stays put), tip dismiss survives reload, select mode (tap selects, no swipe, count, confirmation lists names, deletes, leaves select mode, select all + cancel), nested fold chevrons differ. Screenshots `03-players-tip`, `03e`/`03f` folds, `03g` select mode, `03h` multi confirm, `05c` teams fold open, `11b` settings fold open (light + dark).
+
+# v6: add to home screen
+- **Built:** from the second use (opened again 12+ h after the first use began), a card at the top of the main screen: "התקנה" via Chrome's prompt, or illustrated Safari steps on iPhone/iPad (open in Safari first in Instagram/Facebook…); "אחר כך" (a week) / "לא להציג שוב"; never while a match clock runs or when already installed. Settings → "התקנה במסך הבית" keeps the steps. Manifest `id`, 180 px apple-touch-icon, status-bar meta (DECISIONS → Add to home screen (v6)).
+- **Tested:** unit (`src/state/install.test.ts`: use counting, the show rule, dismissals, junk flags, iPhone/iPad/in-app/Chrome-iOS/Android detection); e2e step 16 (not on the first use, shown on the second, iPhone steps + share icon, above the main button, "later" remembered and back after the week, hidden while the clock runs, "never" remembered, Settings steps, Instagram → open in Safari, standalone never, Android prompt one tap → installed). Screenshots `16a`–`16d` (light + dark).
+- **Not verified:** on real phones (Safari's menu wording in Hebrew, iOS 26 layout, Chrome's real prompt).

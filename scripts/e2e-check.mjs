@@ -485,6 +485,117 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await tctx.close();
 }
 
+// 16. Add to home screen (v6): never on the first use; from the second use (12+ hours later) a card
+// on the main screen with Safari's steps on iPhone; "אחר כך" waits a week, "לא להציג שוב" is for good;
+// never while a match clock runs; never when opened from the home screen; Chrome's prompt is one tap.
+{
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
+  const INSTA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 350.0.0.0.0';
+  const phone = (ua, init) => async () => {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'he-IL', ...(ua ? { userAgent: ua } : {}) });
+    if (init) await c.addInitScript(init);
+    const p = await c.newPage();
+    p.on('pageerror', (e) => errors.push(`install: ${e.message}`));
+    return [c, p];
+  };
+  const flags = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('kochot:install')));
+  // Pretend the current use began 13 hours ago, so the next open is a new use.
+  const nextUse = async (p, patch = {}) => {
+    await p.evaluate((patch) => {
+      const f = JSON.parse(localStorage.getItem('kochot:install'));
+      localStorage.setItem('kochot:install', JSON.stringify({ ...f, useAt: Date.now() - 13 * 3600e3, ...patch }));
+    }, patch);
+    await p.reload();
+    await p.waitForSelector('.hero');
+  };
+  const card = (p) => p.locator('.install-card');
+
+  const [ic, ip] = await phone(IPHONE)();
+  await ip.goto(base);
+  await ip.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).tap();
+  await ip.reload();
+  await ip.waitForSelector('.hero');
+  assert((await card(ip).count()) === 0, 'install: not shown on the first use');
+  assert((await flags(ip)).uses === 1, `install: first use counted once (${(await flags(ip)).uses})`);
+  await nextUse(ip);
+  assert((await flags(ip)).uses === 2, 'install: second use counted');
+  assert(await card(ip).isVisible(), 'install: shown on the second use');
+  assert(await card(ip).getByText(/הוספה למסך הבית״ ואז/).isVisible(), 'install: iPhone shows the Safari steps');
+  assert((await card(ip).getByRole('img', { name: 'שיתוף' }).count()) === 1, 'install: the share icon is drawn');
+  assert((await card(ip).getByRole('button', { name: 'התקנה' }).count()) === 0, 'install: no install button on iOS');
+  // The card sits in the page flow: it never covers the big button.
+  const cardBox = await card(ip).boundingBox();
+  const heroBtn = await ip.getByRole('button', { name: 'עושים כוחות' }).boundingBox();
+  assert(cardBox.y + cardBox.height <= heroBtn.y, 'install: card above the main button, not over it');
+  await card(ip).getByRole('button', { name: 'אחר כך' }).tap();
+  assert((await card(ip).count()) === 0, 'install: "later" hides it');
+  await nextUse(ip);
+  assert((await card(ip).count()) === 0, 'install: "later" remembered on the next use');
+  const later = await flags(ip);
+  assert(later.snoozeUntil - Date.now() > 6.9 * 864e5, 'install: "later" waits about a week');
+  await nextUse(ip, { snoozeUntil: Date.now() - 1 });
+  assert(await card(ip).isVisible(), 'install: back after the week');
+  // Never while a match clock runs (back on the main screen during the match).
+  await ip.getByRole('button', { name: 'עושים כוחות' }).tap();
+  await ip.getByRole('button', { name: /התחלת משחק/ }).tap();
+  await ip.getByRole('button', { name: /^התחלה$/ }).tap();
+  await ip.goto(base + '#home');
+  await ip.waitForSelector('.hero');
+  assert((await card(ip).count()) === 0, 'install: hidden while the match clock runs');
+  await ip.getByRole('button', { name: /חזרה למשחק/ }).tap();
+  await ip.getByRole('button', { name: /עצירה/ }).tap();
+  await ip.goto(base + '#home');
+  await ip.waitForSelector('.hero');
+  assert(await card(ip).isVisible(), 'install: back once the clock is paused');
+  await card(ip).getByRole('button', { name: 'לא להציג שוב' }).tap();
+  await nextUse(ip, { snoozeUntil: 0 });
+  assert((await card(ip).count()) === 0 && (await flags(ip)).never === true, 'install: "never" remembered');
+  // Settings keeps the steps.
+  await ip.getByRole('button', { name: 'הגדרות' }).tap();
+  assert(await ip.locator('.install-settings').getByText(/הוספה למסך הבית״ ואז/).isVisible(), 'install: steps in Settings');
+  await ic.close();
+
+  // An in-app browser on iOS: open in Safari first.
+  const [nc, np] = await phone(INSTA)();
+  await np.goto(base);
+  await np.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).tap();
+  await nextUse(np);
+  assert(await card(np).getByText(/נפתח בתוך אינסטגרם/).isVisible(), 'install: Instagram on iOS says open in Safari');
+  await nc.close();
+
+  // Opened from the home screen: never.
+  const [sc, sp] = await phone(IPHONE, () => {
+    Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });
+  })();
+  await sp.goto(base);
+  await sp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).tap();
+  await nextUse(sp);
+  assert((await flags(sp)).uses === 2 && (await card(sp).count()) === 0, 'install: never shown when already installed');
+  await sp.getByRole('button', { name: 'הגדרות' }).tap();
+  assert(await sp.getByText('כוחות פתוחה ממסך הבית').isVisible(), 'install: Settings says it is installed');
+  await sc.close();
+
+  // Android Chrome: the captured prompt is one tap.
+  const [ac, ap] = await phone(null)();
+  await ap.goto(base);
+  await ap.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).tap();
+  await nextUse(ap);
+  assert((await card(ap).count()) === 0, 'install: no card on Android without an install prompt');
+  await ap.evaluate(() => {
+    const e = new Event('beforeinstallprompt', { cancelable: true });
+    e.prompt = async () => {
+      window.__prompted = true;
+    };
+    e.userChoice = Promise.resolve({ outcome: 'accepted' });
+    window.dispatchEvent(e);
+  });
+  await card(ap).getByRole('button', { name: 'התקנה' }).tap();
+  await ap.waitForFunction(() => window.__prompted);
+  await ap.waitForFunction(() => JSON.parse(localStorage.getItem('kochot:install')).installed === true);
+  assert((await card(ap).count()) === 0, 'install: card gone after installing');
+  await ac.close();
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {

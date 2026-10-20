@@ -7,6 +7,7 @@ import { Sheet, Toast } from './components';
 import { EveningScreen, HistoryScreen } from './HistoryScreen';
 import { GroupsSheet } from './GroupsSheet';
 import { HomeScreen } from './HomeScreen';
+import { useRecordUse } from './InstallPrompt';
 import { Icon } from './icons';
 import { MatchScreen } from './MatchScreen';
 import { PlayersScreen } from './PlayersScreen';
@@ -59,6 +60,7 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<Backup | null>(null);
   const timer = useRef<number>(undefined);
+  useRecordUse(state.players.length > 0);
 
   const go = useCallback((r: Route, p = '') => {
     setRoute(r);

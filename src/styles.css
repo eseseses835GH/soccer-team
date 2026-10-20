@@ -2332,3 +2332,102 @@ thead th {
   margin: 14px auto 4px;
   font-weight: 600;
 }
+
+/* ---------- add to home screen (v6) ---------- */
+.install-card {
+  margin-block: 8px 4px;
+  padding: 14px 14px 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.install-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.install-icon {
+  flex: none;
+  border-radius: 10px;
+}
+.install-card h2 {
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.install-card .hint.small {
+  margin-block-start: 2px;
+  line-height: 1.45;
+}
+.install-go {
+  margin-block-start: 12px;
+  inline-size: 100%;
+}
+.install-steps {
+  margin: 12px 0 0;
+  padding-inline-start: 22px;
+  display: grid;
+  gap: 8px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.install-steps.plain {
+  list-style: none;
+  padding-inline-start: 0;
+}
+.install-steps li::marker {
+  font-weight: 700;
+  color: var(--ink-3);
+}
+.install-steps .step-note {
+  display: block;
+  margin-block-start: 2px;
+  color: var(--ink-3);
+}
+.key-glyph {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 24px;
+  block-size: 24px;
+  padding-inline: 4px;
+  margin-inline: 2px;
+  vertical-align: -6px;
+  border-radius: 7px;
+  background: var(--sunk);
+  color: #0a7aff;
+  font-weight: 800;
+  line-height: 1;
+}
+:root[data-theme='dark'] .key-glyph {
+  color: #4aa3ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .key-glyph {
+    color: #4aa3ff;
+  }
+}
+.install-inapp {
+  margin-block-start: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--notice-bg);
+  color: var(--notice-ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.install-card > .hint.small {
+  margin-block-start: 8px;
+  color: var(--ink-3);
+}
+.install-actions {
+  display: flex;
+  gap: 18px;
+  margin-block-start: 4px;
+}
+.text-btn.quiet {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.install-settings .install-steps {
+  margin-block-end: 4px;
+}
