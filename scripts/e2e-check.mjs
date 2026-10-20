@@ -93,7 +93,9 @@ assert((await snap()) !== before, 're-roll should change teams');
 const beforeLate = await snap();
 await page.getByRole('button', { name: /הגיע מאוחר/ }).click();
 await page.getByPlaceholder('שם').fill('מאחר');
-await page.getByRole('button', { name: 'הצטרף' }).click();
+await page.getByRole('button', { name: 'המשך' }).click();
+assert((await page.getByRole('dialog').locator('.lead').innerText()) === 'עוד לא התחיל משחק', 'late: no match yet');
+await page.getByRole('button', { name: /^נכנס עכשיו · קבוצה חדשה$/ }).click();
 assert(JSON.stringify(await teamSizes()) === '[5,5,5,5,3]', `late → new team, sizes ${await teamSizes()}`);
 const afterLate = (await snap()).split('|');
 assert(beforeLate.split('|').every((team) => afterLate.includes(team)), 'existing teams untouched by a late arrival');
@@ -312,11 +314,13 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   await pg.getByRole('button', { name: 'סיום משחק' }).click();
   await pg.locator('.borrow').getByRole('button', { name: 'דילוג' }).click();
   await pg.getByRole('button', { name: /לקבוצות/ }).click();
-  // Two late arrivals: the short team fills up, then one waits as a sub.
-  for (const name of ['מאחר א', 'מאחר ב']) {
+  // Two late arrivals: one goes in and fills the short team, the other waits on the side.
+  for (const [name, choice] of [['מאחר א', /^נכנס עכשיו/], ['מאחר ב', /^מחכה בצד$/]]) {
     await pg.getByRole('button', { name: /הגיע מאוחר/ }).click();
     await pg.getByPlaceholder('שם').fill(name);
-    await pg.getByRole('button', { name: 'הצטרף' }).click();
+    await pg.getByRole('button', { name: 'המשך' }).click();
+    assert((await pg.getByRole('dialog').locator('.lead').innerText()) === 'בין משחקים', 'late: between matches');
+    await pg.getByRole('button', { name: choice }).click();
     if (await pg.getByRole('button', { name: 'להשאיר ככה' }).isVisible()) await pg.getByRole('button', { name: 'להשאיר ככה' }).click();
   }
   assert(JSON.stringify(await sizes()) === '[5,5,5]', `before leaving: ${await sizes()}`);
@@ -368,6 +372,63 @@ assert((await other.getByRole('button', { name: 'ערבים קודמים' }).cou
   assert(!end2.result.playerIds.includes(end2.players.find((p) => p.name === gone2).id), 'second leaver off the teams');
   assert(await pg.locator('.clock').isVisible(), 'still on the match screen');
   console.log(`left early: ${gone}, then ${gone2}`);
+}
+
+// 11c. Late arrival v8, always asked: 6 players at 4-a-side play 3×3. Before kickoff "מחכה בצד" keeps 3×3;
+// mid-match "נכנס עכשיו" joins the suggested team on the pitch (4×3); mid-match "מחכה בצד" → bench,
+// then swapped in after the match the usual way (tap the sub, then a player).
+{
+  const pg = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  pg.on('pageerror', (e) => errors.push(e.message));
+  const stored = () => pg.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  const sizes = () => pg.locator('.team').evaluateAll((cs) => cs.map((c) => c.querySelectorAll('.member').length));
+  const arrive = async (open, choice, context) => {
+    await pg.getByRole('button', { name: open }).click();
+    const sheet = pg.getByRole('dialog');
+    const name = await sheet.locator('.pick-list .name').first().innerText();
+    await sheet.locator('.pick-list button').first().click();
+    assert((await sheet.locator('h2').innerText()) === `${name} הגיע`, `late: choice step for ${name}`);
+    assert(context.test(await sheet.locator('.lead').innerText()), `late: context line ${await sheet.locator('.lead').innerText()}`);
+    await sheet.getByRole('button', { name: choice }).click();
+    await pg.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+    return name;
+  };
+  await pg.goto(base);
+  await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await pg.getByRole('button', { name: 'ניקוי' }).click();
+  for (let i = 0; i < 6; i++) await pg.locator('.attend label').nth(i).click();
+  await pg.getByRole('radiogroup', { name: 'כמה בקבוצה' }).getByRole('radio', { name: '4' }).click();
+  await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+  await pg.waitForSelector('.team');
+  assert(JSON.stringify(await sizes()) === '[3,3]', `3×3 at 4-a-side: ${await sizes()}`);
+  await arrive(/הגיע מאוחר/, /^מחכה בצד$/, /^עוד לא התחיל משחק$/);
+  assert(JSON.stringify(await sizes()) === '[3,3]', `wait keeps 3×3: ${await sizes()}`);
+  assert((await pg.locator('.bench .member').count()) === 1, 'he waits on the bench');
+  assert(await pg.getByText('להכנסה: נוגעים במחליף ואז בשחקן שיוצא').isVisible(), 'bench hint');
+  assert((await pg.getByText('הנוכחות או גודל הקבוצה השתנו').count()) === 0, 'late: not flagged as changed');
+  await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+  await pg.getByRole('button', { name: 'התחלה' }).click();
+  const keeperBefore = await pg.locator('.keeper').allInnerTexts();
+  const joined = await arrive('מישהו הגיע?', /^נכנס עכשיו לקבוצה 2$/, /^משחק באמצע · קבוצה 1 נגד קבוצה 2$/);
+  const s1 = await stored();
+  const joinedId = s1.players.find((p) => p.name === joined).id;
+  assert(s1.result.assignment[s1.result.playerIds.indexOf(joinedId)] === 1, 'mid-match: joined the suggested team on the pitch');
+  assert(s1.match.clock.running, 'the clock keeps running');
+  assert(JSON.stringify(await pg.locator('.keeper').allInnerTexts()) === JSON.stringify(keeperBefore), 'the keepers in goal stay');
+  const waiting = await arrive('מישהו הגיע?', /^מחכה בצד$/, /^משחק באמצע/);
+  await pg.getByRole('button', { name: '+ גול' }).first().click();
+  await pg.getByRole('button', { name: 'דילוג' }).click();
+  await pg.getByRole('button', { name: 'סיום משחק' }).click();
+  const s2 = await stored();
+  assert(s2.match.history[0].sides[1].includes(joinedId), 'the match record has him');
+  await pg.getByRole('button', { name: /לקבוצות/ }).click();
+  assert(JSON.stringify(await sizes()) === '[3,4]', `after the match: ${await sizes()}`);
+  assert((await pg.locator('.bench .member').count()) === 2, 'two wait on the bench');
+  await pg.locator('.bench .member', { hasText: waiting }).click();
+  await pg.locator('.team').first().locator('.member').first().click();
+  assert((await pg.locator('.team .name').allInnerTexts()).includes(waiting), 'the waiting sub is swapped in');
+  assert(JSON.stringify(await sizes()) === '[3,4]', `swap keeps sizes: ${await sizes()}`);
+  await pg.context().close();
 }
 
 // 11. Groups: a second group starts empty, switching back keeps the first one's roster.

@@ -11,7 +11,7 @@
   - A keeper rotation order per team, and a subs bench.
   - Tap-to-swap, including subs, with undo.
   - Re-roll, WhatsApp share, copy.
-  - **Late arrival** without reshuffling, plus a swap suggestion when the teams fill up.
+  - **Late arrival** without reshuffling: always asks "נכנס עכשיו" (suggested team, or another) or "מחכה בצד" (v8); also from the match screen ("מישהו הגיע?").
   - Rule warnings, and a folded table of per-team averages.
 - **Match night:**
   - Countdown timer: overtime, wake lock, vibrate/beep, survives reloads.

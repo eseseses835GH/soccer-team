@@ -1,7 +1,8 @@
 import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solution } from '../engine';
 import { addTeam, type MatchState } from '../match/match';
-import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, teamBibs, type AppState, type GameResult, type Player, type Settings } from './model';
+import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, teamBibs, type AppState, type Player, type Settings } from './model';
 import { addEvening, buildEvening, mergeHistory, stampSides, type EveningRecord } from './history';
+import { lateJoin, type LateChoice } from './late';
 import { leaveEarly, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
@@ -34,7 +35,8 @@ export type Action =
   | { type: 'swapSub'; subId: string; i: number }
   | { type: 'applyAssignment'; assignment: number[]; swaps: [number, number][] }
   | { type: 'resetSwaps' }
-  | { type: 'lateJoin'; player?: Player; id: string; result: GameResult; now: number }
+  /** Someone arrived late (late.ts): he goes in now or waits on the side; nobody reshuffled. */
+  | { type: 'lateJoin'; player?: Player; id: string; choice: LateChoice; seed: number; now: number }
   /** Someone left early (leave.ts): out of the teams and today's attendance, nobody reshuffled. */
   | { type: 'leave'; id: string; now: number }
   /** A sub joins a team that is short (after someone left). */
@@ -241,14 +243,15 @@ function baseReducer(state: AppState, action: Action): AppState {
       if (!state.result) return state;
       const players = action.player ? [...state.players, action.player] : state.players;
       const presentIds = state.presentIds.includes(action.id) ? state.presentIds : [...state.presentIds, action.id];
-      const grew = action.result.numTeams > state.result.numTeams;
+      const j = lateJoin(state.result, state.match, action.id, action.choice, leaveCtx(state), action.seed);
+      const grew = j.result.numTeams > state.result.numTeams;
       return {
         ...state,
         players,
         presentIds,
         dayAt: action.now,
-        result: action.result,
-        match: state.match && grew ? addTeam(state.match, action.result.numTeams - 1) : state.match,
+        result: j.result,
+        match: j.match && grew ? addTeam(j.match, j.result.numTeams - 1) : j.match,
       };
     }
     case 'leave': {

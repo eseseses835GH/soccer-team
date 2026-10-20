@@ -1,16 +1,15 @@
 import { useMemo, useState } from 'react';
-import { ATTR_KEYS, evaluate, randomSeed, scoreFromCost, suggestSwaps, type SwapSuggestion } from '../engine';
+import { ATTR_KEYS, evaluate } from '../engine';
 import { ATTR_LABELS, goalsEvery } from '../i18n';
 import { startSession } from '../match/match';
-import { applyCards } from '../state/cards';
 import { FIELD_POSITIONS } from '../state/positions';
-import { lateJoin } from '../state/late';
-import { engineOptions, newId, teamLook, type AppState, type GameResult, type Player } from '../state/model';
+import { engineOptions, teamLook, type AppState, type GameResult, type Player } from '../state/model';
 import { isResultStale, useStore } from '../state/store';
 import { buildShareText, copyText, nativeShare, whatsappUrl } from '../share';
 import { useUi } from './App';
-import { CardBadges, Empty, LevelPicker, ScoreMeter, Sheet } from './components';
+import { CardBadges, Empty, ScoreMeter } from './components';
 import { Icon } from './icons';
+import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
 import { rerollTeams, splitTeams } from './split';
 
@@ -79,7 +78,6 @@ export function TeamsScreen() {
   const [busy, setBusy] = useState(false);
   const [late, setLate] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [suggestion, setSuggestion] = useState<SwapSuggestion | null>(null);
   const r = state.result;
   const data = useMemo(() => (r ? evaluateResult(state, r) : null), [state, r]);
 
@@ -163,26 +161,6 @@ export function TeamsScreen() {
   const startMatch = () => {
     if (!state.match) dispatch({ type: 'setMatch', match: startSession(k), now: Date.now() });
     go('match');
-  };
-
-  const onLate = (player: Player, isNew: boolean) => {
-    const j = lateJoin(r, player.id, randomSeed());
-    dispatch({ type: 'lateJoin', player: isNew ? player : undefined, id: player.id, result: j.result, now: Date.now() });
-    setLate(false);
-    const look = j.team !== null ? teamLook(state.settings, j.team) : null;
-    if (j.outcome === 'bench') notify(`${player.name} מחכה בחוץ כמחליף`);
-    else if (j.outcome === 'newTeam') notify(`נפתחה קבוצה חדשה: ${look!.the}`);
-    else if (j.outcome === 'waiting') notify(`${player.name} הצטרף ${look!.to}`);
-    else {
-      notify(`${player.name} השלים את ${look!.the}`);
-      const roster = isNew ? [...state.players, player] : state.players;
-      const map = new Map(roster.map((p) => [p.id, p]));
-      const ps = j.result.playerIds.map((id) => map.get(id)!);
-      const c = new Array<number>(j.result.numTeams).fill(0);
-      j.result.assignment.forEach((t) => c[t]++);
-      const s = suggestSwaps(ps, j.result.assignment, j.result.numTeams, engineOptions(state.settings), state.constraints, c.sort((a, b) => b - a));
-      if (s) setSuggestion(s);
-    }
   };
 
   const violations = [
@@ -273,6 +251,7 @@ export function TeamsScreen() {
               {nameOf(id)}
             </button>
           ))}
+          {sel === null && <p className="hint small bench-hint">להכנסה: נוגעים במחליף ואז בשחקן שיוצא</p>}
         </div>
       )}
 
@@ -343,104 +322,14 @@ export function TeamsScreen() {
           }}
         />
       )}
-      {late && <LateSheet onClose={() => setLate(false)} onPick={onLate} />}
-      {suggestion && (
-        <SuggestSheet
-          suggestion={suggestion}
-          names={r.playerIds}
-          nameOf={nameOf}
-          onClose={() => setSuggestion(null)}
-          onApply={() => {
-            dispatch({ type: 'applyAssignment', assignment: suggestion.assignment, swaps: suggestion.swaps });
-            setSuggestion(null);
-            notify('בוצע');
+      {late && (
+        <LateSheet
+          onClose={() => {
+            setLate(false);
+            setSel(null);
           }}
         />
       )}
     </section>
-  );
-}
-
-function LateSheet({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, isNew: boolean) => void }) {
-  const { state } = useStore();
-  const [name, setName] = useState('');
-  const [level, setLevel] = useState(5);
-  const inGame = new Set([...(state.result?.playerIds ?? []), ...(state.result?.subIds ?? [])]);
-  const others = state.players.filter((p) => !inGame.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'he'));
-  const taken = state.players.some((p) => p.name.trim() === name.trim());
-  return (
-    <Sheet title="מי הגיע?" onClose={onClose}>
-      <p className="lead">הוא מצטרף לקבוצה שבחוץ או מחכה כמחליף. לא מערבבים את כולם מחדש.</p>
-      {others.length > 0 && (
-        <ul className="pick-list">
-          {others.map((p) => (
-            <li key={p.id}>
-              <button type="button" onClick={() => onPick(p, false)}>
-                <span className="name">{p.name}</span>
-                <CardBadges cards={p.cards} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form
-        className="late-new"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!name.trim() || taken) return;
-          onPick({ id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [] }, true);
-        }}
-      >
-        <label className="label" htmlFor="late-name">
-          מישהו חדש
-        </label>
-        <input id="late-name" className="input" placeholder="שם" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
-        {taken && <p className="field-error">כבר יש שחקן בשם הזה, בחרו אותו מהרשימה</p>}
-        <span className="label">רמה</span>
-        <LevelPicker value={level} onChange={setLevel} />
-        <button type="submit" className="btn btn-primary btn-block" disabled={!name.trim() || taken}>
-          הצטרף
-        </button>
-      </form>
-    </Sheet>
-  );
-}
-
-function SuggestSheet({
-  suggestion,
-  names,
-  nameOf,
-  onClose,
-  onApply,
-}: {
-  suggestion: SwapSuggestion;
-  names: string[];
-  nameOf: (id: string) => string;
-  onClose: () => void;
-  onApply: () => void;
-}) {
-  const before = scoreFromCost(suggestion.before);
-  const after = scoreFromCost(suggestion.after);
-  return (
-    <Sheet title="הקבוצה שבחוץ התמלאה" onClose={onClose}>
-      <p className="lead">
-        אפשר לשפר את האיזון מ-<strong>{before}</strong> ל-<strong>{after}</strong> עם {suggestion.swaps.length === 1 ? 'החלפה אחת' : 'שתי החלפות'}:
-      </p>
-      <ul className="swap-list">
-        {suggestion.swaps.map(([i, j]) => (
-          <li key={`${i}-${j}`}>
-            {nameOf(names[i])} ⇄ {nameOf(names[j])}
-          </li>
-        ))}
-      </ul>
-      <div className="stack">
-        <button type="button" className="btn btn-primary btn-block" onClick={onApply}>
-          להחליף
-        </button>
-        <button type="button" className="btn btn-quiet btn-block" onClick={onClose}>
-          להשאיר ככה
-        </button>
-      </div>
-    </Sheet>
   );
 }

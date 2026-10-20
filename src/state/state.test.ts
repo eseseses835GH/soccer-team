@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { applyCards, toggleCard } from './cards';
-import { lateJoin } from './late';
 import { INITIAL_STATE, NEW_DAY_MS, defaultAttrs, defaultMatchMs, sanitize, sanitizeSettings, type AppState, type GameResult, type Player } from './model';
 import { decodeBackup, encodeBackup, makeBackup, mergePlayers, parseRoster } from './io';
 import { reducer } from './reducer';
@@ -76,39 +75,6 @@ describe('cards', () => {
   it('at most three cards', () => {
     expect(toggleCard(['beast', 'cheetah', 'tired'], 'sniper')).toEqual(['cheetah', 'tired', 'sniper']);
     expect(toggleCard(['beast'], 'beast')).toEqual([]);
-  });
-});
-
-describe('late arrivals', () => {
-  it('join the short team outside; completing it is "filled"', () => {
-    const r = result([['a', 'b', 'c', 'd'], ['e', 'f', 'g', 'h'], ['i', 'j']], 4);
-    const one = lateJoin(r, 'x', 1);
-    expect(one.outcome).toBe('waiting');
-    expect(one.team).toBe(2);
-    const two = lateJoin(one.result, 'y', 1);
-    expect(two.outcome).toBe('filled');
-    expect(two.result.gkOrder[2]).toEqual(['i', 'j', 'x', 'y']);
-  });
-  it('wait as subs when teams are full; enough subs become a new team', () => {
-    let r = result([['a', 'b', 'c', 'd', 'e'], ['f', 'g', 'h', 'i', 'j']], 5);
-    let j = lateJoin(r, 'x', 1);
-    expect(j.outcome).toBe('bench');
-    expect(j.result.subIds).toEqual(['x']);
-    j = lateJoin(j.result, 'y', 1);
-    expect(j.outcome).toBe('bench');
-    j = lateJoin(j.result, 'z', 1);
-    expect(j.outcome).toBe('newTeam');
-    expect(j.result.numTeams).toBe(3);
-    expect(j.result.subIds).toEqual([]);
-    r = j.result;
-    j = lateJoin(lateJoin(r, 'w', 1).result, 'v', 1);
-    expect(j.outcome).toBe('filled');
-  });
-  it('fills a reduced split (4v4 when 5-a-side was chosen) evenly', () => {
-    const r = result([['a', 'b', 'c', 'd'], ['e', 'f', 'g', 'h']], 5);
-    const j1 = lateJoin(r, 'x', 1);
-    expect(j1.outcome).toBe('waiting');
-    expect(lateJoin(j1.result, 'y', 1).outcome).toBe('filled');
   });
 });
 

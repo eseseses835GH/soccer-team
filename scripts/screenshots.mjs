@@ -128,6 +128,11 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('.team').nth(1).locator('.member').nth(1).click();
   await page.getByRole('button', { name: /הגיע מאוחר/ }).click();
   await shot('07-late-sheet');
+  await page.getByPlaceholder('שם').fill('אורח');
+  await page.getByRole('button', { name: 'המשך' }).click();
+  await page.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+  await shot('07b-late-choose');
+  await checkLayout('late choose');
   await page.getByRole('button', { name: 'סגירה' }).click();
   await page.getByRole('button', { name: /התחלת משחק/ }).click();
   await page.waitForSelector('.clock');
@@ -137,6 +142,14 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('.sheet .pick-list button').first().click();
   await shot('09-match');
   await checkLayout('match');
+  await page.getByRole('button', { name: 'מישהו הגיע?' }).click();
+  await page.getByPlaceholder('שם').fill('אורח');
+  await page.getByRole('button', { name: 'המשך' }).click();
+  await page.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+  await page.waitForSelector('.goal-burst', { state: 'detached', timeout: 8000 }).catch(() => {});
+  await shot('09l-late-choose-live');
+  await checkLayout('late choose live');
+  await page.getByRole('button', { name: 'סגירה' }).click();
   // Match length (v5): the sheet from the chip under the clock; +1 minute for this match; no timer.
   await page.waitForSelector('.goal-burst', { state: 'detached', timeout: 8000 }).catch(() => {});
   await page.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
@@ -315,10 +328,11 @@ for (const scheme of ['light', 'dark']) {
     await pg.getByRole('button', { name: 'סיום משחק' }).click();
     await pg.locator('.borrow').getByRole('button', { name: 'דילוג' }).click();
     await pg.getByRole('button', { name: /לקבוצות/ }).click();
-    for (const name of ['אלון', 'ברק']) {
+    for (const [name, choice] of [['אלון', /^נכנס עכשיו/], ['ברק', /^מחכה בצד$/]]) {
       await pg.getByRole('button', { name: /הגיע מאוחר/ }).click();
       await pg.getByPlaceholder('שם').fill(name);
-      await pg.getByRole('button', { name: 'הצטרף' }).click();
+      await pg.getByRole('button', { name: 'המשך' }).click();
+      await pg.getByRole('button', { name: choice }).click();
       if (await pg.getByRole('button', { name: 'להשאיר ככה' }).isVisible()) await pg.getByRole('button', { name: 'להשאיר ככה' }).click();
     }
     await pg.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
