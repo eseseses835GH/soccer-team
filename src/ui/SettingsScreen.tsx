@@ -10,6 +10,7 @@ import { useUi } from './App';
 import { RatingSlider, Segmented, Stepper, Toggle } from './components';
 import { Icon } from './icons';
 import { HelpLink } from './HelpScreen';
+import { OrganizersSheet } from './OrganizersSheet';
 import { SettingsFold } from './SettingsFold';
 
 const RULE_LABEL = { apart: 'לא באותה קבוצה', together: 'תמיד באותה קבוצה' } as const;
@@ -17,6 +18,7 @@ const RULE_LABEL = { apart: 'לא באותה קבוצה', together: 'תמיד ב
 export function SettingsScreen({ focus }: { focus?: string }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
+  const [organizers, setOrganizers] = useState(false);
   // Opened from a help answer (#settings/<section>): scroll to that section.
   useEffect(() => {
     if (focus) document.getElementById(`set-${focus}`)?.scrollIntoView({ block: 'start' });
@@ -243,6 +245,11 @@ export function SettingsScreen({ focus }: { focus?: string }) {
                 ״{current.name}״: {current.synced ? STATUS_TEXT[sync.status] : 'בטלפון הזה בלבד. אפשר לסנכרן אותה מתפריט הקבוצות (שם הקבוצה למעלה במסך הראשי).'}
               </p>
               <div className="stack">
+                {current.synced && (
+                  <button type="button" className="btn btn-quiet btn-block" onClick={() => setOrganizers(true)}>
+                    מארגנים והזמנות
+                  </button>
+                )}
                 <button type="button" className="btn btn-quiet btn-block" onClick={() => void sync.signOut()}>
                   יציאה מהחשבון
                 </button>
@@ -350,6 +357,7 @@ export function SettingsScreen({ focus }: { focus?: string }) {
         </div>
       </SettingsFold>
 
+      {organizers && <OrganizersSheet onBack={() => setOrganizers(false)} onClose={() => setOrganizers(false)} />}
     </section>
   );
 }

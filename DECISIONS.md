@@ -467,3 +467,4 @@ Supersedes "Late arrivals" (v2): a late arrival no longer joins the smallest tea
 - **"הגרלה מחדש" asks first once the evening started** (a match played, a goal, or the clock ran): it reshuffles everyone and the table keeps counting by team number.
 - **Two groups can't have the same name** ("כבר יש קבוצה בשם הזה").
 - The phone's back button while a popup is open leaves that screen (nothing is lost); every popup has its own ✕. Left as is, per the user.
+- **Organizers are also reachable from Settings → חשבון** ("מארגנים והזמנות", for a synced group), not only from the group menu — the user couldn't find them.
