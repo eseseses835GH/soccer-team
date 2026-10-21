@@ -10,9 +10,11 @@ import { SyncError } from './supabase';
 export const liveKey = (live: LiveData | null) => (live ? stableKey({ ...live, at: 0 }) : 'ended');
 
 export interface PublisherOptions {
-  send(gid: string, live: LiveData | null): Promise<void>;
+  send(gid: string, live: LiveData | null): Promise<unknown>;
   /** Called after a successful send (e.g. to remember that this phone runs the evening). */
   onSent?(gid: string, live: LiveData | null): void;
+  /** The server said someone else runs the evening (or the rev moved on): the snapshot was dropped. */
+  onConflict?(gid: string, live: LiveData | null): void;
   isOnline?(): boolean;
   now?(): number;
   delay?: number;
@@ -72,10 +74,11 @@ export function createLivePublisher(o: PublisherOptions): LivePublisher {
         o.onSent?.(gid, live);
       } catch (e) {
         const code = e instanceof SyncError ? e.code : 'other';
-        if (code === 'denied' || code === 'invalid') {
-          // Not an organizer any more, or data the server won't take: resending won't help.
+        if (code === 'denied' || code === 'invalid' || code === 'conflict') {
+          // Not allowed, data the server won't take, or someone else runs it now: resending won't help.
           if (queue.get(gid) === live) queue.delete(gid);
           sent.set(gid, liveKey(live));
+          if (code === 'conflict') o.onConflict?.(gid, live);
         } else if (code !== 'offline') retry = true;
         // offline: stays queued until 'online' calls flush()
       }

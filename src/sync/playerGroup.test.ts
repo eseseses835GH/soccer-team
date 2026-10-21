@@ -47,7 +47,7 @@ const pub = (me: Partial<PublicGroup['me']> = {}, claimed: string[] = []): Publi
   updatedAt: '',
 });
 const liveData: LiveData = { v: 1, at: NOW, teamSize: 2, players: [{ id: 'a', name: 'אבי (הערב)' }], teams: [{ bib: 'red', ids: ['a', 'b'], keeper: 'a' }], subs: [], match: null };
-const row = (updatedAt: string, data = liveData): LiveRow => ({ data, updatedBy: null, byName: 'אלי', updatedAt });
+const row = (updatedAt: string, data = liveData): LiveRow => ({ data, updatedBy: null, byName: 'אלי', updatedAt, runner: null, runnerName: '', runnerSince: null, rev: 0 });
 
 describe('role branching', () => {
   it('a player group never runs the organizer sync; organizer groups do; local groups don’t', () => {

@@ -123,6 +123,20 @@ describe('live publisher', () => {
     expect(send).toHaveBeenCalledTimes(5);
   });
 
+  it('v12: someone else runs it → dropped (no retry) and reported', async () => {
+    const send = vi.fn(async () => {
+      throw new SyncError('someone else runs the evening', 'conflict');
+    });
+    const conflicts: string[] = [];
+    const pub = createLivePublisher({ send, isOnline: () => true, retryMs: 5000, onConflict: (g) => conflicts.push(g) });
+    pub.update('g', live(1));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(pub.pending().size).toBe(0);
+    await vi.runAllTimersAsync();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(conflicts).toEqual(['g']);
+  });
+
   it('a change during a send goes out right after it', async () => {
     let release!: () => void;
     const sent: number[] = [];

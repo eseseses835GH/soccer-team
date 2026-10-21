@@ -70,10 +70,12 @@ describe('liveFromState', () => {
     expect(lm.onPitch).toEqual(m.onPitch);
     expect(lm.queue).toEqual([0]);
     expect(lm.score).toEqual(m.onPitch[0] === 2 ? [1, 0] : [0, 1]);
-    expect(lm.goals).toEqual([{ team: 2 }]);
+    expect(lm.goals).toEqual([{ team: 2, at: T0 + 5 * MIN }]);
     expect(lm.clock).toEqual({ running: true, startedAt: T0 + 4 * MIN, elapsedMs: 0, lengthMs: 8 * MIN });
     expect(lm.borrow).toEqual({ team: 2, from: 0, ids: ['a2'] });
-    expect(lm.played).toEqual([{ a: 0, b: 1, goalsA: 0, goalsB: 1 }]);
+    expect(lm.played).toEqual([{ a: 0, b: 1, goalsA: 0, goalsB: 1, out: 0, goals: [{ team: 1, by: 'b2', at: T0 + MIN }], endedAt: T0 + 3 * MIN, ms: 3 * MIN }]);
+    expect(lm).toMatchObject({ conceded: m.conceded, pitchSince: m.pitchSince, dismissed: null });
+    expect(live).toMatchObject({ createdAt: T0, rules: { gkRotate: true, gkEvery: 1, matchMs: 8 * MIN, drawExtraMinutes: 2 } });
     expect(lm.extra).toBe(false);
     expect(live.teams[0].keeper).toBe('a2');
     expect(liveClockMs(lm.clock, T0 + 6 * MIN)).toBe(2 * MIN);
@@ -148,6 +150,23 @@ describe('liveApi (mocked network)', () => {
     expect(f.sb.rpc).toHaveBeenLastCalledWith('live_get', { p_group_id: 'g' });
     await f.api.set('g', null);
     expect(f.sb.rpc).toHaveBeenLastCalledWith('live_set', { p_group_id: 'g', p_data: null });
+  });
+  it('v12: set with rev returns the new rev; take / release control', async () => {
+    const f = fake({ data: 7 });
+    expect(await f.api.set('g', null, 6)).toBe(7);
+    expect(f.sb.rpc).toHaveBeenLastCalledWith('live_set', { p_group_id: 'g', p_data: null, p_rev: 6 });
+    expect(await f.api.releaseControl('g')).toBe(7);
+    expect(f.sb.rpc).toHaveBeenLastCalledWith('release_control', { p_group_id: 'g' });
+    const t = fake({ data: [{ data: { v: 1, teams: [] }, runner: 'u1', runner_name: 'דני', runner_since: '2026-10-21T10:00:00Z', rev: 3 }] });
+    expect(await t.api.takeControl('g')).toMatchObject({ runner: 'u1', runnerName: 'דני', runnerSince: '2026-10-21T10:00:00Z', rev: 3 });
+    expect(t.sb.rpc).toHaveBeenLastCalledWith('take_control', { p_group_id: 'g' });
+  });
+  it('v12: someone else runs it / stale rev → conflict; nothing to take → invalid', async () => {
+    await expect(fake({ error: { message: 'someone else runs the evening', code: '40001' } }).api.set('g', null)).rejects.toMatchObject({ code: 'conflict' });
+    await expect(fake({ error: { message: 'no live evening', code: 'P0002' } }).api.takeControl('g')).rejects.toMatchObject({ code: 'invalid' });
+  });
+  it('v10 rows (no runner columns) read as nobody runs it', () => {
+    expect(parseLiveRow({ data: { v: 1, teams: [] } })).toMatchObject({ runner: null, runnerName: '', runnerSince: null, rev: 0 });
   });
   it('a player publishing is denied', async () => {
     const f = fake({ error: { message: 'not allowed', code: '42501' } });
