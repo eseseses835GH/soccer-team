@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SyncDoc } from './doc';
 import type { RemoteApi, RemoteGroup } from './engine';
 import { parseInvites, parseOrganizers, type Invite, type Organizer } from './organizers';
+import type { MemberRole } from './players';
 
 const URL_ = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
 const KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() ?? '';
@@ -63,26 +64,29 @@ export async function authProviders(): Promise<{ google: boolean; email: boolean
 export class SyncError extends Error {
   constructor(
     message: string,
-    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'other',
+    /** taken = that roster player is already claimed by someone else (or you already claimed one). */
+    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'taken' | 'other',
   ) {
     super(message);
   }
 }
 
-function fail(error: { message?: string; code?: string; status?: number } | null): never {
+export function fail(error: { message?: string; code?: string; status?: number } | null): never {
   const msg = error?.message ?? 'error';
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new SyncError(msg, 'offline');
   if (/fetch|network|load failed/i.test(msg)) throw new SyncError(msg, 'offline');
   if (error?.code === 'PGRST301' || error?.code === '28000' || /jwt/i.test(msg)) throw new SyncError(msg, 'auth');
   if (error?.code === '42501') throw new SyncError(msg, 'denied');
-  if (error?.code === 'P0002') throw new SyncError(msg, 'invalid');
+  if (error?.code === 'P0002' || error?.code === '22023') throw new SyncError(msg, 'invalid');
+  if (error?.code === '23505') throw new SyncError(msg, 'taken');
   throw new SyncError(msg, 'other');
 }
 
 export function remoteApi(sb: SupabaseClient): RemoteApi & {
   createGroup(id: string, name: string, data: SyncDoc): Promise<RemoteGroup>;
   createInvite(groupId: string): Promise<string>;
-  joinGroup(token: string): Promise<{ id: string; name: string }>;
+  /** `role`: what the caller is in the group now ('player' joined with the player link). */
+  joinGroup(token: string): Promise<{ id: string; name: string; role: MemberRole }>;
   leaveGroup(groupId: string): Promise<void>;
   listOrganizers(groupId: string): Promise<Organizer[]>;
   listInvites(groupId: string): Promise<Invite[]>;
@@ -114,9 +118,9 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
     async joinGroup(token) {
       const { data, error } = await sb.rpc('join_group', { p_token: token });
       if (error) fail(error);
-      const row = (Array.isArray(data) ? data[0] : data) as { group_id: string; name: string } | undefined;
+      const row = (Array.isArray(data) ? data[0] : data) as { group_id: string; name: string; role?: string } | undefined;
       if (!row) throw new SyncError('invalid invite', 'invalid');
-      return { id: row.group_id, name: row.name };
+      return { id: row.group_id, name: row.name, role: row.role === 'player' ? 'player' : 'organizer' };
     },
     async leaveGroup(groupId) {
       const { error } = await sb.rpc('leave_group', { p_group_id: groupId });
@@ -132,6 +136,7 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
         .from('group_invites')
         .select('token,created_by,created_at,expires_at,revoked_at')
         .eq('group_id', groupId)
+        .eq('role', 'organizer') // the player link is separate (playersApi.playerInvite)
         .is('revoked_at', null)
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })

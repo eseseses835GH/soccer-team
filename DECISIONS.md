@@ -480,3 +480,64 @@ User: "only one person rates a player — who decided he's right? Let's take an 
 - **Sync merge:** a player that both phones changed and that has votes on any side is merged per field (name, keeper, positions… each: the side that changed it wins, this phone if both did); level + cards + sliders move as one unit; votes merge **per organizer** (union by user id; for the same user the side that changed wins). If the merged votes differ from those behind the chosen level, the level becomes their average: rebuilt from level + cards, or, when the sliders were tuned by hand, only `overall` moves and the tuning stays. Players without votes keep the old rule (this phone wins the whole player). Tests: `src/sync/votes.test.ts`.
 - **Leaving a group keeps your votes** (simplest; they're part of the player). An organizer's account going away doesn't matter yet.
 - **Mixed versions:** an older app drops `levelVotes` when it edits a player (sanitize), like positions in v4; the level stays.
+
+## Players, live evening, rating permission — server (v10)
+*Server + client API only (no screens). Updates "Groups, login and sync (v3)" → Roles, and "Organizers and invite links (v6)".*
+
+### Roles and what each sees
+- **`group_members.role` is `organizer` or `player`**, plus `player_id text` (the roster id he claimed; unique per group) and `can_rate boolean` (default false). Existing members stayed `organizer`.
+- **Organizers:** as before — `groups` (data with ratings), invites, every member row, every vote.
+- **Players never see ratings.** RLS on `groups` (select and update), `group_invites` and other members' rows now requires `role = 'organizer'`; a player sees only his own `group_members` row. Players read:
+  - **`group_public`** — `{ name, players: [{id, name}], history }`, **derived by the server** (trigger on `groups` insert/update of `name`/`data`, function `private.public_doc`) from `groups.data` with a whitelist: player id + name only (no positions, no `canGK`, no cards/levels/votes), history records field by field (`id, v, startedAt, endedAt, teamSize, subIds, players[{id,name}], teams[{bib,ids}], matches[{a,b,goalsA,goalsB,sides,ms,endedAt,goals[{team,by}],pens{winner,a,b}}]`). *(my call: server-side so a buggy or old client can't leak ratings, and it needs no app change to stay current. Positions left out: they are an organizer's judgement of "strong in"; adding them is one line in `public_doc`.)*
+  - **`group_live`** — the evening on the pitch.
+  - **`rating_votes`** — only his own rows.
+- **Non-members get nothing; `anon` has no table or function access.**
+
+### Links and claims
+- **One player link per group:** `create_player_invite(group_id)` returns the live player link or makes one (organizers only). It doesn't expire (stored as now + 100 years) since it lives in the players' WhatsApp group; organizers revoke it with the existing `revoke_invite(token)` and call `create_player_invite` again for a fresh one. Organizer links are unchanged (14 days). `remoteApi.listInvites` now lists organizer links only; `playersApi.playerInvite(groupId)` reads the player link without creating it.
+- **`join_group(token)` uses the link's role** and now also returns `role`. A player opening an organizer link becomes organizer (`can_rate` reset); an organizer opening the player link stays organizer (never downgraded).
+- **Claim:** `claim_player(group_id, player_id)` — any member, only while he has no claim, id must be in the roster, not claimed by another login (`23505` → `SyncError 'taken'`; unknown id `22023` → `'invalid'`). Claiming deletes any vote he had for that id. **A wrong claim is undone only by an organizer** (`unclaim_player(group_id, user_id)`). *(my call: organizers may claim too — harmless, and it keeps a player→organizer upgrade consistent.)*
+- **`remove_player(group_id, user_id)`** — organizers can remove a *player* member (not organizers, as in v6). His votes go with him (FK cascade).
+- **Leaving:** the group is deleted when its **last organizer** leaves (players alone can't run it).
+
+### Live evening
+- **`group_live (group_id pk, data jsonb < 64 KB, updated_by, by_name, updated_at)`**, Realtime on. Organizers write through `live_set(group_id, data)`; **last write wins** and `by_name` (display name of whoever wrote last) is the "running on <name>'s phone" marker. *(my call: no locks; normally one phone runs the evening; if a second organizer starts publishing, his phone simply becomes the source.)*
+- `live_set(group_id, null)` = the evening ended: the row becomes `{"ended": true}` (an UPDATE, because Realtime can't deliver DELETEs to a filtered subscription). Readers treat anything that isn't `v: 1` with `teams` as "nothing live".
+- The server refuses live data containing the keys `attrs`, `levelVotes`, `cards`, `overall`, `weaknesses` (`22023`), as a backstop.
+- **Publish on every change** on the match screen (teams, goal, scorer, clock start/pause, length change, borrow, end of match, end of evening), not every second; readers tick the clock locally with `liveClockMs(clock, now)` (assumes phones' clocks are in step, which phones on network time are).
+
+### Votes from players
+- **`rating_votes (group_id, rater, player_id, level 1–10, updated_at)`**, pk `(group_id, rater, player_id)`, FK `(group_id, rater)` → `group_members` on delete cascade. No direct writes.
+- **`submit_votes(group_id, {playerId: 1–10 | null})`** — only `role = 'player'` with `can_rate` and a claimed `player_id`; never his own id; only roster ids; whole numbers 1–10; null takes a vote back; any bad entry fails the whole call (`22023`). Returns his votes after (`{playerId: level}`). Skipping = not sending that id.
+- **`set_can_rate(group_id, user_id, bool)`** — organizers, on player members only. Turning it off deletes his votes.
+- **Organizers' votes stay in the doc** (`Player.levelVotes`, v9). Players' votes are **not** copied into the doc; organizers read them with `group_votes(group_id)` (only from players who currently may rate) and the organizer app computes the level from both: `mergePlayerVotes(levelVotes, rows, playerId)` (one vote per login; for the same login the doc wins) and `applyPlayerVotes(players, rows)` (sets the level to the rounded average like a level change; hand-tuned sliders keep their tuning; `levelVotes` untouched). *(my call: keeps v9's doc merge as is and the doc organizer-only.)* **The organizer app must run `applyPlayerVotes` after every sync and when votes change**, because the doc merge (v9) only knows organizers' votes. A player whose only votes were taken away keeps his last level until the next vote.
+
+### API contract (all `public.*` security-invoker wrappers over `private.*` security-definer bodies; errors: `28000` not logged in → `'auth'`, `42501` not allowed / not a member → `'denied'`, `P0002` bad invite and `22023` bad input → `'invalid'`, `23505` already claimed → `'taken'`)
+| RPC | who | args | returns |
+|---|---|---|---|
+| `create_player_invite` | organizer | `p_group_id` | `text` token (same until revoked) |
+| `join_group` | logged in | `p_token` | `(group_id, name, role)` |
+| `claim_player` | member | `p_group_id, p_player_id` | void |
+| `unclaim_player` | organizer | `p_group_id, p_user_id` | void |
+| `set_can_rate` | organizer | `p_group_id, p_user_id, p_can` | void |
+| `remove_player` | organizer | `p_group_id, p_user_id` | void |
+| `group_members_list` | member | `p_group_id` | `(user_id, display_name, role, player_id, can_rate, joined_at, is_me)` — organizer: all; player: own row |
+| `group_organizers` | member | `p_group_id` | as v6, **organizers only** now |
+| `group_public_get` | member | `p_group_id` | `{groupId, name, players[{id,name}], history[], claimed[ids], me{role, playerId, canRate}, updatedAt}` |
+| `live_get` | member | `p_group_id` | `(data, updated_by, by_name, updated_at)` or no row |
+| `live_set` | organizer | `p_group_id, p_data` (null = ended) | `timestamptz` |
+| `submit_votes` | player with can_rate + claim | `p_group_id, p_votes` | `{playerId: level}` |
+| `my_votes` | member | `p_group_id` | `{playerId: level}` |
+| `group_votes` | organizer | `p_group_id` | `(rater, player_id, level, updated_at)` |
+| `create_invite`, `revoke_invite` | **organizer** now | as before | as before |
+
+**Live JSON (`LiveData`, `src/sync/live.ts`):** `{ v: 1, at, teamSize, players: [{id, name}] (everyone tonight), teams: [{bib, ids (keeper order), keeper}], subs: [ids], match: null | { n (1-based), onPitch: [a, b], queue: [team…], score: [ga, gb], goals: [{team, by?}], clock: {running, startedAt, elapsedMs, lengthMs | null}, extra, borrow: {team, from, ids} | null, streak: [n…], played: [{a, b, goalsA, goalsB, pens?}] } }`. Team names/colours: `bibLook(bib, index)`.
+
+**Client:** `src/sync/players.ts` (`playersApi(sb)`: `createPlayerInvite, playerInvite, claimPlayer, unclaimPlayer, setCanRate, removePlayer, listMembers, getPublic, myVotes, submitVotes, groupVotes, subscribePublic`; pure `parseMembers, parsePublic, parseMyVotes, parseVoteRows, mergePlayerVotes, applyPlayerVotes, rateable`), `src/sync/live.ts` (`liveApi(sb)`: `get, set, subscribe`; pure `liveFromState({result, match, players, settings, now}), liveClockMs, sanitizeLive, parseLiveRow`). `remoteApi.joinGroup` returns `role`; `SyncError` has a new code `'taken'`. Realtime: `group_live` and `group_public` (players can't subscribe to `groups`).
+
+**For the app:** a player's group must not run the v3 sync (`fetchGroup` on `groups` returns nothing for him, which the engine reads as "gone"); branch on `join_group`'s `role` / `group_public_get().me.role`.
+
+### SQL and verification
+- `supabase/migrations/20261021120000_players_live_votes.sql` and `20261021120100_live_clear_as_update.sql`, applied to `cieyeoyuwddobrxjcffw` as `players_live_votes` and `live_clear_as_update`.
+- Verified with simulated users (organizer, two players, a non-member, anon) in a transaction that was always rolled back: player reads 0 rows of `groups`/invites, only his own member row, public copy without any rating field (extra fields planted in the doc and history were stripped), the live row, only his own votes; can't write live, groups, invites, votes or his own `can_rate` directly; votes refused without `can_rate`, for himself, for unknown ids, 11 and 6.5; claims of taken/unknown ids refused; organizer reads votes, `set_can_rate(false)` deletes them; the trigger updates the public copy on a rename; organizer link upgrades a player, player link never downgrades; last organizer leaving deletes the group; non-member and anon get nothing. Real data before/after: 5 users, 1 group (same content hash), 5 members all organizer, 6 invites.
+- Advisors: security — only "leaked password protection disabled" (an Auth dashboard setting, not schema); performance — only INFO "unused index" on the new `group_live_updated_by_idx` (kept: it covers a foreign key).
