@@ -29,7 +29,7 @@ import {
   undoGoal,
   type MatchState,
 } from '../match/match';
-import { eveningId, hasEveningData } from '../state/history';
+import { hasEveningData } from '../state/history';
 import { defaultMatchMs, engineOptions, teamLook, verb } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
@@ -39,6 +39,7 @@ import { GoalBurst } from './GoalBurst';
 import { Icon } from './icons';
 import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
+import { useEndEvening } from './LiveControl';
 import { celebrateGoal, playWhistle, stopSounds, unlockAudio, unlockOnNextTap } from './sounds';
 
 /** Quick picks in the match length sheet, in minutes. */
@@ -82,7 +83,7 @@ function useWakeLock(on: boolean) {
  */
 export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {}) {
   const { state, dispatch } = useStore();
-  const { go, notify } = useUi();
+  const { notify } = useUi();
   const m = state.match;
   const r = state.result;
   const [now, setNow] = useState(() => Date.now());
@@ -90,6 +91,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {})
   /** Level match: first "who won on penalties?", then (plain draw) "who leaves?". */
   const [drawAsk, setDrawAsk] = useState<false | 'pens' | 'leave'>(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const endEvening = useEndEvening();
   const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
   const [lengthOpen, setLengthOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -538,11 +540,8 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {})
               type="button"
               className="btn btn-danger btn-block"
               onClick={() => {
-                const id = eveningId(r);
-                const saved = hasEveningData(m, Date.now());
-                dispatch({ type: 'endEvening', id, now: Date.now() });
-                if (saved) go('evening', id);
-                else go('teams');
+                setConfirmEnd(false);
+                void endEvening();
               }}
             >
               סיום הערב

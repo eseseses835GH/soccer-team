@@ -213,3 +213,7 @@
 # v12: a player runs the match
 - **Built:** a player can run the match from his phone ("לנהל מהטלפון שלי"; asks first if someone else runs it). Same match screen, without late/left, re-split or ending the evening; "להפסיק לנהל". Losing control → back to watching with a toast. See DECISIONS → "Match runner handoff — player side (v12)".
 - **Tested:** unit (`src/sync/runner.test.ts`), e2e block 14 and screenshots p09–p11 on a mocked Supabase.
+
+# v12: runner handoff, organizer side
+- **Built:** an organizer's phone writes tonight only while it runs it; when someone else runs it, the teams/match screens are read-only ("מנוהל מהטלפון של …") with one button to take it back, which imports everything played meanwhile. "סיום הערב" takes control first. A second organizer phone opens read-only. See DECISIONS → "Match runner handoff — organizer side (v12)".
+- **Tested:** unit (`src/sync/organizerControl.test.ts`), e2e block 9b and screenshots 18a–d on a mocked server.

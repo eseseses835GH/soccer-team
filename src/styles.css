@@ -2868,3 +2868,23 @@ thead th {
   min-block-size: 44px;
   color-scheme: normal;
 }
+
+/* v12: an organizer's phone while another phone runs tonight (LiveControl.tsx). */
+.viewer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block: 4px 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.viewer-bar p {
+  margin: 0;
+  font-weight: 600;
+}
+.viewer-bar .btn {
+  flex: none;
+}

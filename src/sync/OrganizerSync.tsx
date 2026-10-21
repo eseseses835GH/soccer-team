@@ -3,32 +3,18 @@
 // - publishes tonight (teams, match, clock…) to group_live for players and other organizers;
 // - reads players' level votes and folds them into the levels (applyPlayerVotes) after every sync round.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import type { GroupMeta } from '../state/groups';
-import type { AppState } from '../state/model';
 import { localKV, useGroups, useStore } from '../state/store';
-import { liveApi, liveFromState, type LiveData } from './live';
-import { eveningEnded, justEnded, withPlayerVotes } from './organizer';
+import { liveApi, type LiveRow } from './live';
+import { justEnded, withPlayerVotes } from './organizer';
+import { createOrganizerControl, ENDED, type TakeResult } from './organizerControl';
 import { eveningId } from '../state/history';
 import { playersApi, type VoteRow } from './players';
-import { createLivePublisher, shouldRepublish } from './publish';
 import { useSync } from './SyncProvider';
 
 /** A cloud group this phone organizes (a player's group, once the app has them, says role 'player'). */
 export const isOrganizerGroup = (g: GroupMeta) => g.synced && (g as GroupMeta & { role?: string }).role !== 'player';
-
-/** This phone published a live evening that it hasn't ended yet (survives a crash / reload). */
-const MINE = (gid: string) => `kochot:liveMine:${gid}`;
-const isMine = (gid: string) => localKV.get(MINE(gid)) === true;
-/** eveningId of teams whose evening was ended without anything saved (see eveningEnded). */
-const ENDED = (gid: string) => `kochot:liveEnded:${gid}`;
-const endedId = (gid: string) => {
-  const v = localKV.get(ENDED(gid));
-  return typeof v === 'string' ? v : null;
-};
-
-const liveOf = (gid: string, s: AppState): LiveData | null =>
-  eveningEnded(s, endedId(gid)) ? null : liveFromState({ result: s.result, match: s.match, players: s.players, settings: s.settings, now: Date.now() });
 
 interface VotesApi {
   /** Players' votes that count in the open group (organizer groups only; [] otherwise). */
@@ -39,6 +25,18 @@ interface VotesApi {
 const VotesCtx = createContext<VotesApi>({ rows: [], refresh: () => {} });
 export const usePlayerVotes = () => useContext(VotesCtx);
 
+export interface LiveControlApi {
+  /** Another phone runs tonight: this one shows it read-only (null = this phone runs it, or nothing is live). */
+  viewer: LiveRow | null;
+  /** "לקחת את הניהול בחזרה": take control and import what was played meanwhile. */
+  takeBack(): Promise<TakeResult>;
+  /** Before ending the evening: take control (and import) first if another phone runs it. */
+  ensureRunner(): Promise<TakeResult>;
+}
+const ok = async (): Promise<TakeResult> => 'ok';
+const ControlCtx = createContext<LiveControlApi>({ viewer: null, takeBack: ok, ensureRunner: ok });
+export const useLiveControl = () => useContext(ControlCtx);
+
 export function OrganizerSync({ children }: { children: ReactNode }) {
   const sync = useSync();
   const groups = useGroups();
@@ -47,55 +45,53 @@ export function OrganizerSync({ children }: { children: ReactNode }) {
   groupsRef.current = groups;
   const cur = groups.current;
   const me = sync.userId;
+  const meRef = useRef(me);
+  meRef.current = me;
   const active = !!me && isOrganizerGroup(cur);
   const gid = cur.id;
   const getClient = sync.client; // stable
   const clientRef = useRef<SupabaseClient | null>(null);
   const client = useCallback(async () => (clientRef.current ??= await getClient()), [getClient]);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
-  // ---------- live evening ----------
-  const publisher = useMemo(
+  // ---------- live evening: only the runner's phone writes (organizerControl.ts) ----------
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const ctl = useMemo(
     () =>
-      createLivePublisher({
-        send: async (g, live) => liveApi(await client()).set(g, live),
-        onSent: (g, live) => (live ? localKV.set(MINE(g), true) : localKV.remove(MINE(g))),
+      createOrganizerControl({
+        api: async () => liveApi(await client()),
+        me: () => meRef.current,
+        latest: () => groupsRef.current.latest(),
+        setState: (g, update) => groupsRef.current.setGroupState(g, update),
+        kv: localKV,
+        onChange: rerender,
       }),
     [client],
   );
-  useEffect(() => () => publisher.dispose(), [publisher]);
+  useEffect(() => () => ctl.dispose(), [ctl]);
 
-  // Open / back on screen: republish (a crashed phone mustn't leave a stale row), unless another
-  // organizer's phone is running the evening right now; then only our own changes are sent.
-  const activeRef = useRef(active);
-  activeRef.current = active;
-  const onOpen = useCallback(async () => {
-    const { gid: g, app } = groupsRef.current.latest();
-    const live = liveOf(g, app);
-    publisher.baseline(g, live);
-    if (!live) {
-      if (isMine(g)) publisher.republish(g, null);
-      return;
-    }
-    try {
-      const row = await liveApi(await client()).get(g);
-      if (activeRef.current && groupsRef.current.latest().gid === g && shouldRepublish(row, me ?? '')) publisher.republish(g, liveOf(g, groupsRef.current.latest().app));
-    } catch {
-      if (activeRef.current) publisher.republish(g, live); // offline: queued until 'online'
-    }
-  }, [publisher, client, me]);
-
+  // Open / back on screen: run it (republish, so a crashed phone doesn't leave a stale row) or view
+  // it when another phone runs it. Changes on the row (someone took control, ended it) come live.
   useEffect(() => {
     if (!active) return;
-    void onOpen();
-    const onVisible = () => document.visibilityState === 'visible' && void onOpen();
-    const onOnline = () => void publisher.flush();
+    void ctl.open(gid);
+    const onVisible = () => document.visibilityState === 'visible' && void ctl.open(gid);
+    const onOnline = () => void ctl.flush();
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
+    let unsub = () => {};
+    let gone = false;
+    void client().then((sb) => {
+      if (!gone) unsub = liveApi(sb).subscribe(gid, (row) => ctl.row(gid, row));
+    });
     return () => {
+      gone = true;
+      unsub();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
     };
-  }, [active, gid, onOpen, publisher]);
+  }, [active, gid, ctl, client]);
 
   // Tonight changed (teams, goal, clock, borrow, end of match/evening, new day…).
   const prev = useRef({ gid, state });
@@ -103,10 +99,17 @@ export function OrganizerSync({ children }: { children: ReactNode }) {
     const was = prev.current;
     prev.current = { gid, state };
     if (was.gid === gid && justEnded(was.state, state) && state.result) localKV.set(ENDED(gid), eveningId(state.result));
-    if (!active) return;
-    const live = liveOf(gid, state);
-    if (live || isMine(gid)) publisher.update(gid, live);
-  }, [active, gid, state, publisher]);
+    if (active) ctl.changed(gid, state);
+  }, [active, gid, state, ctl]);
+
+  const control = useMemo<LiveControlApi>(
+    () => ({
+      viewer: active ? ctl.viewer(gid) : null,
+      takeBack: () => (activeRef.current ? ctl.takeBack(groupsRef.current.latest().gid) : ok()),
+      ensureRunner: () => (activeRef.current ? ctl.ensureRunner(groupsRef.current.latest().gid) : ok()),
+    }),
+    [active, gid, ctl, ctl.viewer(gid)],
+  );
 
   // ---------- players' votes ----------
   const [votes, setVotes] = useState<{ gid: string; rows: VoteRow[] }>({ gid: '', rows: [] });
@@ -137,7 +140,11 @@ export function OrganizerSync({ children }: { children: ReactNode }) {
     () => ({ rows: active && votes.gid === gid ? votes.rows : [], refresh: () => void loadVotes() }),
     [active, gid, votes, loadVotes],
   );
-  return <VotesCtx.Provider value={value}>{children}</VotesCtx.Provider>;
+  return (
+    <ControlCtx.Provider value={control}>
+      <VotesCtx.Provider value={value}>{children}</VotesCtx.Provider>
+    </ControlCtx.Provider>
+  );
 }
 
 const sameRows = (a: VoteRow[], b: VoteRow[]) =>

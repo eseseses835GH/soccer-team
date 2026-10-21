@@ -7,7 +7,7 @@ import { eveningId } from '../state/history';
 import type { GameResult } from '../state/model';
 import type { MatchState } from '../match/match';
 import { parseMembers, type VoteRow } from './players';
-import { createLivePublisher, liveKey, shouldRepublish } from './publish';
+import { createLivePublisher, liveKey } from './publish';
 import { SyncError } from './supabase';
 
 const live = (score: number, at = 1): LiveData => ({
@@ -156,14 +156,6 @@ describe('live publisher', () => {
     await f;
     await vi.runAllTimersAsync();
     expect(sent).toEqual([1, 2]);
-  });
-
-  it("doesn't take over another organizer's fresh evening on open", () => {
-    const now = Date.parse('2026-10-21T20:00:00Z');
-    expect(shouldRepublish(null, 'me', now)).toBe(true);
-    expect(shouldRepublish({ updatedBy: 'ME', updatedAt: '2026-10-21T19:59:00Z' }, 'me', now)).toBe(true);
-    expect(shouldRepublish({ updatedBy: 'other', updatedAt: '2026-10-21T19:55:00Z' }, 'me', now)).toBe(false);
-    expect(shouldRepublish({ updatedBy: 'other', updatedAt: '2026-10-21T19:40:00Z' }, 'me', now)).toBe(true);
   });
 });
 

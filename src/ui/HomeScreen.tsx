@@ -8,6 +8,8 @@ import { CardBadges, Empty, Sheet } from './components';
 import { InstallCard, useInstall } from './InstallPrompt';
 import { LateSheet } from './LateSheet';
 import { splitTeams } from './split';
+import { useLiveControl } from '../sync/OrganizerSync';
+import { runnerLine } from './LiveControl';
 
 const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
 
@@ -30,6 +32,7 @@ function planSentence(n: number, plan: FormatPlan | null, size: number): string 
 export function HomeScreen() {
   const { state, dispatch } = useStore();
   const { go, notify } = useUi();
+  const { viewer } = useLiveControl();
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
   const [confirmResplit, setConfirmResplit] = useState(false);
@@ -167,10 +170,15 @@ export function HomeScreen() {
       </p>
 
       <div className="cta-dock">
-        <p className={`plan ${plan ? '' : 'warn'}`} aria-live="polite">
-          {planSentence(present.length, plan, state.teamSize)}
+        <p className={`plan ${plan || viewer ? '' : 'warn'}`} aria-live="polite">
+          {viewer ? runnerLine(viewer.runnerName) : planSentence(present.length, plan, state.teamSize)}
         </p>
-        {live ? (
+        {viewer ? (
+          // Another phone runs tonight: watch it (and take it back) from the match screen.
+          <button type="button" className="btn btn-hero btn-block" onClick={() => go('match')}>
+            {viewer.data.match ? `לערב · משחק ${viewer.data.match.n}` : 'לערב'}
+          </button>
+        ) : live ? (
           <>
             <button type="button" className="btn btn-hero btn-block" onClick={() => go('match')}>
               חזרה למשחק · משחק {played + 1}
