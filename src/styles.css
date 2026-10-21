@@ -2715,3 +2715,120 @@ thead th {
   flex-basis: 100%;
   margin: 0;
 }
+
+/* ---------- player side: live evening, who are you, rating (v10) ---------- */
+.role-tag {
+  margin-inline-start: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--sunk);
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.live .pitch {
+  margin-block-start: 12px;
+}
+.live .side {
+  padding-block-end: 14px;
+}
+.live .member {
+  min-block-size: 40px;
+}
+.member.me {
+  background: var(--accent-soft);
+  font-weight: 800;
+}
+.member.me .name {
+  font-weight: 800;
+}
+.member.chip.me {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.member.away {
+  opacity: 0.5;
+}
+.rate-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block: 4px 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.rate-card p {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.rate-card .btn {
+  flex: none;
+}
+.claim-title {
+  margin-block: 8px 12px;
+  font-size: 1.6rem;
+  font-weight: 800;
+  text-align: center;
+}
+.claim-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.claim-grid .member.chip {
+  justify-content: center;
+  min-block-size: 52px;
+  font-size: 1.05rem;
+}
+.claim-grid .member.chip:disabled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-3);
+}
+.claim .hint {
+  margin-block-start: 14px;
+}
+.rate {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-block-start: 12px;
+}
+.rate-progress {
+  margin: 0;
+  text-align: center;
+  color: var(--ink-3);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rate-name {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.rate-levels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  direction: ltr;
+}
+.rate-levels button {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sunk);
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.rate-levels button.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

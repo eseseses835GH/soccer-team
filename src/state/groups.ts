@@ -14,6 +14,8 @@ export interface GroupMeta {
   /** True once the group was uploaded to (or joined from) the cloud. */
   synced: boolean;
   createdAt: number;
+  /** 'player' = joined with the player link: a read-only view of someone else's group (never runs the organizer sync). Missing or 'organizer' = this phone organizes it. */
+  role?: 'organizer' | 'player';
 }
 
 export interface GroupIndex {
@@ -70,6 +72,7 @@ function sanitizeIndex(raw: unknown): GroupIndex | null {
       name: typeof g.name === 'string' && cleanName(g.name) ? cleanName(g.name) : DEFAULT_GROUP_NAME,
       synced: !!g.synced,
       createdAt: Number(g.createdAt) || 0,
+      ...(g.role === 'player' || g.role === 'organizer' ? { role: g.role } : {}),
     });
   }
   if (!groups.length) return null;

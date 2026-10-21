@@ -13,11 +13,18 @@ import { useRecordUse } from './InstallPrompt';
 import { Icon } from './icons';
 import { MatchScreen } from './MatchScreen';
 import { PlayersScreen } from './PlayersScreen';
+import { ClaimView, PlayerHome } from './PlayerHome';
+import { PlayerSettings } from './PlayerSettings';
+import { RateScreen } from './RateScreen';
+import { isPlayerGroup } from '../sync/playerGroup';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
 
-export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help';
-const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening', 'help'];
+export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help' | 'rate' | 'claim';
+const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening', 'help', 'rate', 'claim'];
+/** Organizer-only screens (a player group never shows them), and player-only ones. */
+const ORGANIZER_ONLY: Route[] = ['teams', 'match', 'players'];
+const PLAYER_ONLY: Route[] = ['rate', 'claim'];
 const TITLES: Record<Route, string> = {
   home: '',
   teams: 'הקבוצות',
@@ -27,9 +34,22 @@ const TITLES: Record<Route, string> = {
   history: 'ערבים קודמים',
   evening: 'סיכום הערב',
   help: 'שאלות ותשובות',
+  rate: 'דירוג',
+  claim: 'מי אתה?',
 };
 /** Where "back" goes from each screen. */
-const PARENT: Record<Route, Route> = { home: 'home', teams: 'home', match: 'teams', players: 'home', settings: 'home', history: 'home', evening: 'history', help: 'home' };
+const PARENT: Record<Route, Route> = {
+  home: 'home',
+  teams: 'home',
+  match: 'teams',
+  players: 'home',
+  settings: 'home',
+  history: 'home',
+  evening: 'history',
+  help: 'home',
+  rate: 'home',
+  claim: 'home',
+};
 /** Help can be opened from several screens; "back" returns to the one it came from. */
 const HELP_FROM: Route[] = ['home', 'teams', 'match', 'players', 'settings'];
 
@@ -139,10 +159,12 @@ export function App() {
     prevEmail.current = sync.email;
   }, [sync.email, notify]);
 
-  // Screens that need data fall back home.
+  // Screens that need data fall back home. A player group is read-only: no organizer screens.
+  const isPlayer = isPlayerGroup(groups.current);
   const evening = route === 'evening' ? state.history.find((e) => e.id === param) : undefined;
-  const safeRoute: Route =
-    (route === 'teams' && !state.result) || (route === 'match' && !state.match)
+  const safeRoute: Route = (isPlayer ? ORGANIZER_ONLY : PLAYER_ONLY).includes(route)
+    ? 'home'
+    : (route === 'teams' && !state.result) || (route === 'match' && !state.match)
       ? state.result
         ? 'teams'
         : 'home'
@@ -200,9 +222,11 @@ export function App() {
               <button type="button" className="icon-btn help-btn" aria-label="שאלות ותשובות" onClick={() => go('help')}>
                 <Icon name="help" size={20} />
               </button>
-              <button type="button" className="icon-btn" aria-label="השחקנים" onClick={() => go('players')}>
-                <Icon name="users" />
-              </button>
+              {!isPlayer && (
+                <button type="button" className="icon-btn" aria-label="השחקנים" onClick={() => go('players')}>
+                  <Icon name="users" />
+                </button>
+              )}
               <button type="button" className="icon-btn" aria-label="הגדרות" onClick={() => go('settings')}>
                 <Icon name="gear" />
               </button>
@@ -220,13 +244,15 @@ export function App() {
         )}
       </header>
       <main className={`screen screen-${safeRoute}`}>
-        {safeRoute === 'home' && <HomeScreen />}
+        {safeRoute === 'home' && (isPlayer ? <PlayerHome /> : <HomeScreen />)}
         {safeRoute === 'teams' && <TeamsScreen />}
         {safeRoute === 'match' && <MatchScreen />}
         {safeRoute === 'players' && <PlayersScreen />}
-        {safeRoute === 'settings' && <SettingsScreen focus={param} />}
-        {safeRoute === 'history' && <HistoryScreen />}
-        {safeRoute === 'evening' && evening && <EveningScreen record={evening} />}
+        {safeRoute === 'settings' && (isPlayer ? <PlayerSettings /> : <SettingsScreen focus={param} />)}
+        {safeRoute === 'history' && <HistoryScreen readOnly={isPlayer} />}
+        {safeRoute === 'evening' && evening && <EveningScreen record={evening} readOnly={isPlayer} />}
+        {safeRoute === 'rate' && <RateScreen />}
+        {safeRoute === 'claim' && <ClaimView onDone={() => go(param === 'rate' ? 'rate' : 'home')} />}
         {safeRoute === 'help' && <HelpScreen focus={param} />}
       </main>
       {incoming && (

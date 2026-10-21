@@ -2,6 +2,7 @@
 // Usage: npm run build && npx vite preview --port 4173 & npm run screenshots -- [outDir]
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { playerContext, SB_URL } from './player-mock.mjs';
 
 const out = process.argv[2] ?? 'screenshots';
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
@@ -363,6 +364,54 @@ for (const scheme of ['light', 'dark']) {
     }
     if (!swapShown) console.log(`${scheme}: no swap suggestion came up`);
     await lctx.close();
+  }
+
+  // Player side (v10), on a mocked Supabase: who are you → live evening (me highlighted) → rating → no evening.
+  if (SB_URL) {
+    const { ctx: pctx, page: pp, db } = await playerContext(browser, { scheme, me: null, canRate: true, live: true });
+    pp.on('pageerror', (e) => errors.push(`${scheme} player: ${e.message}`));
+    pp.on('console', (m) => m.type() === 'error' && !/fonts\.g/.test(m.text()) && errors.push(`${scheme} player console: ${m.text()}`));
+    const pshot = async (name, full = false) => {
+      await pp.waitForTimeout(200);
+      await pp.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: full });
+      const sw = await pp.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    await pp.goto(base);
+    await pp.waitForSelector('.claim-grid');
+    await pshot('p01-claim');
+    await pp.getByRole('button', { name: 'גיל', exact: true }).click();
+    await pp.waitForSelector('.live');
+    await pshot('p02-home-live');
+    await pshot('p02b-home-live-full', true);
+    if (!(await pp.locator('.member.me', { hasText: 'גיל' }).count())) errors.push(`${scheme} player: "me" not highlighted`);
+    await pp.getByRole('button', { name: 'לדרג' }).click();
+    await pp.waitForSelector('.rate-levels');
+    await pshot('p03-survey');
+    await pp.getByRole('radio', { name: '7' }).click();
+    await pp.getByRole('button', { name: 'דילוג' }).click();
+    await pp.getByRole('radio', { name: '4' }).click();
+    await pshot('p03b-survey-step');
+    if (JSON.stringify(db.votes) !== JSON.stringify({ p1: 7, p4: 4 })) errors.push(`${scheme} player: votes ${JSON.stringify(db.votes)}`);
+    await pp.getByRole('button', { name: 'סיום' }).click();
+    await pp.waitForSelector('.rate-card');
+    await pshot('p04-home-update');
+    await pp.getByRole('button', { name: /החלפת קבוצה/ }).click();
+    await pshot('p05-groups');
+    await pp.keyboard.press('Escape');
+    await pp.getByRole('button', { name: 'ערבים קודמים' }).click();
+    await pshot('p06-history');
+    await pp.locator('.ev-list button').first().click();
+    await pshot('p06b-evening', true);
+    if (await pp.getByRole('button', { name: 'מחיקה מההיסטוריה' }).count()) errors.push(`${scheme} player: delete shown on an evening`);
+    await pp.goto(base + '#settings');
+    await pshot('p07-settings');
+    db.live = false;
+    await pp.goto(base + '#home');
+    await pp.reload();
+    await pp.waitForSelector('text=אין ערב עכשיו');
+    await pshot('p08-no-evening');
+    await pctx.close();
   }
 }
 await browser.close();
