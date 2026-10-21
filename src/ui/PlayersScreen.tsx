@@ -2,19 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import type { Attributes, Position } from '../engine';
 import { playersCount } from '../i18n';
 import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
-import { ROSTER_TEMPLATE, parseBackup, parseRoster, restoreBackup, type ParsedRoster } from '../state/io';
 import { newId, type Player } from '../state/model';
 import { withPositions } from '../state/positions';
+import { SHARED_HASH } from '../state/whatsapp';
 import { loadJSON, saveJSON } from '../state/storage';
-import { useGroups, useStore } from '../state/store';
-import { averageLevel, isTuned, votesLine } from '../state/votes';
+import { useStore } from '../state/store';
+import { isTuned, votesLine } from '../state/votes';
 import { useVoterId } from '../sync/SyncProvider';
 import { usePlayerVotes } from '../sync/OrganizerSync';
-import { mergePlayerVotes } from '../sync/players';
-import { downloadText } from '../share';
+import { mergePlayerVotes, playerAtLevel } from '../sync/players';
 import { useUi } from './App';
 import { AttrSliders, CardBadges, CardPicker, LevelPicker, PositionBadges, PositionPicker, Sheet } from './components';
 import { DeletePlayerSheet } from './DeletePlayerSheet';
+import { ImportSheet } from './ImportSheet';
 import { Icon } from './icons';
 import { SwipeRow, closeSwipeRows } from './SwipeRow';
 import { usePlayerGate } from './useGate';
@@ -84,7 +84,8 @@ export function PlayersScreen() {
   const [attrs, setAttrs] = useState<Attributes>(() => applyCards(5, []));
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Player | null>(null);
-  const [importing, setImporting] = useState(false);
+  // A chat shared from WhatsApp to the installed app lands here (public/sw.js → #players?import=shared).
+  const [importing, setImporting] = useState<false | 'open' | 'shared'>(() => (location.hash.includes(SHARED_HASH) ? 'shared' : false));
   const [deleting, setDeleting] = useState<Player[] | null>(null);
   // Select mode: tap rows to pick several players, then delete them in one go.
   const [selecting, setSelecting] = useState(false);
@@ -208,7 +209,7 @@ export function PlayersScreen() {
                 בחירה
               </button>
             )}
-            <button type="button" className="text-btn" onClick={() => setImporting(true)}>
+            <button type="button" className="text-btn" onClick={() => setImporting('open')}>
               <Icon name="upload" size={18} /> ייבוא רשימה
             </button>
           </div>
@@ -312,7 +313,7 @@ export function PlayersScreen() {
           }}
         />
       )}
-      {importing && <ImportSheet onClose={() => setImporting(false)} />}
+      {importing && <ImportSheet shared={importing === 'shared'} onClose={() => setImporting(false)} />}
     </section>
   );
 }
@@ -338,11 +339,7 @@ function PlayerSheet({
   const playerVotes = usePlayerVotes().rows;
   const myVote = voter ? draft.levelVotes?.[voter] : undefined;
   // In a synced group the organizer's tap is their vote; the level is the organizers' average.
-  const setLevel = (v: number) => {
-    if (!voter) return setProfile(v, draft.cards);
-    const levelVotes = { ...draft.levelVotes, [voter]: v };
-    setDraft((d) => ({ ...d, levelVotes, attrs: applyCards(averageLevel(mergePlayerVotes(levelVotes, playerVotes, d.id)) ?? v, d.cards) }));
-  };
+  const setLevel = (v: number) => setDraft((d) => playerAtLevel(d, v, voter, playerVotes));
   // Players allowed to rate count too (v10); their votes aren't in the doc.
   const allVotes = mergePlayerVotes(draft.levelVotes, playerVotes, draft.id);
   const line = votesLine(allVotes, voter, Object.keys(allVotes ?? {}).length > Object.keys(draft.levelVotes ?? {}).length ? 'מדרגים' : 'מארגנים');
@@ -404,107 +401,6 @@ function PlayerSheet({
           </button>
         </div>
       </form>
-    </Sheet>
-  );
-}
-
-function ImportSheet({ onClose }: { onClose: () => void }) {
-  const { state, dispatch } = useStore();
-  const { notify } = useUi();
-  const groups = useGroups();
-  const gate = usePlayerGate();
-  const [text, setText] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
-  const parsed: ParsedRoster = parseRoster(text, state.players.map((p) => p.name));
-
-  const commit = (players: Player[]) =>
-    gate(players, () => {
-      for (const p of players) dispatch({ type: 'addPlayer', player: p });
-      notify(players.length === 1 ? 'נוסף שחקן אחד' : `נוספו ${players.length} שחקנים`);
-      onClose();
-    });
-
-  const onFile = async (file: File) => {
-    try {
-      const content = await file.text();
-      if (file.name.toLowerCase().endsWith('.json')) {
-        const b = parseBackup(JSON.parse(content));
-        if (!b) return notify('הקובץ לא נראה כמו גיבוי של כוחות');
-        const added = restoreBackup(state.players, state.constraints, b).players.filter((p) => !state.players.some((x) => x.id === p.id));
-        gate(added, () => {
-          // After a login the roster may have changed meanwhile: merge into the latest one.
-          const now = groups.latest().app;
-          const r = restoreBackup(now.players, now.constraints, b);
-          dispatch({ type: 'importPlayers', players: r.players, constraints: r.constraints });
-          if (b.history?.length) dispatch({ type: 'mergeHistory', records: b.history });
-          notify(r.added === 0 ? 'כל השחקנים מהקובץ כבר ברשימה' : r.added === 1 ? 'נוסף שחקן אחד' : `נוספו ${r.added} שחקנים`);
-          onClose();
-        });
-        return;
-      }
-      setText(content.replace(/^﻿/, ''));
-    } catch {
-      notify('לא הצלחתי לקרוא את הקובץ');
-    }
-  };
-
-  return (
-    <Sheet title="ייבוא רשימה" onClose={onClose}>
-      <p className="lead">שחקן בכל שורה: שם, ואחריו רמה (לא חובה). אפשר להוסיף עמדות (״טוב בשער״, ״הגנה״, ״קישור״, ״התקפה״) ושמות של כרטיסיות, למשל ״קוסם״ או ״איטי״.</p>
-      <pre className="example" dir="rtl">{'אבי 8 קישור\nדני הקטן, 6, טוב בשער, הגנה\nנועם, 7, התקפה, קוסם, עצלן\nיוסי'}</pre>
-      <textarea className="input textarea" rows={6} placeholder="מדביקים כאן…" value={text} onChange={(e) => setText(e.target.value)} aria-label="רשימת שחקנים" />
-      <div className="row-links">
-        <button type="button" className="text-btn" onClick={() => fileRef.current?.click()}>
-          <Icon name="upload" size={18} /> מקובץ (CSV / טקסט / גיבוי)
-        </button>
-        <button type="button" className="text-btn" onClick={() => downloadText('kochot-roster-template.csv', ROSTER_TEMPLATE, 'text/csv')}>
-          <Icon name="download" size={18} /> קובץ תבנית
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,.txt,.json,text/csv,text/plain,application/json"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFile(f);
-            e.target.value = '';
-          }}
-        />
-      </div>
-      {text.trim() && (
-        <div className="preview">
-          <p>
-            {parsed.players.length === 1 ? (
-              'שחקן אחד מוכן'
-            ) : (
-              <>
-                <strong>{parsed.players.length}</strong> שחקנים מוכנים
-              </>
-            )}
-            {parsed.skipped.length > 0 && (parsed.skipped.length === 1 ? ', אחד דולג' : `, ${parsed.skipped.length} דולגו`)}
-          </p>
-          {parsed.skipped.length > 0 && (
-            <ul className="skipped">
-              {parsed.skipped.slice(0, 5).map((s, i) => (
-                <li key={i}>
-                  {s.line}: {s.reason}
-                </li>
-              ))}
-            </ul>
-          )}
-          <ul className="preview-list">
-            {parsed.players.slice(0, 30).map((p) => (
-              <li key={p.id}>
-                {p.name} <span className="muted">{p.attrs.overall}</span> <PositionBadges player={p} /> <CardBadges cards={p.cards} all />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <button type="button" className="btn btn-primary btn-block" disabled={!parsed.players.length} onClick={() => commit(parsed.players)}>
-        {parsed.players.length === 1 ? 'הוספת שחקן אחד' : `הוספת ${parsed.players.length || ''} שחקנים`.replace('  ', ' ')}
-      </button>
     </Sheet>
   );
 }

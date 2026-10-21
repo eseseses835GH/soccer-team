@@ -82,7 +82,7 @@ Remove those variables, and the app is local-only and hides login. The database 
 Browser checks against `npm run preview` (Playwright; set `CHROMIUM_PATH` if needed):
 ```bash
 npm run screenshots -- ./screenshots   # 390px, light + dark; fails on console errors / overflow
-npm run e2e                            # add, import, split 22, re-roll, late arrival, match, player rules, bibs on/off, end evening + summary + history, new day, backup file restore
+npm run e2e                            # add, import, split 22, re-roll, late arrival, match, player rules, bibs on/off, end evening + summary + history, new day, backup file restore, WhatsApp import + quick rating
 npm run sounds-check                   # whistles/horn fire at the right moments (spies on Web Audio), never speech
 npm run render-sounds -- ./sounds      # offline-render horn + whistles to WAV, check peak levels
 node scripts/icons.mjs                 # regenerate PWA PNG icons from public/favicon.svg
@@ -104,6 +104,11 @@ Commas, semicolons, tabs or spaces all work, and a header line is ignored:
 ```
 Duplicate names and levels outside 1–10 are skipped and listed. A backup `.json` file can be imported
 from the same screen: players with new names are added, with the file's rules between players and its evenings.
+
+**From WhatsApp:** export the group chat (פרטי הקבוצה → ייצוא צ'אט → ללא מדיה) and pick the `.txt` or `.zip`
+(on Android the installed app also takes it straight from the share sheet). The senders become a checklist
+(people who never wrote don't appear; phone numbers are never kept), then a quick 1–10 rating of the new players.
+Also: the phone's contacts (Android Chrome) and participant CSVs with a name and a phone column.
 
 ## Project layout
 ```

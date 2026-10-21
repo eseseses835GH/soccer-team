@@ -10,6 +10,7 @@ const BUILD = '__BUILD_ID__';
 const PRECACHE = [/*__PRECACHE__*/];
 const CACHE = `kochot-${BUILD}`;
 const FONTS = 'kochot-fonts'; // kept across versions
+const SHARE = 'kochot-share'; // a chat shared to the app, until the app reads it (src/state/whatsapp.ts)
 const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icon-192.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -27,7 +28,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONTS).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONTS && k !== SHARE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -44,8 +45,30 @@ const NAV_TIMEOUT_MS = 3500;
 const SCOPE_PATH = new URL('./', self.location).pathname;
 const APP_PATHS = [SCOPE_PATH, `${SCOPE_PATH}index.html`];
 
+// Android share sheet → the installed app (manifest `share_target`): keep the shared chat (.txt/.zip)
+// or text for the app to read once, and open the import sheet on it.
+const SHARE_URL = new URL('./share-target', self.location).pathname;
+async function shareTarget(req) {
+  try {
+    const form = await req.formData();
+    const files = form.getAll('file').filter((f) => typeof f === 'object' && f.size > 0);
+    const file = files.find((f) => /\.(txt|zip)$/i.test(f.name)) ?? files[0];
+    const text = [form.get('text'), form.get('title')].find((t) => typeof t === 'string' && t.trim());
+    const body = file ?? (text ? new Blob([text], { type: 'text/plain' }) : null);
+    const cache = await caches.open(SHARE);
+    if (body) await cache.put(new URL('./__share', self.location).href, new Response(body));
+  } catch {
+    /* the sheet opens empty */
+  }
+  return Response.redirect(new URL('./#players?import=shared', self.location).href, 303);
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
+  if (req.method === 'POST' && new URL(req.url).pathname === SHARE_URL) {
+    e.respondWith(shareTarget(req));
+    return;
+  }
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   // Never cache login/sync traffic (Supabase API, auth, realtime): always straight to the network.

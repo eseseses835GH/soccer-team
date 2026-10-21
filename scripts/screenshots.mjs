@@ -358,6 +358,41 @@ for (const scheme of ['light', 'dark']) {
     await nctx.close();
   }
 
+  // WhatsApp import (v14): the sheet with the WhatsApp button + the export hint (contacts picker
+  // stubbed, as on Android Chrome), the names checklist from the iPhone .zip, a quick-rating step.
+  {
+    const wctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: scheme, isMobile: true, hasTouch: true, locale: 'he-IL', reducedMotion: 'reduce' });
+    await wctx.addInitScript(() => {
+      navigator.contacts = { select: async () => [] };
+    });
+    const wp = await wctx.newPage();
+    wp.on('pageerror', (e) => errors.push(`${scheme} wa: ${e.message}`));
+    const wshot = async (name) => {
+      await wp.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+      await wp.waitForTimeout(150);
+      await wp.screenshot({ path: `${out}/${scheme}-${name}.png` });
+      const sw = await wp.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    await wp.goto(base + '#players');
+    await wp.getByPlaceholder('איך קוראים לו?').fill('אבי');
+    await wp.getByRole('button', { name: /^הוספה$/ }).click();
+    await wp.getByRole('button', { name: /ייבוא רשימה/ }).click();
+    await wshot('03i-import-sheet');
+    await wp.locator('details.wa-help > summary').click();
+    await wshot('03j-import-wa-hint');
+    await wp.getByLabel('קובץ לייבוא').setInputFiles(new URL('./fixtures/wa-chat-ios.zip', import.meta.url).pathname);
+    await wp.locator('.wa-picks').waitFor();
+    for (const n of ['נועם', 'ליאור', 'עומר', 'יוסי כהן']) await wp.getByRole('button', { name: n, exact: true }).click();
+    await wshot('03k-import-picked');
+    await wp.getByRole('button', { name: 'הוספת 3 שחקנים' }).click();
+    const rating = wp.getByRole('dialog', { name: 'דירוג מהיר' });
+    await rating.getByRole('radio', { name: '7', exact: true }).click();
+    await rating.getByRole('button', { name: 'הגנה', exact: true }).click();
+    await wshot('03l-quick-rate');
+    await wctx.close();
+  }
+
   // Organizers sheet with the player link and players who joined (v10): a mocked session, every
   // Supabase call answered locally (nothing reaches the real project).
   {

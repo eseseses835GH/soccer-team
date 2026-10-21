@@ -221,3 +221,7 @@
 # v13: login most of the time
 - **Built:** logged out = one group and 4 own players (the sample squad is free); past that the login sheet opens and the action goes on after logging in. Logged in, the local group goes to the cloud by itself. Server caps (groups, memberships, members, links, data size, 200 players). See DECISIONS → "Login most of the time: free limits and server caps (v13)".
 - **Tested:** unit (`src/sync/gate.test.ts`), e2e (login from the sheet on a mocked Supabase, block 18), screenshots 11f/11g, SQL caps with simulated users (rolled back).
+
+# v14: WhatsApp import and quick rating
+- **Built:** "ייבוא רשימה" takes a WhatsApp chat export (.txt/.zip, iPhone and Android formats), a share from WhatsApp to the installed app (Android), the phone's contacts (Android Chrome) and participant CSVs → a names checklist → a quick 1–10 rating of the new players. Phone numbers are never stored. See DECISIONS → "WhatsApp import and quick rating (v14)".
+- **Tested:** unit (`whatsapp.test.ts`, `quickRate.test.ts`, `sw.test.ts`), e2e block 19 (zip, login at the 5th, rating, share target through the service worker, contacts), screenshots 03i–03l.

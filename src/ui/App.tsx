@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { playersCount } from '../i18n';
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
 import { useGroups, useStore } from '../state/store';
+import { SHARED_HASH, dropShared } from '../state/whatsapp';
 import { useRunner } from '../sync/RunnerProvider';
 import { LIMIT_TEXT, gatePlayers } from '../sync/gate';
 import { JOIN_HASH, STATUS_TEXT, useSync, type SyncStatus } from '../sync/SyncProvider';
@@ -61,7 +62,8 @@ const isRoute = (s: string): s is Route => (ROUTES as string[]).includes(s);
 
 /** `#evening/<id>`: a route plus an optional parameter. */
 function parseHash(): { route: Route | null; param: string } {
-  const [name, ...rest] = location.hash.slice(1).split('/');
+  // "#players?import=shared" (the Android share target, see public/sw.js) is the players screen.
+  const [name, ...rest] = location.hash.slice(1).split('?')[0].split('/');
   return { route: isRoute(name) ? name : null, param: decodeURIComponent(rest.join('/')) };
 }
 
@@ -132,6 +134,7 @@ export function App() {
       setParam(h.param);
     };
     window.addEventListener('popstate', onPop);
+    if (!location.hash.includes(SHARED_HASH)) dropShared();
     // An organizer invite was opened: join (after logging in if needed).
     if (location.hash.startsWith(JOIN_HASH)) {
       const token = decodeURIComponent(location.hash.slice(JOIN_HASH.length));

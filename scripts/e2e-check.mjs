@@ -1,6 +1,6 @@
 // Functional smoke test of the main flows against `vite preview` (see README).
 import { chromium } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { GID, ME, ORG, playerContext, SB_URL } from './player-mock.mjs';
@@ -1389,6 +1389,100 @@ if (SB_URL) {
   assert((await stored()) === null, 'runner: local evening kept after losing control');
   console.log(`runner: ${db.sets.length} live writes, revs ${db.sets.map((x) => x.rev).join(',')}`);
   await rctx.close();
+}
+
+// 19. WhatsApp import (v14), logged out on a mocked Supabase: the iPhone .zip export → the names
+// checklist (most messages first, one already in the roster greyed, numbers unchecked) → past the
+// 4 free players the login sheet → the quick rating (rate two, skip one, finish). Then the Android
+// share target: a chat POSTed to ./share-target through the service worker opens the checklist.
+// The phone's contacts (stubbed picker). No phone number is stored anywhere.
+{
+  const wctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await wctx.addInitScript(() => {
+    navigator.contacts = { select: async () => [{ name: ['רונן'] }, { name: ['‪+972 52-999-4567‬'] }, { name: [] }] };
+  });
+  const ws = cloudServer();
+  await cloudRoutes(wctx, ws);
+  const wp = await wctx.newPage();
+  wp.on('pageerror', (e) => errors.push(`wa: ${e.message}`));
+  const roster = () => wp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).players);
+  const sheet = wp.getByRole('dialog', { name: 'ייבוא רשימה' });
+  const rating = wp.getByRole('dialog', { name: 'דירוג מהיר' });
+  const fixture = (f) => new URL(`./fixtures/${f}`, import.meta.url).pathname;
+  await wp.goto(base + '#players');
+  await wp.getByPlaceholder('איך קוראים לו?').fill('אבי');
+  await wp.getByRole('button', { name: /^הוספה$/ }).click();
+  await wp.getByRole('button', { name: /ייבוא רשימה/ }).click();
+  assert(await sheet.getByRole('button', { name: "מצ'אט בוואטסאפ" }).isVisible(), 'wa: the WhatsApp button');
+  assert(!(await sheet.locator('details.wa-help').evaluate((d) => d.open)), 'wa: the export hint starts folded');
+  await sheet.getByLabel('קובץ לייבוא').setInputFiles(fixture('wa-chat-ios.zip'));
+  await sheet.locator('.wa-picks').waitFor({ timeout: 5000 }).catch(() => errors.push('wa: no checklist from the zip'));
+  const chips = await sheet.locator('.wa-picks .card-chip').evaluateAll((bs) => bs.map((b) => [b.textContent, b.getAttribute('aria-pressed'), b.disabled]));
+  assert(
+    JSON.stringify(chips.map((c) => c[0])) === JSON.stringify(['אלי', 'דני', 'Ben', 'יוסי כהן', 'אביכבר ברשימה', 'נועם', 'ליאור', 'עומר', '2 מספרים בלי שם']),
+    `wa: checklist ${JSON.stringify(chips)}`,
+  );
+  assert(chips[4][2] === true && chips[8][1] === 'false' && chips[0][1] === 'true', `wa: greyed / unchecked ${JSON.stringify(chips)}`);
+  for (const n of ['נועם', 'ליאור', 'עומר']) await sheet.getByRole('button', { name: n, exact: true }).click();
+  await sheet.getByRole('button', { name: 'הוספת 4 שחקנים' }).click();
+  assert(await wp.getByRole('dialog', { name: 'התחברות' }).getByText('כדי להוסיף עוד שחקנים צריך להתחבר').isVisible(), 'wa: 1 + 4 asks to log in');
+  assert((await roster()).length === 1, 'wa: nothing added before the login');
+  await loginInSheet(wp);
+  await rating.waitFor({ timeout: 5000 }).catch(() => errors.push('wa: no quick rating after the login'));
+  assert((await rating.locator('.rate-progress').textContent()) === '1/4' && (await rating.locator('.rate-name').textContent()) === 'אלי', 'wa: rating starts at 1/4 אלי');
+  await rating.getByRole('button', { name: 'התקפה', exact: true }).click();
+  await rating.getByRole('radio', { name: '8', exact: true }).click();
+  assert((await rating.locator('.rate-progress').textContent()) === '2/4', 'wa: on to 2/4');
+  await rating.getByRole('radio', { name: '3', exact: true }).click();
+  assert((await rating.locator('.rate-name').textContent()) === 'Ben', 'wa: 3/4 is Ben');
+  await rating.getByRole('button', { name: 'דילוג' }).click();
+  assert((await rating.locator('.rate-progress').textContent()) === '4/4', 'wa: skip goes on');
+  await rating.getByRole('button', { name: 'סיום' }).click();
+  assert(!(await rating.count()), 'wa: "סיום" closes the rating');
+  const after = await roster();
+  const by = (n) => after.find((p) => p.name === n);
+  assert(after.length === 5 && !by('נועם') && !after.some((p) => p.name.startsWith('בלי שם')), `wa: roster ${after.map((p) => p.name)}`);
+  assert(by('אלי')?.attrs.overall === 8 && JSON.stringify(by('אלי')?.positions) === '["att"]', `wa: אלי ${JSON.stringify(by('אלי'))}`);
+  assert(by('דני')?.attrs.overall === 3, `wa: דני ${by('דני')?.attrs.overall}`);
+  assert(by('Ben')?.attrs.overall === 5 && !by('Ben')?.positions && !by('Ben')?.canGK && !by('Ben')?.levelVotes, 'wa: skipped Ben stays 5, nothing marked');
+  assert(by('יוסי כהן')?.attrs.overall === 5, 'wa: closed before יוסי כהן: 5');
+
+  // Android share target, through the real service worker.
+  await wp.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 15000 }).catch(() => errors.push('wa: no service worker'));
+  const chat = readFileSync(fixture('wa-chat-android.txt'), 'utf8');
+  await wp.evaluate((text) => {
+    const f = Object.assign(document.createElement('form'), { method: 'POST', action: './share-target', enctype: 'multipart/form-data' });
+    const input = Object.assign(document.createElement('input'), { type: 'file', name: 'file' });
+    const dt = new DataTransfer();
+    dt.items.add(new File([text], 'WhatsApp Chat with כדורגל.txt', { type: 'text/plain' }));
+    input.files = dt.files;
+    f.append(input);
+    document.body.append(f);
+    f.submit();
+  }, chat);
+  await sheet.locator('.wa-picks').waitFor({ timeout: 8000 }).catch(() => errors.push('wa: the share target did not open the checklist'));
+  const shared = await sheet.locator('.wa-picks .card-chip').evaluateAll((bs) => bs.map((b) => b.textContent));
+  assert(JSON.stringify(shared) === JSON.stringify(['שחר', 'אליכבר ברשימה', 'תומר', 'רז', 'מספר בלי שם']), `wa: shared checklist ${JSON.stringify(shared)}`);
+  assert((await wp.evaluate(() => location.hash)) === '#players', 'wa: the share hash is cleaned');
+  assert(!(await wp.evaluate(() => caches.keys())).includes('kochot-share'), 'wa: the shared chat is deleted once read');
+  await sheet.getByRole('button', { name: 'הוספת 3 שחקנים' }).click();
+  await rating.getByRole('button', { name: 'סיום' }).click();
+  assert((await roster()).length === 8, 'wa: 3 more from the share');
+
+  // Contacts (Android Chrome's picker, stubbed): names only.
+  await wp.getByRole('button', { name: /ייבוא רשימה/ }).click();
+  await sheet.getByRole('button', { name: 'מאנשי הקשר' }).click();
+  assert(JSON.stringify(await sheet.locator('.wa-picks .card-chip').evaluateAll((bs) => bs.map((b) => b.textContent))) === '["רונן"]', 'wa: contacts checklist');
+  await sheet.getByRole('button', { name: 'הוספת שחקן אחד' }).click();
+  await rating.getByRole('radio', { name: '6', exact: true }).click();
+  assert(!(await rating.count()) && (await roster()).find((p) => p.name === 'רונן')?.attrs.overall === 6, 'wa: contact added and rated, round over');
+
+  // Nothing with a phone number, anywhere this phone keeps data.
+  const kept = await wp.evaluate(async () => JSON.stringify(localStorage) + JSON.stringify(await caches.keys()));
+  assert(!/4567|4321|0134/.test(kept), 'wa: a phone number was stored');
+  assert(!/4567|4321/.test(JSON.stringify(ws.calls)), 'wa: a phone number was sent to the server');
+  console.log(`whatsapp: ${(await roster()).length} players (zip, share target, contacts)`);
+  await wctx.close();
 }
 
 console.log(`split 22 players in ${dt}ms`);

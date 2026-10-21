@@ -1,5 +1,6 @@
 import { CARDS, applyCards, sanitizeCards, type CardId } from './cards';
 import { parsePositionWords } from './positions';
+import { isPhone } from './whatsapp';
 import { newId, sanitizePlayer, sanitizeSettings, type Player, type Settings } from './model';
 import type { Constraints } from '../engine';
 import { sanitizeHistory, type EveningRecord } from './history';
@@ -28,6 +29,11 @@ export function parseRoster(text: string, existingNames: string[] = []): ParsedR
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
+    // A bare phone number is never a name (and never stored).
+    if (isPhone(line.split(/[,;\t|]/)[0])) {
+      skipped.push({ line: 'מספר טלפון', reason: 'בלי שם' });
+      continue;
+    }
     let name = '';
     let level = 5;
     let rest = '';

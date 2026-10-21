@@ -8,6 +8,7 @@ import { sanitizeHistory, type EveningRecord } from '../state/history';
 import type { Player } from '../state/model';
 import type { Position } from '../engine';
 import { sanitizePositions } from '../state/positions';
+import { applyCards } from '../state/cards';
 import { attrsAtLevel, averageLevel, sanitizeVotes, type LevelVotes } from '../state/votes';
 import { fail } from './supabase';
 
@@ -121,6 +122,17 @@ export function mergePlayerVotes(levelVotes: LevelVotes | undefined, rows: VoteR
   for (const r of rows) if (r.playerId === playerId) out[r.rater] = r.level;
   Object.assign(out, levelVotes ?? {});
   return sanitizeVotes(out);
+}
+
+/**
+ * A level tap in the edit sheet (and the quick rating after an import): logged out / local, the
+ * level itself; in a synced group the organizer's vote, and the level is the average with everyone's
+ * votes. Attributes are rebuilt from level + cards.
+ */
+export function playerAtLevel(p: Player, level: number, voter: string | null, rows: VoteRow[]): Player {
+  if (!voter) return { ...p, attrs: applyCards(level, p.cards) };
+  const levelVotes = { ...p.levelVotes, [voter]: level };
+  return { ...p, levelVotes, attrs: applyCards(averageLevel(mergePlayerVotes(levelVotes, rows, p.id)) ?? level, p.cards) };
 }
 
 /**

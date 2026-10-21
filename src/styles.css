@@ -2888,3 +2888,39 @@ thead th {
 .viewer-bar .btn {
   flex: none;
 }
+
+/* Import from WhatsApp (v14): the export hint, the picked names, the quick rating. */
+.wa-help {
+  margin-block: 10px 14px;
+}
+.steps {
+  margin: 0 0 6px;
+  padding-inline-start: 22px;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+.import-lead {
+  margin-block-start: 6px;
+}
+.wa-picks {
+  margin-block: 4px 16px;
+}
+.wa-picks .card-chip:disabled {
+  opacity: 0.5;
+}
+.wa-picks .card-chip small {
+  font-weight: 400;
+}
+.quick-rate {
+  gap: 14px;
+  padding-block-start: 0;
+}
+.quick-rate .rate-name {
+  margin: 0;
+}
+.quick-rate .pos-picker .card-chips {
+  justify-content: center;
+}
+.quick-rate .row-links {
+  margin-block: 0;
+}

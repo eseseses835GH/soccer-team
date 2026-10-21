@@ -692,3 +692,33 @@ All raise **SQLSTATE `54000`** with the cap's name as the message → `SyncError
 
 ### Code and tests
 `src/sync/gate.ts` (+ `gate.test.ts`: only non-sample players count, imports, old phones, 200, one group, blocked → login → continues once / dropped on close, auto-upload rules, `54000` mapping), `src/ui/useGate.ts`, `SyncProvider` (`loggedOut`, `openLogin(reason, then)`, `createGroup`, auto-upload, limit messages), `GroupsSheet`, `PlayersScreen`, `LateSheet`, `App` (`#import=`), `AccountSheet` (two reasons). The sheet no longer unlocks page scroll while another sheet is still open under the login sheet. e2e: the main flow logs in from the sheet at the 19-player import (mocked Supabase, `scripts/cloud-mock.mjs`) and runs synced from there; backup restore asks then continues; a new group while logged in is created on the server; block 18 (sample + 4 free, 5th → login → added + uploaded; "+ קבוצה חדשה" → login → form → only the new group goes up; late "מישהו חדש" → login → "in now or wait"; an old phone keeps 6). Screenshots `11f-login-players`, `11g-login-group`; `13-new-group` now on a mocked login.
+
+## WhatsApp import and quick rating (v14)
+*Extends "ייבוא רשימה" (the import sheet). The free limit is v13's.*
+
+### What a website can get from WhatsApp
+A web page can't read a personal WhatsApp group's members. Meta's Groups API only covers groups a business creates through it; third-party "WhatsApp APIs" automate WhatsApp Web against WhatsApp's terms — not used and not mentioned in the app. So the sources are what the user can hand over himself:
+- **Exported chat** (WhatsApp → פרטי הקבוצה → ייצוא צ'אט → ללא מדיה): the `.txt`, or the `.zip` the iPhone makes. The names are the **senders**: people who never wrote in the group don't appear (the hint says so).
+- **Android share target:** the installed app is in the share sheet (manifest `share_target`, POST multipart `file` .txt/.zip + `text`). `public/sw.js` keeps the file in the `kochot-share` cache and redirects to `#players?import=shared`; the import sheet reads it once and deletes it. A share never opened is deleted on the next start; a new SW version keeps that cache.
+- **Contacts** (`navigator.contacts.select(['name'])`, Android Chrome): names only. The button is hidden where the API is missing (iPhone, desktop).
+- **Participants CSV** from WhatsApp-Web export extensions: a header with a name column (`Name`, `שם`, `Saved Name`, `Public Name`…) and a phone column (`Phone`, `Number`, `טלפון`…). The first name column with a value wins; rows without a name are skipped. A header with `רמה`/`level` is our roster CSV and goes to the old parser.
+- Pasting a chat into the text box works too; any other paste is the old one-line-per-player import, unchanged.
+
+### Parsing (`src/state/whatsapp.ts`, pure)
+- Message headers: iPhone `[21/10/2026, 20:15:03] דני: …`, Android `21/10/2026, 20:15 - דני: …`; any date order and `/ . -`, with or without the comma, 24h or 12h (`PM`, `p.m.`, `לפנה"צ`/`אחה"צ`, narrow no-break spaces). Lines without a header continue the message above (multi-line messages).
+- **System notices are never names:** Android notices have no `name: `; iPhone puts them under the group's name with a left-to-right mark first (`[…] כדורגל שישי: ‎דני הצטרף/ה…`) — such a body is a notice unless it's a media line ("image omitted", `<מצורף: …>`, deleted…). The encryption notice is dropped in both. A "sender" with quotes, over 40 characters or more than 5 words is a notice whose text had a colon (`changed the subject from "a: b"`).
+- Names: direction marks/isolates (U+200E/200F/202A–202E/2066–2069) and the `~ ` of non-contacts removed, spaces collapsed, cut to 24. Same person = same name ignoring case, spaces and marks (first spelling kept). Sorted by number of messages.
+- **Phone numbers are never kept.** A sender that is only a number is counted and dropped inside the parser; the sheet shows one chip "N מספרים בלי שם", off by default; on, they're added as "בלי שם 1", "בלי שם 2"… A bare number in a pasted list is skipped too. Tested: parser output, localStorage, caches and what's sent to the server contain no fixture number.
+- **Zip:** a ~40-line reader of the central directory, inflating with the browser's own `DecompressionStream('deflate-raw')` — no dependency. Picks `_chat.txt` (else a `*chat*.txt`, else any `.txt`, never `__MACOSX`). Stored or deflated, no zip64 (a chat without media is small).
+
+### The sheet
+One sheet, as before: on top "מצ'אט בוואטסאפ" (WhatsApp green) and "מאנשי הקשר" (when supported), then a folded "איך מייצאים צ'אט?" (3 steps + "מי שלא כתב בקבוצה לא יופיע"), then the old paste/file part. A chat, CSV or contacts → a checklist of chips: everyone on, names already in the roster greyed "כבר ברשימה", numbers off → "הוספת N שחקנים" / "חזרה". *(my call: chips, like the cards and positions, instead of a long list of checkboxes.)*
+
+### Quick rating right after
+Only for players added from the checklist (a pasted list already has its levels). One at a time in the same sheet ("דירוג מהיר"): progress `3/12`, the name, optional position chips (🧤 הגנה קישור התקפה), the 10 round level buttons — a tap saves and goes on — "דילוג" (stays 5, nothing marked), "סיום". *(my call: the chips sit above the levels because a level tap moves on.)* A level tap goes through `playerAtLevel` (`src/sync/players.ts`), the same function the edit sheet now uses: in a synced group it's the organizer's vote and the level is the average. Every tap is saved at once, so closing midway keeps what was rated; a player deleted meanwhile is passed over.
+
+### Free limit
+The whole checklist is one decision (v13): logged out past 4 own players the login sheet opens, and after logging in the players are added (names taken meanwhile are dropped) and the rating starts.
+
+### Code and tests
+`src/state/whatsapp.ts` (+ `whatsapp.test.ts`: iPhone/Android/Hebrew/English/12h/other date orders/multi-line/notices/phone senders/marks/duplicates/24 chars; CSV headers; zip deflated/stored/fixture made by `zip`/no .txt), `src/state/quickRate.ts` (+ test: steps, skip, organizer vote, gate), `src/sw.test.ts` (share target against a fake worker: file, .txt among several, text, broken post, cache kept on update), `src/ui/ImportSheet.tsx` (moved out of `PlayersScreen.tsx`), `public/manifest.webmanifest`, `public/sw.js`, `App.tsx` (`#players?…`, stale share dropped). Fixtures in `scripts/fixtures/`. e2e block 19: zip → checklist → login at the 5th → rate two, skip one, finish → roster; share target POST through the real SW → checklist; contacts (stubbed); no number stored or sent. Screenshots `03i`–`03l` (light + dark).
