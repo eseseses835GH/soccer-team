@@ -3,6 +3,7 @@ import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { liveServer, organizerRoutes, ORG_ME, groupState, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -1046,6 +1047,96 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   assert(lives.length === ended, 'org: an ended evening is not republished on open');
   assert(pushes.length - pushesAfterVote <= 2, `org: no push loop (${pushes.length - pushesAfterVote} pushes after the vote)`);
   console.log(`organizer: ${lives.length} live writes (${lives.map((l) => (l ? (l.match ? 'match' : 'teams') : 'ended')).join(', ')}), ${pushes.length} group pushes`);
+  await octx.close();
+}
+
+// 9b. Runner handoff, organizer side (v12), on a mocked server with the v12 rules: a player takes
+// control → this phone's next write is refused → read-only with whose phone runs it → take it back
+// (imports the player's goal, publishes with the rev) → he takes it again → "סיום הערב" takes
+// control first and ends it → a second organizer phone opens read-only and writes nothing.
+{
+  const octx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await octx.newPage();
+  pg.on('pageerror', (e) => errors.push(`handoff: ${e.message}`));
+  const srv = liveServer();
+  await organizerRoutes(pg, srv);
+  await pg.goto(base);
+  await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await pg.waitForTimeout(200);
+  srv.roster = (await groupState(pg)).app.players;
+  await signInOrganizer(pg);
+  await pg.reload();
+  await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+  await pg.waitForSelector('.team');
+  await pg.waitForTimeout(1600);
+  await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+  await pg.getByRole('button', { name: /התחלה/ }).click();
+  await pg.waitForTimeout(1600);
+  assert(srv.runner === ORG_ME && srv.data?.match, `handoff: the organizer runs it first (${srv.runner})`);
+  const sets = () => srv.calls.filter((c) => c.rpc === 'live_set');
+  assert(sets()[0]?.body.p_rev === undefined && sets().at(-1)?.body.p_rev === srv.rev - 1, `handoff: first publish without rev, then with it (${sets().map((c) => c.body.p_rev)})`);
+
+  playOnElsewhere(srv); // a player took control and scored
+  await pg.getByRole('button', { name: '+ גול' }).last().click();
+  await pg.getByRole('button', { name: 'דילוג' }).click();
+  await pg.getByText('מנוהל מהטלפון של דני').waitFor({ timeout: 5000 }).catch(() => errors.push('handoff: no viewer line after a refused write'));
+  assert((await pg.getByRole('button', { name: '+ גול' }).count()) === 0, 'handoff: no match controls while someone else runs it');
+  assert(srv.runner !== ORG_ME, 'handoff: the refused write took nothing');
+  const n = sets().length;
+
+  await pg.getByRole('button', { name: 'לקחת את הניהול בחזרה' }).click();
+  await pg.getByRole('button', { name: '+ גול' }).first().waitFor();
+  await pg.waitForTimeout(600);
+  const scores = await pg.locator('.pitch .goals').allInnerTexts();
+  assert(scores.join() === '1,0', `handoff: the player's goal imported, ours dropped (${scores})`);
+  const take = srv.calls.findLastIndex((c) => c.rpc === 'take_control');
+  assert(take >= 0 && sets().length === n + 1 && sets().at(-1).body.p_rev === srv.rev - 1, `handoff: taken back and published with the rev (${sets().at(-1)?.body.p_rev}/${srv.rev})`);
+  assert(srv.runner === ORG_ME && srv.data.match.score.join() === '1,0', 'handoff: the row is ours again');
+  const st = await groupState(pg);
+  assert(st.app.match.goals.length === 1 && st.app.presentIds.length === st.app.result.playerIds.length + st.app.result.subIds.length, 'handoff: imported match and attendance');
+
+  playOnElsewhere(srv, '00000000-0000-4000-8000-0000000000cc', 'דני');
+  await pg.reload();
+  await pg.getByText('מנוהל מהטלפון של דני').waitFor({ timeout: 5000 }).catch(() => errors.push('handoff: reopening while someone else runs it is not read-only'));
+  const before = sets().length;
+  await pg.getByRole('button', { name: 'סיום הערב' }).click();
+  await pg.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
+  await pg.waitForURL(/#evening\//, { timeout: 5000 }).catch(() => errors.push('handoff: ending did not open the evening summary'));
+  await pg.waitForTimeout(1600);
+  assert(srv.calls.filter((c) => c.rpc === 'take_control').length === 2, 'handoff: ending took control first');
+  assert(sets().length > before && sets().at(-1).body.p_data === null && typeof sets().at(-1).body.p_rev === 'number', `handoff: ended with null and the rev (${JSON.stringify(sets().at(-1)?.body).slice(0, 60)})`);
+  const ended = await groupState(pg);
+  assert(ended.app.history.length === 1 && ended.app.history[0].matches.length === 1, `handoff: the evening is in the history with the player's goal (${ended.app.history[0]?.matches.length})`);
+
+  // A second organizer phone (same roster, no teams) while another organizer runs tonight.
+  srv.data = null;
+  srv.runner = null;
+  const phone1 = ended;
+  await pg.goto(base + '#home');
+  await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+  await pg.waitForSelector('.team');
+  await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+  await pg.waitForTimeout(1600);
+  srv.runner = '00000000-0000-4000-8000-0000000000dd';
+  srv.runnerName = 'משה';
+  const p2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pg2 = await p2.newPage();
+  pg2.on('pageerror', (e) => errors.push(`second phone: ${e.message}`));
+  await organizerRoutes(pg2, srv);
+  await pg2.goto(base);
+  await pg2.evaluate((st) => {
+    localStorage.setItem('kochot:groups', JSON.stringify(st.index));
+    localStorage.setItem(`kochot:group:${st.gid}`, JSON.stringify({ ...st.app, result: null, match: null, presentIds: [], history: [] }));
+  }, phone1);
+  await signInOrganizer(pg2);
+  const setsBefore = sets().length;
+  await pg2.reload();
+  await pg2.getByText('מנוהל מהטלפון של משה').waitFor({ timeout: 5000 }).catch(() => errors.push('second phone: no viewer line on home'));
+  await pg2.getByRole('button', { name: /^לערב/ }).click();
+  await pg2.getByRole('button', { name: 'לקחת את הניהול בחזרה' }).waitFor();
+  await pg2.waitForTimeout(1500);
+  assert(sets().length === setsBefore, 'second phone: nothing written while someone else runs it');
+  await p2.close();
   await octx.close();
 }
 

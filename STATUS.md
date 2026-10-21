@@ -209,3 +209,7 @@
 # v10: player side
 - **Built:** player link → read-only player group ("שחקן" tag): "מי אתה?", live evening (me highlighted, ticking clock), past evenings, rating survey when allowed. Organizer sync never runs on it. See DECISIONS → "Players and live evening — player side (v10)".
 - **Tested:** unit (`src/sync/playerGroup.test.ts`); mocked-Supabase screenshots p01–p08 (light + dark).
+
+# v12: runner handoff, organizer side
+- **Built:** an organizer's phone writes tonight only while it runs it; when someone else runs it, the teams/match screens are read-only ("מנוהל מהטלפון של …") with one button to take it back, which imports everything played meanwhile. "סיום הערב" takes control first. A second organizer phone opens read-only. See DECISIONS → "Match runner handoff — organizer side (v12)".
+- **Tested:** unit (`src/sync/organizerControl.test.ts`), e2e block 9b and screenshots 18a–d on a mocked server.

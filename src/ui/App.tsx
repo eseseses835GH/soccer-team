@@ -17,6 +17,8 @@ import { ClaimView, PlayerHome } from './PlayerHome';
 import { PlayerSettings } from './PlayerSettings';
 import { RateScreen } from './RateScreen';
 import { isPlayerGroup } from '../sync/playerGroup';
+import { useLiveControl } from '../sync/OrganizerSync';
+import { ViewerScreen } from './LiveControl';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
 
@@ -161,10 +163,13 @@ export function App() {
 
   // Screens that need data fall back home. A player group is read-only: no organizer screens.
   const isPlayer = isPlayerGroup(groups.current);
+  // Another phone runs tonight: the teams and match screens show it read-only (LiveControl.tsx).
+  const control = useLiveControl();
+  const viewing = !isPlayer && !!control.viewer;
   const evening = route === 'evening' ? state.history.find((e) => e.id === param) : undefined;
   const safeRoute: Route = (isPlayer ? ORGANIZER_ONLY : PLAYER_ONLY).includes(route)
     ? 'home'
-    : (route === 'teams' && !state.result) || (route === 'match' && !state.match)
+    : !viewing && ((route === 'teams' && !state.result) || (route === 'match' && !state.match))
       ? state.result
         ? 'teams'
         : 'home'
@@ -172,7 +177,7 @@ export function App() {
         ? 'history'
         : route;
 
-  const backTo = safeRoute === 'help' ? helpFrom.current : PARENT[safeRoute];
+  const backTo = safeRoute === 'help' ? helpFrom.current : viewing && safeRoute === 'match' ? 'home' : PARENT[safeRoute];
 
   const doImport = () => {
     if (!incoming) return;
@@ -245,8 +250,8 @@ export function App() {
       </header>
       <main className={`screen screen-${safeRoute}`}>
         {safeRoute === 'home' && (isPlayer ? <PlayerHome /> : <HomeScreen />)}
-        {safeRoute === 'teams' && <TeamsScreen />}
-        {safeRoute === 'match' && <MatchScreen />}
+        {safeRoute === 'teams' && (viewing ? <ViewerScreen /> : <TeamsScreen />)}
+        {safeRoute === 'match' && (viewing ? <ViewerScreen /> : <MatchScreen />)}
         {safeRoute === 'players' && <PlayersScreen />}
         {safeRoute === 'settings' && (isPlayer ? <PlayerSettings /> : <SettingsScreen focus={param} />)}
         {safeRoute === 'history' && <HistoryScreen readOnly={isPlayer} />}

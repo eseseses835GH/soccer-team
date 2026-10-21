@@ -119,13 +119,3 @@ export function createLivePublisher(o: PublisherOptions): LivePublisher {
     },
   };
 }
-
-/** Another organizer's phone wrote the live row this recently: don't take it over just by opening the app. */
-export const FOREIGN_FRESH_MS = 10 * 60_000;
-
-/** On open/focus: republish only if the row is ours, missing, ended, or stale. */
-export function shouldRepublish(row: { updatedBy: string | null; updatedAt: string } | null, me: string, now = Date.now()): boolean {
-  if (!row || !row.updatedBy || row.updatedBy.toLowerCase() === me.toLowerCase()) return true;
-  const t = Date.parse(row.updatedAt);
-  return Number.isNaN(t) || now - t > FOREIGN_FRESH_MS;
-}

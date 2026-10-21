@@ -3,6 +3,7 @@
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { playerContext, SB_URL } from './player-mock.mjs';
+import { groupState, liveServer, organizerRoutes, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
 
 const out = process.argv[2] ?? 'screenshots';
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
@@ -393,6 +394,47 @@ for (const scheme of ['light', 'dark']) {
     if (sw > 390) errors.push(`${scheme}: horizontal overflow on organizers: ${sw}px`);
     if (!calls.some((c) => c.endsWith('/rpc/group_members_list'))) errors.push(`${scheme}: members were never asked for`);
     await octx.close();
+  }
+
+  // Runner handoff, organizer side (v12), mocked: a player runs tonight → read-only with whose
+  // phone → home → take it back (his goal imported).
+  {
+    const hctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: scheme, isMobile: true, hasTouch: true, locale: 'he-IL', reducedMotion: 'reduce' });
+    const pg = await hctx.newPage();
+    pg.on('pageerror', (e) => errors.push(`${scheme} handoff: ${e.message}`));
+    pg.on('console', (m) => m.type() === 'error' && !/fonts\.g|409|404/.test(m.text()) && errors.push(`${scheme} handoff console: ${m.text()}`));
+    const hshot = async (name, full = false) => {
+      await pg.waitForTimeout(200);
+      await pg.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: full });
+      const sw = await pg.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    const srv = liveServer();
+    await organizerRoutes(pg, srv);
+    await pg.goto(base);
+    await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+    await pg.waitForTimeout(200);
+    srv.roster = (await groupState(pg)).app.players;
+    await signInOrganizer(pg);
+    await pg.reload();
+    await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+    await pg.waitForSelector('.team');
+    await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+    await pg.getByRole('button', { name: /התחלה/ }).click();
+    await pg.waitForTimeout(1600);
+    playOnElsewhere(srv);
+    await pg.reload();
+    await pg.getByText('מנוהל מהטלפון של דני').waitFor();
+    await hshot('18a-handoff-viewer');
+    await hshot('18b-handoff-viewer-full', true);
+    await pg.goto(base + '#home');
+    await pg.getByText('מנוהל מהטלפון של דני').waitFor();
+    await hshot('18c-handoff-home');
+    await pg.getByRole('button', { name: /^לערב/ }).click();
+    await pg.getByRole('button', { name: 'לקחת את הניהול בחזרה' }).click();
+    await pg.getByRole('button', { name: '+ גול' }).first().waitFor();
+    await hshot('18d-handoff-taken-back');
+    await hctx.close();
   }
 
   // Left early (v6): pick → confirm → the best sub comes in; then (no subs) a swap suggestion.
