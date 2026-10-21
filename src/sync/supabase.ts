@@ -67,8 +67,9 @@ export class SyncError extends Error {
     /**
      * taken = that roster player is already claimed by someone else (or you already claimed one).
      * conflict = live_set lost: someone else runs the evening, or the row moved on (stale rev).
+     * limit = one of the server's caps (54000; the message names it, see sync/gate.ts limitText).
      */
-    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'taken' | 'conflict' | 'other',
+    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'taken' | 'conflict' | 'limit' | 'other',
   ) {
     super(message);
   }
@@ -83,6 +84,7 @@ export function fail(error: { message?: string; code?: string; status?: number }
   if (error?.code === 'P0002' || error?.code === '22023') throw new SyncError(msg, 'invalid');
   if (error?.code === '23505') throw new SyncError(msg, 'taken');
   if (error?.code === '40001') throw new SyncError(msg, 'conflict');
+  if (error?.code === '54000') throw new SyncError(msg, 'limit');
   throw new SyncError(msg, 'other');
 }
 

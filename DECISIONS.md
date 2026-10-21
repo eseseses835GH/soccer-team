@@ -657,3 +657,35 @@ Player can't write or take with no evening; organizer's first publish (old two-a
 - **Second organizer phone** opening mid-evening: viewer, even with an old evening of its own; also my own login on a phone with no evening (the row says I run it, but this phone has nothing to publish).
 - **Old v11 organizer apps** retrying refused writes: harmless, nothing done.
 - **Tests:** `src/sync/organizerControl.test.ts` (fake server with the v12 rules: first publish without rev then with it, conflict → viewer and silence, realtime take-over → viewer, take back imports and publishes with the rev, ending while someone else runs → take + import + `null` with rev + history, second phone opens as viewer (3 local states), ended meanwhile, watched evening ended elsewhere, stale rev retry, guests added). e2e block 9b (mocked server, `scripts/organizer-mock.mjs`): refused write → viewer line, no goal buttons → take back (player's goal imported, ours dropped, rev) → reopen while a player runs → "סיום הערב" takes control and ends with `null` + rev, evening in history → second phone: home line, viewer, no writes. Screenshots `18a`–`18d` (light + dark). `shouldRepublish` / the 10-minute rule removed.
+
+## Login most of the time: free limits and server caps (v13)
+*Updates "Groups, login and sync (v3)" → Login ("Optional") and Server → size cap.*
+
+### Logged out (local only)
+- **One group.** "+ קבוצה חדשה" opens the login sheet ("כדי לפתוח עוד קבוצה צריך להתחבר. זה חינם ולוקח רגע."); after logging in, the new-group form opens. Phones that already have several local groups keep them.
+- **4 own players** (`FREE_PLAYERS` in `src/sync/gate.ts`, the only place to change it). Sample players (`sample-*`) never count, so the sample squad stays a free trial. A 5th own player — quick add, list import, backup file, old `#import=` link, late arrival "מישהו חדש" — opens the login sheet ("כדי להוסיף עוד שחקנים צריך להתחבר. זה חינם ולוקח רגע.") and the action runs once the login succeeds in the same page (Google GIS, password, or the code field). Closing the sheet drops it. A login that leaves the page (magic link, Google redirect fallback) loses it — the user just repeats the tap. *(my call: a whole import is one decision, so past the limit nothing of it is added before logging in.)*
+- Phones that already have more than 4 own players keep all of them; they can't add more until they log in.
+- Only when login exists in the build (`syncConfigured`) and the session is known to be absent (`loggedOut`); while the session is still loading nothing is blocked.
+- Settings → חשבון (logged out): one line "בלי חשבון: קבוצה אחת ועד 4 שחקנים, בטלפון הזה בלבד."
+
+### Logged in
+- **The open local group is uploaded by itself** (`shouldAutoUpload`), silently: once it has at least one own player, or when it was created while logged in (`GroupMeta.upload`, kept in the index until it's up). Not an empty/sample-only group (so a player who logs in to join doesn't leave an empty "הקבוצה שלי" on the server), never a player group, never while an invite join is pending. Runs from the sync loop: after login, on open/switch, after adding the first player, on focus and when back online — so a failed upload stays local and is retried. A retry of an upload that already went through (`23505`) is merged with the server's copy (that path used to only work for `other`).
+- **"+ קבוצה חדשה" while logged in = a cloud group from the start** (`sync.createGroup`).
+- Everything else logged in is unchanged; the gate only adds a 200-player check (same as the server).
+
+### Server caps (`supabase/migrations/20261022120000_limits.sql`, applied as `limits`)
+All raise **SQLSTATE `54000`** with the cap's name as the message → `SyncError 'limit'` → `limitText` (Hebrew).
+| cap | where | Hebrew |
+|---|---|---|
+| 20 groups created per login (that still exist) | `create_group` | אפשר לפתוח עד 20 קבוצות בחשבון |
+| 50 memberships per login | `create_group`, `join_group` (new members only) | אפשר להיות בעד 50 קבוצות |
+| 200 members per group | `join_group` (new members only; an existing member's upgrade still works) | הקבוצה מלאה |
+| 20 live organizer links per group; 100 links of any kind created per group in 24 h | `create_invite`, `create_player_invite` (only when it makes a new one) | יותר מדי קישורים. בטלו אחד ונסו שוב |
+| `groups.data` ≤ 1 MiB as text | trigger `groups_limits` (insert / update of data) | הקבוצה גדולה מדי לסנכרון |
+| ≤ 200 players in `groups.data` | same trigger | עד 200 שחקנים בקבוצה |
+*(my call: 1 MiB, not 512 KB — 150 saved evenings (the history cap) of a big group can reach ~600 KB; the real group today is 6.5 KB.)* Already bounded: group name ≤ 40, live data < 64 KB, votes by roster × members. Advisory locks per user / group make the counts race-free. Nothing existing was changed: rows over a cap stay, only new writes are checked. A refused push shows its message once per group and the status dot turns to error.
+
+**Verification:** simulated users in a transaction always rolled back (20 creates ok, 21st `groups_limit`, retry of an existing id still `23505`, 200 players ok / 201 `players_limit` on update and insert, 1.1 MB `data_limit`, rename without data ok, 21st live link `invites_limit`, player link still ok, revoke frees a slot, 101st link in 24 h refused for both kinds, 51st join and create `memberships_limit`, join into a 200-member group `group_full`, an existing member's organizer upgrade still works there, anon `42501`). Real data before/after: 5 users, 2 groups (same content hash), 6 members, 7 invites, 0 live rows, 0 votes. Advisors: security — only "leaked password protection disabled" (Auth setting); performance — the two known unused `group_live` FK indexes.
+
+### Code and tests
+`src/sync/gate.ts` (+ `gate.test.ts`: only non-sample players count, imports, old phones, 200, one group, blocked → login → continues once / dropped on close, auto-upload rules, `54000` mapping), `src/ui/useGate.ts`, `SyncProvider` (`loggedOut`, `openLogin(reason, then)`, `createGroup`, auto-upload, limit messages), `GroupsSheet`, `PlayersScreen`, `LateSheet`, `App` (`#import=`), `AccountSheet` (two reasons). The sheet no longer unlocks page scroll while another sheet is still open under the login sheet. e2e: the main flow logs in from the sheet at the 19-player import (mocked Supabase, `scripts/cloud-mock.mjs`) and runs synced from there; backup restore asks then continues; a new group while logged in is created on the server; block 18 (sample + 4 free, 5th → login → added + uploaded; "+ קבוצה חדשה" → login → form → only the new group goes up; late "מישהו חדש" → login → "in now or wait"; an old phone keeps 6). Screenshots `11f-login-players`, `11g-login-group`; `13-new-group` now on a mocked login.

@@ -217,3 +217,7 @@
 # v12: runner handoff, organizer side
 - **Built:** an organizer's phone writes tonight only while it runs it; when someone else runs it, the teams/match screens are read-only ("מנוהל מהטלפון של …") with one button to take it back, which imports everything played meanwhile. "סיום הערב" takes control first. A second organizer phone opens read-only. See DECISIONS → "Match runner handoff — organizer side (v12)".
 - **Tested:** unit (`src/sync/organizerControl.test.ts`), e2e block 9b and screenshots 18a–d on a mocked server.
+
+# v13: login most of the time
+- **Built:** logged out = one group and 4 own players (the sample squad is free); past that the login sheet opens and the action goes on after logging in. Logged in, the local group goes to the cloud by itself. Server caps (groups, memberships, members, links, data size, 200 players). See DECISIONS → "Login most of the time: free limits and server caps (v13)".
+- **Tested:** unit (`src/sync/gate.test.ts`), e2e (login from the sheet on a mocked Supabase, block 18), screenshots 11f/11g, SQL caps with simulated users (rolled back).

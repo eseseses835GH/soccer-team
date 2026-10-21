@@ -3,6 +3,7 @@ import { playersCount } from '../i18n';
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
 import { useGroups, useStore } from '../state/store';
 import { useRunner } from '../sync/RunnerProvider';
+import { LIMIT_TEXT, gatePlayers } from '../sync/gate';
 import { JOIN_HASH, STATUS_TEXT, useSync, type SyncStatus } from '../sync/SyncProvider';
 import { AccountSheet } from './AccountSheet';
 import { Sheet, Toast } from './components';
@@ -188,6 +189,15 @@ export function App() {
 
   const doImport = () => {
     if (!incoming) return;
+    const fresh = mergePlayers(state.players, incoming.players).players.filter((p) => !state.players.some((x) => x.id === p.id));
+    const r = gatePlayers(sync.loggedOut, state.players, fresh);
+    if (r === 'full') return notify(LIMIT_TEXT.players_limit);
+    if (r === 'players') return sync.openLogin('players', () => importNow(incoming));
+    importNow(incoming);
+  };
+  const importNow = (incoming: Backup) => {
+    // Also after a login: merge into the latest roster.
+    const state = groups.latest().app;
     const m = mergePlayers(state.players, incoming.players);
     const mapPair = ([a, b]: [string, string]) => [m.idMap.get(a) ?? a, m.idMap.get(b) ?? b] as [string, string];
     const ids = new Set(m.players.map((p) => p.id));

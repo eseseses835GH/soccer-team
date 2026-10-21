@@ -245,7 +245,8 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
     document.body.classList.add('no-scroll');
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.classList.remove('no-scroll');
+      // Another sheet may still be open underneath (the login sheet over the import sheet).
+      if (!document.querySelector('.sheet')) document.body.classList.remove('no-scroll');
       prev?.focus?.();
     };
   }, []);

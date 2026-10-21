@@ -4,6 +4,7 @@ import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { ORG, playerContext, SB_URL } from './player-mock.mjs';
 import { groupState, liveServer, organizerRoutes, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
+import { cloudRoutes, cloudServer, loginInSheet } from './cloud-mock.mjs';
 
 const out = process.argv[2] ?? 'screenshots';
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
@@ -235,10 +236,6 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
   await shot('12-groups-sheet');
   await checkLayout('groups sheet');
-  await page.getByRole('button', { name: /קבוצה חדשה/ }).click();
-  await page.getByLabel('שם הקבוצה').fill('כדורגל בשכונה');
-  await shot('13-new-group');
-  await page.getByRole('button', { name: 'ביטול' }).click();
   await page.getByRole('button', { name: 'סגירה' }).click();
   await page.getByRole('button', { name: 'הגדרות' }).click();
   await page.evaluate(() => scrollTo(0, 0));
@@ -319,8 +316,47 @@ for (const scheme of ['light', 'dark']) {
     await page.waitForTimeout(1200);
     await shot('11e-login');
     await checkLayout('login');
+    await page.getByRole('button', { name: 'סגירה' }).click();
+    // Logged out past the free limits (v13): the 5th own player, and a second group.
+    const waitLogin = async () => {
+      await page.locator('.gis-btn iframe, .sheet .btn-quiet:not(:disabled)').first().waitFor({ state: 'attached', timeout: 12000 });
+      await page.waitForTimeout(1200);
+    };
+    await page.goto(base + '#players');
+    for (const n of ['רועי', 'שגיא', 'עידו', 'אורי', 'נדב', 'יואב']) {
+      await page.getByPlaceholder('איך קוראים לו?').fill(n);
+      await page.getByRole('button', { name: /^הוספה$/ }).click();
+      if (await page.getByRole('dialog', { name: 'התחברות' }).count()) break;
+    }
+    await waitLogin();
+    await page.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+    await shot('11f-login-players');
+    await checkLayout('login for players');
+    await page.getByRole('dialog', { name: 'התחברות' }).getByRole('button', { name: 'סגירה' }).click();
+    await page.goto(base + '#home');
+    await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
+    await page.getByRole('button', { name: /קבוצה חדשה/ }).click();
+    await waitLogin();
+    await shot('11g-login-group');
+    await checkLayout('login for a group');
   }
   await ctx.close();
+
+  // Logged in (mocked; v13: a new group needs a login): the new-group form.
+  {
+    const nctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: scheme, isMobile: true, hasTouch: true, locale: 'he-IL', reducedMotion: 'reduce' });
+    await cloudRoutes(nctx, cloudServer());
+    const np = await nctx.newPage();
+    np.on('pageerror', (e) => errors.push(`${scheme} new group: ${e.message}`));
+    await np.goto(base);
+    await np.getByRole('button', { name: /החלפת קבוצה/ }).click();
+    await np.getByRole('button', { name: /קבוצה חדשה/ }).click();
+    await loginInSheet(np);
+    await np.getByLabel('שם הקבוצה').fill('כדורגל בשכונה');
+    await np.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+    await np.screenshot({ path: `${out}/${scheme}-13-new-group.png` });
+    await nctx.close();
+  }
 
   // Organizers sheet with the player link and players who joined (v10): a mocked session, every
   // Supabase call answered locally (nothing reaches the real project).
