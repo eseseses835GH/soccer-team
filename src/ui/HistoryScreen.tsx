@@ -227,7 +227,8 @@ function highlightsOf(rec: EveningRecord, s: EveningStats): Highlight[] {
 
 // ---------- one evening ----------
 
-export function EveningScreen({ record: rec }: { record: EveningRecord }) {
+/** `readOnly`: a player's view (nothing to delete). */
+export function EveningScreen({ record: rec, readOnly = false }: { record: EveningRecord; readOnly?: boolean }) {
   const { dispatch } = useStore();
   const { go, notify } = useUi();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -380,11 +381,13 @@ export function EveningScreen({ record: rec }: { record: EveningRecord }) {
           <Icon name="share" size={20} /> שיתוף הסיכום
         </button>
       </div>
-      <div className="row-links">
-        <button type="button" className="text-btn danger" onClick={() => setConfirmDelete(true)}>
-          מחיקה מההיסטוריה
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="row-links">
+          <button type="button" className="text-btn danger" onClick={() => setConfirmDelete(true)}>
+            מחיקה מההיסטוריה
+          </button>
+        </div>
+      )}
 
       {confirmDelete && (
         <Sheet title="למחוק את הערב?" onClose={() => setConfirmDelete(false)}>
@@ -494,12 +497,13 @@ function AllTimeView({ history }: { history: EveningRecord[] }) {
   );
 }
 
-export function HistoryScreen() {
+export function HistoryScreen({ readOnly = false }: { readOnly?: boolean }) {
   const { state } = useStore();
   const { go } = useUi();
   const [view, setView] = useState<'list' | 'all'>('list');
   const history = state.history;
 
+  if (!history.length && readOnly) return <Empty icon="📅" title="עוד אין ערבים" />;
   if (!history.length) {
     return (
       <Empty icon="📅" title="עוד אין ערבים">

@@ -7,6 +7,7 @@ import { useUi } from './App';
 import { Sheet } from './components';
 import { Icon } from './icons';
 import { OrganizersSheet } from './OrganizersSheet';
+import { isPlayerGroup } from '../sync/playerGroup';
 
 type Mode = 'list' | 'new' | 'rename' | 'remove' | 'organizers';
 
@@ -20,6 +21,8 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const cur = groups.current;
   const only = groups.index.groups.length <= 1;
+  /** A player group: read-only, so only "leave". */
+  const player = isPlayerGroup(cur);
 
   const pick = (id: string) => {
     if (id !== cur.id) {
@@ -106,7 +109,9 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
     return (
       <Sheet title={cur.synced ? 'יציאה מהקבוצה' : 'מחיקת הקבוצה'} onClose={onClose}>
         <p className="lead">
-          {cur.synced
+          {player
+            ? `״${cur.name}״ תוסר מהטלפון הזה.`
+            : cur.synced
             ? `״${cur.name}״ תוסר מהטלפון הזה, והמארגנים האחרים ימשיכו כרגיל. אם אתם המארגנים האחרונים, הקבוצה תימחק גם מהשרת.`
             : `כל השחקנים וההגדרות של ״${cur.name}״ יימחקו מהטלפון הזה. אי אפשר לבטל.`}
         </p>
@@ -132,7 +137,10 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
                 {g.id === cur.id ? '✓' : ''}
               </span>
               <span className="group-text">
-                <strong>{g.name}</strong>
+                <strong>
+                  {g.name}
+                  {isPlayerGroup(g) && <span className="role-tag">שחקן</span>}
+                </strong>
                 <small>{g.id === cur.id && g.synced ? STATUS_TEXT[sync.status] : g.synced ? 'מסונכרנת' : STATUS_TEXT.local}</small>
               </span>
             </button>
@@ -153,6 +161,7 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
       <h3 className="sheet-sub">״{cur.name}״</h3>
       <div className="stack">
         {sync.configured &&
+          !player &&
           (cur.synced ? (
             <>
               <button type="button" className="btn btn-quiet btn-block" disabled={busy} onClick={invite}>
@@ -173,17 +182,19 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
               <p className="hint small">שומר את הקבוצה בחשבון, כדי שעוד מארגנים יוכלו לערוך אותה מהטלפון שלהם. דורש התחברות.</p>
             </>
           ))}
-        <div className="row-2">
-          <button
-            type="button"
-            className="btn btn-quiet"
-            onClick={() => {
-              setName(cur.name);
-              setMode('rename');
-            }}
-          >
-            שינוי שם
-          </button>
+        <div className={player ? 'stack' : 'row-2'}>
+          {!player && (
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => {
+                setName(cur.name);
+                setMode('rename');
+              }}
+            >
+              שינוי שם
+            </button>
+          )}
           <button type="button" className="btn btn-quiet danger" disabled={only && !cur.synced} onClick={() => setMode('remove')}>
             {cur.synced ? 'יציאה' : 'מחיקה'}
           </button>

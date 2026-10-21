@@ -11,6 +11,7 @@ import { applyDoc, docFromState, mergeDocs, sanitizeDoc } from './doc';
 import { EMPTY_META, hasLocalChanges, loadMeta, saveMeta, syncGroup } from './engine';
 import { JOIN_HASH, inviteUrl } from './organizers';
 import { OrganizerSync } from './OrganizerSync';
+import { isPlayerGroup, joinPlan, publicKey, runsOrganizerSync } from './playerGroup';
 import { SyncError, getClient, hasStoredAuth, redirectUrl, remoteApi, syncConfigured } from './supabase';
 
 export type SyncStatus = 'local' | 'signedOut' | 'syncing' | 'pending' | 'synced' | 'offline' | 'error' | 'gone';
@@ -107,6 +108,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const meta = g.latestIndex().groups.find((x) => x.id === gid);
     if (!meta?.synced) return setStatus('local');
     const c = clientRef.current;
+    // Player groups never run the organizer sync (PlayerGroupProvider reads them).
+    if (!runsOrganizerSync(meta)) return setStatus(!sessionRef.current ? 'signedOut' : navigator.onLine === false ? 'offline' : 'synced');
     if (!c || !sessionRef.current) return setStatus(sessionRef.current === undefined && hasStoredAuth() ? 'syncing' : 'signedOut');
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return setStatus('offline'); // retried on 'online'
     if (running.current) {
@@ -170,22 +173,23 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   // Sync when the session or the open group changes.
   const current = groups.current;
+  const organizerSync = runsOrganizerSync(current);
   useEffect(() => {
     schedule(0);
-  }, [session, current.id, current.synced, schedule]);
+  }, [session, current.id, current.synced, current.role, schedule]);
 
   // Local edits → push after a short pause. Tonight-only changes don't count.
   useEffect(() => {
-    if (!current.synced || !session) return;
+    if (!organizerSync || !session) return;
     if (hasLocalChanges(loadMeta(localKV, current.id), docFromState(state), current.name)) {
       setStatus(navigator.onLine === false ? 'offline' : 'pending');
       schedule(1500);
     }
-  }, [state, current.id, current.name, current.synced, session, schedule]);
+  }, [state, current.id, current.name, organizerSync, session, schedule]);
 
   // Focus, back online, a slow poll, and realtime updates from other phones.
   useEffect(() => {
-    if (!current.synced || !session) return;
+    if (!organizerSync || !session) return;
     const onVisible = () => document.visibilityState === 'visible' && schedule(0);
     const onOnline = () => schedule(0);
     const onOffline = () => setStatus('offline');
@@ -208,7 +212,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       window.clearInterval(poll);
       if (c && channel) void c.removeChannel(channel);
     };
-  }, [current.id, current.synced, session, schedule]);
+  }, [current.id, organizerSync, session, schedule]);
 
   // ---------- join / upload / invite / leave ----------
   const afterLogin = useRef<LoginReason | null>(null);
@@ -220,7 +224,27 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       joining.current = token;
       try {
         const api = remoteApi(await ensureClient());
-        const { id } = await api.joinGroup(token);
+        const { id, name, role } = await api.joinGroup(token);
+        const g = groupsRef.current;
+        const known = g.latestIndex().groups.find((x) => x.id === id);
+        const { theme, accent } = g.latest().app.settings;
+        const plan = joinPlan(known, role);
+        if (plan === 'player-new' || plan === 'player-open') {
+          // Read-only: PlayerGroupProvider fills it from the public copy. A group this phone had as
+          // an organizer starts empty (its ratings aren't his to keep).
+          try {
+            localStorage.removeItem(PENDING_JOIN);
+          } catch {
+            /* ignore */
+          }
+          if (plan === 'player-open') g.switchTo(id);
+          else {
+            saveMeta(localKV, id, EMPTY_META);
+            g.adopt({ id, name, synced: true, createdAt: known?.createdAt ?? Date.now(), role: 'player' }, newGroupState({ theme, accent }));
+          }
+          say(`הצטרפתם לקבוצה ״${name}״`);
+          return;
+        }
         const row = await api.fetchGroup(id);
         if (!row) throw new SyncError('no access', 'denied');
         try {
@@ -228,16 +252,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         } catch {
           /* ignore */
         }
-        const g = groupsRef.current;
-        const known = g.latestIndex().groups.find((x) => x.id === id);
-        if (known) {
+        if (plan === 'organizer-open') {
           g.setMeta(id, { synced: true });
           g.switchTo(id);
         } else {
+          // New here, or a player group that became an organizer group: the server's copy, nothing local.
           const doc = sanitizeDoc(row.data);
-          const { theme, accent } = g.latest().app.settings;
           saveMeta(localKV, id, { base: doc, baseVersion: row.version, baseName: row.name });
-          g.adopt({ id, name: row.name, synced: true, createdAt: Date.now() }, sanitize(applyDoc(newGroupState({ theme, accent }), doc)));
+          localKV.remove(publicKey(id));
+          g.adopt(
+            { id, name: row.name, synced: true, createdAt: known?.createdAt ?? Date.now(), role: undefined },
+            sanitize(applyDoc(newGroupState({ theme, accent }), doc)),
+          );
         }
         say(`הצטרפתם לקבוצה ״${row.name}״`);
       } catch (e) {
@@ -356,8 +382,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           say(errCode(e) === 'offline' ? 'צריך אינטרנט כדי לצאת מהקבוצה' : 'היציאה לא הצליחה');
           return false;
         }
+        const meta = g.latestIndex().groups.find((x) => x.id === gid);
+        if (isPlayerGroup(meta)) localKV.remove(publicKey(gid));
         if (g.latestIndex().groups.length > 1) g.remove(gid);
-        else {
+        else if (isPlayerGroup(meta)) {
+          // Someone else's group: nothing to keep. A fresh local group takes its place.
+          g.create('הקבוצה שלי');
+          g.remove(gid);
+        } else {
           // The only group on this phone: keep the data, as a local group.
           saveMeta(localKV, gid, EMPTY_META);
           g.setMeta(gid, { synced: false });

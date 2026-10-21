@@ -205,3 +205,7 @@
 # v10: organizer side of players + live evening
 - **Built:** organizers' phones publish tonight to the live row (debounced, offline-queued, `null` when the evening ends); players' votes count in the level; "מארגנים והזמנות" has the player link and the players who joined (claim, "יכול לדרג", remove / undo claim). See DECISIONS → "Players and live evening — organizer side (v10)".
 - **Tested:** unit (`src/sync/publish.test.ts`), e2e block 9 and screenshots 17a–c with a mocked session (nothing sent to the real project).
+
+# v10: player side
+- **Built:** player link → read-only player group ("שחקן" tag): "מי אתה?", live evening (me highlighted, ticking clock), past evenings, rating survey when allowed. Organizer sync never runs on it. See DECISIONS → "Players and live evening — player side (v10)".
+- **Tested:** unit (`src/sync/playerGroup.test.ts`); mocked-Supabase screenshots p01–p08 (light + dark).
