@@ -2852,3 +2852,10 @@ thead th {
   background: var(--accent);
   color: var(--accent-ink);
 }
+/* Google's own button (an iframe it draws). color-scheme normal: no opaque backdrop behind the iframe in dark mode. */
+.gis-btn {
+  display: flex;
+  justify-content: center;
+  min-block-size: 44px;
+  color-scheme: normal;
+}

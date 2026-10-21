@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { GOOGLE_CLIENT_ID, googleMode, iosHomeScreen, loadGis, makeNonce, secureForGis } from '../sync/googleId';
 import { authErrorText, authProviders, redirectUrl } from '../sync/supabase';
 import { useSync, type LoginReason } from '../sync/SyncProvider';
 import { Segmented, Sheet } from './components';
@@ -25,6 +26,10 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [google, setGoogle] = useState<boolean | null>(null);
+  const useGis = !!GOOGLE_CLIENT_ID && secureForGis() && !iosHomeScreen();
+  const [gis, setGis] = useState<'loading' | 'ready' | 'failed'>(useGis ? 'loading' : 'failed');
+  const gisBox = useRef<HTMLDivElement>(null);
+  const onCredential = useRef<(credential: string | undefined, nonce: string) => void>(() => {});
 
   useEffect(() => {
     let live = true;
@@ -33,6 +38,49 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
       live = false;
     };
   }, []);
+
+  // Google's own button (GIS), loaded only now. A fresh nonce each time the sheet opens: Google
+  // gets its SHA-256, Supabase the raw value, and checks that they match.
+  useEffect(() => {
+    if (!useGis) return;
+    let live = true;
+    Promise.all([loadGis(), makeNonce()])
+      .then(([id, nonce]) => {
+        if (!live) return;
+        id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          nonce: nonce.hashed,
+          ux_mode: 'popup',
+          auto_select: false,
+          callback: (r) => onCredential.current(r.credential, nonce.raw),
+        });
+        setGis('ready');
+      })
+      .catch(() => live && setGis('failed'));
+    return () => {
+      live = false;
+    };
+  }, [useGis]);
+
+  const gMode = googleMode({ clientId: GOOGLE_CLIENT_ID, secure: secureForGis(), iosHomeScreen: iosHomeScreen(), provider: google, gis });
+
+  useEffect(() => {
+    const box = gisBox.current;
+    const id = window.google?.accounts?.id;
+    if (gMode !== 'gis' || !box || !id) return;
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    id.renderButton(box, {
+      type: 'standard',
+      theme: dark ? 'filled_black' : 'outline',
+      size: 'large',
+      text: 'continue_with',
+      shape: 'pill',
+      logo_alignment: 'center',
+      locale: 'he',
+      width: Math.max(200, Math.min(400, Math.floor(box.clientWidth))),
+    });
+  }, [gMode]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -49,11 +97,22 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
 
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
+  // The old flow (through Supabase's domain): when GIS can't be used here.
   const withGoogle = () =>
     run(async () => {
       if (google === false) throw new Error('provider is not enabled');
       const c = await sync.client();
       const { error } = await c.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectUrl() } });
+      if (error) throw error;
+    });
+
+  // GIS answered with an ID token (its nonce claim = the hash). The session arrives through
+  // onAuthStateChange, which closes this sheet and finishes a pending join/upload (SyncProvider).
+  onCredential.current = (token, nonce) =>
+    void run(async () => {
+      if (!token) throw new Error('google id token missing');
+      const c = await sync.client();
+      const { error } = await c.auth.signInWithIdToken({ provider: 'google', token, nonce });
       if (error) throw error;
     });
 
@@ -105,11 +164,16 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
     <Sheet title="התחברות" onClose={onClose}>
       <p className="lead">{LEADS[reason]}</p>
       <div className="stack">
-        <button type="button" className="btn btn-quiet btn-block" disabled={busy} onClick={withGoogle}>
-          <GoogleLogo />
-          המשך עם Google
-        </button>
-        {google === false && <p className="hint small center">Google עוד לא הופעל בפרויקט. בינתיים אפשר להתחבר עם מייל.</p>}
+        {gMode === 'gis' ? (
+          <div ref={gisBox} className="gis-btn" aria-busy={busy} />
+        ) : (
+          <button type="button" className="btn btn-quiet btn-block" disabled={busy || gMode === 'loading'} onClick={withGoogle}>
+            <GoogleLogo />
+            המשך עם Google
+          </button>
+        )}
+        {gMode === 'off' && <p className="hint small center">Google עוד לא הופעל בפרויקט. בינתיים אפשר להתחבר עם מייל.</p>}
+        {gMode === 'redirect' && useGis && <p className="hint small center">Google לא נטען כאן, אז ההתחברות תעבור דרך דף של Supabase.</p>}
       </div>
       <div className="or" aria-hidden="true">
         <span>או עם מייל</span>

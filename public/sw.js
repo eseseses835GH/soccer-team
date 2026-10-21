@@ -5,7 +5,7 @@
 // - Pages (index.html) and the other un-hashed files (manifest, icons): network first, so a new
 //   deploy is picked up on the next open; the cached copy is used only when offline.
 // - Hashed files in assets/ and Google Fonts: cache first (their content never changes).
-// - Supabase (login + sync) is never cached.
+// - Supabase (login + sync) and Google sign-in (accounts.google.com, the GIS script) are never cached.
 const BUILD = '__BUILD_ID__';
 const PRECACHE = [/*__PRECACHE__*/];
 const CACHE = `kochot-${BUILD}`;
@@ -48,6 +48,7 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   // Never cache login/sync traffic (Supabase API, auth, realtime): always straight to the network.
   if (url.hostname.endsWith('.supabase.co') || url.hostname.endsWith('.supabase.in') || /\/(auth|rest|realtime)\/v1\//.test(url.pathname)) return;
+  if (url.hostname === 'accounts.google.com' || url.hostname.endsWith('.google.com')) return;
   const sameOrigin = url.origin === self.location.origin;
   const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   if (!sameOrigin && !isFont) return;

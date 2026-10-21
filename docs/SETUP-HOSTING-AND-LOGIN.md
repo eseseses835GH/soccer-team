@@ -186,15 +186,16 @@
 ### 3. יוצרים "Client" (מפתח ההתחברות)
 1. **Clients** ← **Create client** (במסכים ישנים: **APIs & Services** ← **Credentials** ← **Create Credentials** ← **OAuth client ID**).
 2. **Application type**: **Web application**. **Name**: `Kochot web`.
-3. **Authorized JavaScript origins** ← **Add URI**:
-   - `https://example.com`
-   - אם יש גם `www`: `https://www.example.com`
-   - (רשות) `https://soccer-team-xxxx.vercel.app`
+3. **Authorized JavaScript origins** ← **Add URI**. **חובה** (כפתור Google נפתח ישירות מהאתר, ו-Google מסרב לכל כתובת שלא ברשימה). הוסיפו את כולן, בלי `/` בסוף:
+   - `https://kadoregel.com`
+   - `https://www.kadoregel.com`
+   - `https://soccer-team-tau.vercel.app`
+   - `http://localhost:5173` (להרצה על המחשב)
 4. **Authorized redirect URIs** ← **Add URI**, הדביקו בדיוק:
    ```
    https://cieyeoyuwddobrxjcffw.supabase.co/auth/v1/callback
    ```
-   (זאת הכתובת של Supabase, לא של האתר שלכם. ככה זה צריך להיות.)
+   (זאת הכתובת של Supabase, לא של האתר שלכם. היא משמשת רק לדרך הגיבוי: כשהאפליקציה פתוחה מאייקון במסך הבית של iPhone, או כש-Google לא נטען.)
 5. **Create**.
 6. יופיעו **Client ID** ו-**Client secret**. **העתיקו את שניהם ושמרו במקום בטוח.** ייתכן ש-Google יראה את ה-secret רק עכשיו (אפשר להוריד אותו כקובץ JSON).
 
@@ -204,13 +205,16 @@
 3. **Client IDs**: הדביקו את ה-Client ID.
 4. **Client Secret (for OAuth)**: הדביקו את ה-Client secret.
 5. שימו לב לשדה **Callback URL (for OAuth)** שמופיע שם: הוא צריך להיות בדיוק `https://cieyeoyuwddobrxjcffw.supabase.co/auth/v1/callback`, כמו שהדבקתם ב-Google.
-6. **Save**.
+6. **Skip nonce check**: להשאיר **כבוי**. (האפליקציה שולחת nonce, וזה מה שמגן מפני שימוש חוזר בטוקן.)
+7. **Save**.
+
+> ה-Client ID נמצא גם בקוד, בקובץ `.env` (`VITE_GOOGLE_CLIENT_ID`). הוא ציבורי, לא סוד. אם יוצרים Client חדש ב-Google, צריך לעדכן אותו גם שם וגם ב-Supabase.
 
 ### 5. מצב "Testing" מול "In production"
 - בהתחלה האפליקציה ב-Google נמצאת במצב **Testing**: רק אנשים שהוספתם לרשימת **Test users** יכולים להתחבר עם Google (עד 100). מוסיפים אותם ב-**Audience** ← **Test users** ← **Add users**.
 - כשמוכנים לכולם: **Audience** ← **Publish app** ← **Confirm**. המצב יהיה **In production**.
 - כי ביקשנו רק שם ומייל, בדרך כלל **לא צריך** בדיקה (verification) של Google כדי לפרסם. אם Google מבקש אימות, זה בעיקר כדי להציג את השם והלוגו, ואפשר להמשיך גם בלי.
-- במסך של Google יופיע "to continue to cieyeoyuwddobrxjcffw.supabase.co". זה תקין. (להחליף את זה בדומיין שלכם אפשר רק בתוספת בתשלום של Supabase, Custom Domain. לא צריך.)
+- במסך של Google יופיע "to continue to kadoregel.com" (הכתובת שממנה התחברתם). רק בדרך הגיבוי (אייקון במסך הבית של iPhone, או כש-Google לא נטען) יופיע עדיין `cieyeoyuwddobrxjcffw.supabase.co`.
 
 **בודקים:** באפליקציה ← הגדרות ← **התחברות**. כבר לא כתוב "Google עוד לא הופעל בפרויקט". לוחצים **המשך עם Google**, בוחרים חשבון, וחוזרים לאפליקציה מחוברים.
 
@@ -237,7 +241,10 @@
 
 ## ז. כשמשהו לא עובד
 
-**Google מראה "Error 400: redirect_uri_mismatch"**
+**Google מראה "Error 400: origin_mismatch" / "The given origin is not allowed"**
+הכתובת שממנה פתחתם את האפליקציה לא נמצאת ב-**Authorized JavaScript origins** של ה-Client ב-Google Cloud (פרק ה', סעיף 3). הוסיפו אותה בדיוק (עם `https`, בלי `/` בסוף), שמרו וחכו כמה דקות.
+
+**Google מראה "Error 400: redirect_uri_mismatch"
 ב-Google Cloud, ב-Client ← **Authorized redirect URIs** צריך להיות בדיוק `https://cieyeoyuwddobrxjcffw.supabase.co/auth/v1/callback`: עם `https`, בלי רווח ובלי `/` בסוף. שמרו וחכו כמה דקות (לפעמים לוקח עד חצי שעה).
 
 **אחרי ההתחברות עם Google חוזרים לכתובת אחרת (למשל ל-`vercel.app` במקום לדומיין, או ל-`localhost`)**
