@@ -86,6 +86,7 @@ npm run e2e                            # add, import, split 22, re-roll, late ar
 npm run sounds-check                   # whistles/horn fire at the right moments (spies on Web Audio), never speech
 npm run render-sounds -- ./sounds      # offline-render horn + whistles to WAV, check peak levels
 node scripts/icons.mjs                 # regenerate PWA PNG icons from public/favicon.svg
+node scripts/og-image.mjs              # regenerate public/og-image.png (1200×630 link preview)
 ```
 
 ## Importing a roster
@@ -152,6 +153,10 @@ the email code template and SMTP, Google login), in Hebrew: [docs/SETUP-HOSTING-
 - `npm run build` outputs a static `dist/` with relative paths (`base: './'`), so any static host works.
 - `vercel.json` sets the Vite preset and the headers: `index.html`, `sw.js` and the manifest are `no-cache`,
   hashed files in `assets/` are cached for a year (`immutable`), plus `nosniff`, `Referrer-Policy` and `X-Frame-Options`.
+- Search: the site lives at https://www.kadoregel.com/ (canonical; the apex redirects there). `index.html` has the
+  title/description, Open Graph tags and JSON-LD, plus a short Hebrew text in `#root` for no-JS crawlers (hidden as soon
+  as JS runs, replaced by the app). `public/about.html`, `robots.txt` and `sitemap.xml` are plain static files; the
+  `vercel.app` host gets `X-Robots-Tag: noindex`. Search Console steps (Hebrew): [docs/SEO.md](docs/SEO.md).
 - No environment variables are needed on Vercel: the Supabase URL and publishable key come from the committed `.env`.
 - The old GitHub Pages workflow (`.github/workflows/deploy.yml`, runs on `main` only) is superseded by Vercel.
 

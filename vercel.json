@@ -13,6 +13,11 @@
       ]
     },
     {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "soccer-team-tau.vercel.app" }],
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }]
+    },
+    {
       "source": "/",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     },
@@ -33,6 +38,14 @@
         { "key": "Cache-Control", "value": "no-cache" },
         { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
       ]
+    },
+    {
+      "source": "/(robots.txt|sitemap.xml)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+    },
+    {
+      "source": "/og-image.png",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
     },
     {
       "source": "/assets/(.*)",

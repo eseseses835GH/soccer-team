@@ -41,6 +41,8 @@ function put(cacheName, req, res) {
 }
 
 const NAV_TIMEOUT_MS = 3500;
+const SCOPE_PATH = new URL('./', self.location).pathname;
+const APP_PATHS = [SCOPE_PATH, `${SCOPE_PATH}index.html`];
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
@@ -52,6 +54,8 @@ self.addEventListener('fetch', (e) => {
   const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   if (!sameOrigin && !isFont) return;
 
+  // Only the app's own page is cached as the app shell; other pages (about, privacy) go to the network.
+  if (req.mode === 'navigate' && !APP_PATHS.includes(url.pathname)) return;
   if (req.mode === 'navigate') {
     // Network first, but a weak connection at the pitch shouldn't keep the app from opening: after
     // NAV_TIMEOUT_MS the cached page is used, and the network answer still refreshes the cache.

@@ -3,7 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="description" content="חלוקה הוגנת לקבוצות כדורגל בלחיצה אחת" />
+    <title>כוחות – חלוקה לקבוצות כדורגל הוגנות | kadoregel</title>
+    <meta name="description" content="עושים כוחות לכדורגל בלחיצה: מסמנים מי הגיע ומקבלים קבוצות מאוזנות לפי רמה ועמדות, עם טיימר ו״מנצחת נשארת״. בחינם, מהדפדפן, בלי להוריד אפליקציה." />
+    <link rel="canonical" href="https://www.kadoregel.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="כוחות · kadoregel" />
+    <meta property="og:locale" content="he_IL" />
+    <meta property="og:url" content="https://www.kadoregel.com/" />
+    <meta property="og:title" content="כוחות – חלוקה לקבוצות כדורגל הוגנות" />
+    <meta property="og:description" content="מסמנים מי הגיע, לוחצים ״עושים כוחות״ ומקבלים קבוצות מאוזנות. טיימר ו״מנצחת נשארת״. בחינם, בלי להוריד אפליקציה." />
+    <meta property="og:image" content="https://www.kadoregel.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="כוחות – חלוקה לקבוצות כדורגל" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="כוחות – חלוקה לקבוצות כדורגל הוגנות" />
+    <meta name="twitter:description" content="מסמנים מי הגיע, לוחצים ״עושים כוחות״ ומקבלים קבוצות מאוזנות. בחינם, בלי להוריד אפליקציה." />
+    <meta name="twitter:image" content="https://www.kadoregel.com/og-image.png" />
     <meta name="theme-color" content="#f5f4ef" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f100e" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
@@ -17,10 +33,45 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <title>כוחות</title>
+    <!-- About text for search engines and no-JS visitors; with JS the app replaces it, so it's hidden from the first paint. -->
+    <script>document.documentElement.className += ' js';</script>
+    <style>
+      .js #about { display: none; }
+      #about { padding: 32px 20px; line-height: 1.6; font-family: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; color: #151613; background: #f5f4ef; }
+      #about h1 { font-size: 1.6rem; margin: 0 0 12px; }
+      #about a { color: #0b7a43; }
+      @media (prefers-color-scheme: dark) { #about { color: #f1f1ec; background: #0f100e; } #about a { color: #3ccf80; } }
+    </style>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "כוחות",
+        "alternateName": ["kadoregel", "kadoregel.com"],
+        "url": "https://www.kadoregel.com/",
+        "description": "חלוקה לקבוצות כדורגל הוגנות ומאוזנות לפי רמה ועמדות, עם טיימר ו״מנצחת נשארת״. עובד מהדפדפן, בלי להתקין, בחינם.",
+        "applicationCategory": "SportsApplication",
+        "operatingSystem": "Any (web browser)",
+        "inLanguage": "he",
+        "image": "https://www.kadoregel.com/og-image.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "ILS" }
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="about">
+        <h1>כוחות: חלוקה לקבוצות כדורגל</h1>
+        <p>עושים כוחות למשחק כדורגל עם החבר׳ה, בלי ויכוחים ובלי קפטנים שבוחרים.</p>
+        <ul>
+          <li>מסמנים מי הגיע ולוחצים ״עושים כוחות״.</li>
+          <li>קבוצות מאוזנות לפי רמה ועמדות (שוער, הגנה, קישור, התקפה).</li>
+          <li>טיימר, גולים ו״מנצחת נשארת״: מי עולה הבא, טבלה ומלך שערים.</li>
+          <li>עובד מהדפדפן בלי להתקין אפליקציה, בחינם.</li>
+        </ul>
+        <p><a href="./about.html">עוד על כוחות</a> · <a href="./privacy.html">פרטיות</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
