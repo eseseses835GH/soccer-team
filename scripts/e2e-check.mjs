@@ -2,6 +2,7 @@
 import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -514,10 +515,10 @@ assert((await old.locator('[aria-label="כוכב"]').count()) === 1, 'old card i
 assert(!(await old.evaluate(() => localStorage.getItem('kochot:v1'))), 'old key moved');
 // No network to Supabase without an account.
 const sbCalls = [];
-old.on('request', (r) => /supabase/.test(r.url()) && sbCalls.push(r.url()));
+old.on('request', (r) => /supabase|accounts\.google\.com/.test(r.url()) && sbCalls.push(r.url()));
 await old.reload();
 await old.waitForTimeout(300);
-assert(sbCalls.length === 0, `no Supabase calls when logged out: ${sbCalls}`);
+assert(sbCalls.length === 0, `no Supabase or Google calls when logged out: ${sbCalls}`);
 
 // 13. Swipe to delete on a touch phone: a real touch drag reveals "מחיקה", which asks first.
 {
@@ -1046,6 +1047,91 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   assert(pushes.length - pushesAfterVote <= 2, `org: no push loop (${pushes.length - pushesAfterVote} pushes after the vote)`);
   console.log(`organizer: ${lives.length} live writes (${lives.map((l) => (l ? (l.match ? 'match' : 'teams') : 'ended')).join(', ')}), ${pushes.length} group pushes`);
   await octx.close();
+}
+
+// 14. "המשך עם Google" on our own page (v11): Google's script loads only when the login sheet opens;
+// its credential and the raw nonce go to Supabase's id_token grant (the nonce Google got is its
+// SHA-256); an invite opened before logging in is then joined. GIS and Supabase are stubbed here.
+{
+  const gctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await gctx.newPage();
+  pg.on('pageerror', (e) => errors.push(`gis: ${e.message}`));
+  const gisLoads = [];
+  let tokenBody = null;
+  let joined = null;
+  await pg.route('https://accounts.google.com/**', (route) => {
+    gisLoads.push(route.request().url());
+    route.fulfill({
+      status: 200,
+      contentType: 'text/javascript',
+      body: `window.__gis = { inits: [], opts: null };
+        window.google = { accounts: { id: {
+          initialize(c) { window.__gis.inits.push({ client_id: c.client_id, nonce: c.nonce }); window.__gis.cb = c.callback; },
+          renderButton(el, o) { window.__gis.opts = o; el.textContent = ''; const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Google (stub)'; b.onclick = () => window.__gis.cb({ credential: 'stub.id.token' }); el.appendChild(b); },
+        } } };`,
+    });
+  });
+  await pg.routeWebSocket(/supabase\.co/, () => {});
+  await pg.route(/supabase\.co/, async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (u.pathname.endsWith('/auth/v1/settings')) return json({ external: { google: true, email: true } });
+    if (u.pathname.endsWith('/auth/v1/token') && u.searchParams.get('grant_type') === 'id_token') {
+      tokenBody = req.postDataJSON();
+      const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+      const exp = Math.floor(Date.now() / 1000) + 3600;
+      const id = '00000000-0000-4000-8000-0000000000cc';
+      return json({
+        access_token: `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: id, exp, role: 'authenticated' })}.c2ln`,
+        refresh_token: 'r',
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: exp,
+        user: { id, aud: 'authenticated', role: 'authenticated', email: 'g@example.com', app_metadata: { provider: 'google' }, user_metadata: {}, created_at: '2026-10-21T10:00:00Z' },
+      });
+    }
+    const GID = '22222222-3333-4444-8555-666666666666';
+    if (u.pathname.endsWith('/rpc/join_group')) {
+      joined = req.postDataJSON();
+      return json([{ group_id: GID, name: 'מוזמנים', role: 'organizer' }]);
+    }
+    if (u.pathname.endsWith('/rest/v1/groups')) {
+      if (req.method() === 'GET') return json({ id: GID, name: 'מוזמנים', version: 1, data: { v: 1, players: [], constraints: { together: [], apart: [] } } });
+      return json([{ version: 2 }]);
+    }
+    return json(null);
+  });
+  await pg.goto(base);
+  await pg.waitForTimeout(400);
+  assert(gisLoads.length === 0, `gis: Google's script isn't loaded before the login sheet (${gisLoads})`);
+  await pg.goto(base + '#join=TOKEN123');
+  await pg.reload();
+  await pg.getByRole('button', { name: 'Google (stub)' }).click({ timeout: 10000 });
+  await pg.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 10000 }).catch(() => errors.push('gis: the login sheet stays open after Google'));
+  const gis = await pg.evaluate(() => window.__gis);
+  const init = gis.inits.at(-1);
+  assert(gisLoads.length === 1 && gisLoads[0].startsWith('https://accounts.google.com/gsi/client'), `gis: script loaded once (${gisLoads})`);
+  assert(/^826193645474-.*\.apps\.googleusercontent\.com$/.test(init?.client_id ?? ''), `gis: client id ${init?.client_id}`);
+  assert(gis.opts?.text === 'continue_with' && gis.opts?.locale === 'he' && gis.opts?.theme === 'outline', `gis: button options ${JSON.stringify(gis.opts)}`);
+  assert(tokenBody?.provider === 'google' && tokenBody?.id_token === 'stub.id.token', `gis: id_token grant ${JSON.stringify(tokenBody)}`);
+  assert(!!tokenBody?.nonce && tokenBody.nonce !== init?.nonce && createHash('sha256').update(tokenBody.nonce).digest('hex') === init?.nonce, 'gis: raw nonce to Supabase, its SHA-256 to Google');
+  await pg.waitForFunction(() => document.body.textContent.includes('הצטרפתם לקבוצה'), null, { timeout: 10000 }).catch(() => {});
+  assert(joined?.p_token === 'TOKEN123', `gis: the invite is joined after logging in (${JSON.stringify(joined)})`);
+  console.log(`google: id_token + nonce ok, invite ${joined?.p_token} joined`);
+  await gctx.close();
+
+  // Google's script can't load: the old button (through Supabase) with a short note.
+  const fctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const fp = await fctx.newPage();
+  fp.on('pageerror', (e) => errors.push(`gis fallback: ${e.message}`));
+  await fp.route('https://accounts.google.com/**', (r) => r.abort());
+  await fp.route(/supabase\.co/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"external":{"google":true,"email":true}}' }));
+  await fp.goto(base + '#settings');
+  await fp.getByRole('button', { name: 'התחברות', exact: true }).click();
+  await fp.getByText('Google לא נטען כאן').waitFor({ timeout: 10000 }).catch(() => errors.push('gis fallback: no note when Google fails to load'));
+  assert(await fp.getByRole('button', { name: 'המשך עם Google' }).isEnabled(), 'gis fallback: the redirect button works');
+  await fctx.close();
 }
 
 console.log(`split 22 players in ${dt}ms`);

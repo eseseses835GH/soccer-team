@@ -304,6 +304,21 @@ for (const scheme of ['light', 'dark']) {
     }
     await c.close();
   }
+
+  // Login sheet (v11): Google's own button (the real GIS script when online; this preview origin
+  // isn't an authorized one, so GIS logs that, and it's ignored). Supabase's settings are mocked.
+  if (SB_URL) {
+    await page.route(/\/auth\/v1\/settings/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"external":{"google":true,"email":true}}' }));
+    page.removeAllListeners('console');
+    page.on('console', (m) => m.type() === 'error' && !/fonts\.g|GSI_LOGGER/.test(m.text()) && !/google\.com/.test(m.location()?.url ?? '') && errors.push(`${scheme} console: ${m.text()}`));
+    await page.goto(base + '#settings');
+    await page.locator('#set-account').evaluate((d) => (d.open = true));
+    await page.getByRole('button', { name: 'התחברות', exact: true }).click();
+    await page.locator('.gis-btn iframe, .sheet .btn-quiet:not(:disabled)').first().waitFor({ state: 'attached', timeout: 12000 });
+    await page.waitForTimeout(1200);
+    await shot('11e-login');
+    await checkLayout('login');
+  }
   await ctx.close();
 
   // Organizers sheet with the player link and players who joined (v10): a mocked session, every

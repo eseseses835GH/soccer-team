@@ -166,5 +166,6 @@ export function authErrorText(e: unknown): string {
   if (code === 'validation_failed' || /invalid email|unable to validate email/.test(msg)) return 'כתובת המייל לא תקינה';
   if (code === 'signup_disabled' || /signups not allowed/.test(msg)) return 'הרשמה חדשה סגורה כרגע';
   if (/provider is not enabled|unsupported provider/.test(msg)) return 'ההתחברות עם Google עוד לא הופעלה. אפשר להתחבר עם מייל';
+  if (/id.?token|nonce|audience|issuer/.test(msg)) return 'ההתחברות עם Google לא הצליחה. נסו שוב, או התחברו עם מייל';
   return 'משהו השתבש, נסו שוב';
 }
