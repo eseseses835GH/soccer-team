@@ -9,6 +9,8 @@ import { loadJSON, saveJSON } from '../state/storage';
 import { useStore } from '../state/store';
 import { averageLevel, isTuned, votesLine } from '../state/votes';
 import { useVoterId } from '../sync/SyncProvider';
+import { usePlayerVotes } from '../sync/OrganizerSync';
+import { mergePlayerVotes } from '../sync/players';
 import { downloadText } from '../share';
 import { useUi } from './App';
 import { AttrSliders, CardBadges, CardPicker, LevelPicker, PositionBadges, PositionPicker, Sheet } from './components';
@@ -328,14 +330,17 @@ function PlayerSheet({
   const [draft, setDraft] = useState<Player>(player);
   const [error, setError] = useState<string | null>(null);
   const voter = useVoterId();
+  const playerVotes = usePlayerVotes().rows;
   const myVote = voter ? draft.levelVotes?.[voter] : undefined;
   // In a synced group the organizer's tap is their vote; the level is the organizers' average.
   const setLevel = (v: number) => {
     if (!voter) return setProfile(v, draft.cards);
     const levelVotes = { ...draft.levelVotes, [voter]: v };
-    setDraft((d) => ({ ...d, levelVotes, attrs: applyCards(averageLevel(levelVotes) ?? v, d.cards) }));
+    setDraft((d) => ({ ...d, levelVotes, attrs: applyCards(averageLevel(mergePlayerVotes(levelVotes, playerVotes, d.id)) ?? v, d.cards) }));
   };
-  const line = votesLine(draft.levelVotes, voter);
+  // Players allowed to rate count too (v10); their votes aren't in the doc.
+  const allVotes = mergePlayerVotes(draft.levelVotes, playerVotes, draft.id);
+  const line = votesLine(allVotes, voter, Object.keys(allVotes ?? {}).length > Object.keys(draft.levelVotes ?? {}).length ? 'מדרגים' : 'מארגנים');
   // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
   const setProfile = (level: number, cards: CardId[]) => setDraft((d) => ({ ...d, cards, attrs: applyCards(level, cards) }));
 

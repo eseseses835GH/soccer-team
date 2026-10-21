@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useGroups } from '../state/store';
+import { useGroups, useStore } from '../state/store';
+import { usePlayerVotes } from '../sync/OrganizerSync';
+import { playerMemberRows, type PlayerMemberRow } from '../sync/organizer';
+import { playersApi, type Member } from '../sync/players';
 import { creatorName, expiresIn, inviteUrl, shortDate, type Invite, type Organizer } from '../sync/organizers';
 import { SyncError, redirectUrl, remoteApi } from '../sync/supabase';
 import { useSync } from '../sync/SyncProvider';
 import { copyText, nativeShare } from '../share';
 import { useUi } from './App';
-import { Sheet } from './components';
+import { Sheet, Toggle } from './components';
 import { Icon } from './icons';
 
 type Load = 'loading' | 'offline' | 'auth' | 'error' | 'ok';
@@ -25,17 +28,25 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
   const [load, setLoad] = useState<Load>('loading');
   const [organizers, setOrganizers] = useState<Organizer[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [playerLink, setPlayerLink] = useState<string | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const rows = playerMemberRows(members, useStore().state.players);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const votes = usePlayerVotes();
   const [busy, setBusy] = useState(false);
 
   const client = sync.client; // stable, unlike the whole sync object
   const refresh = useCallback(async () => {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return setLoad('offline');
     try {
-      const api = remoteApi(await client());
-      const [o, i] = await Promise.all([api.listOrganizers(cur.id), api.listInvites(cur.id)]);
+      const c = await client();
+      const api = remoteApi(c);
+      const pApi = playersApi(c);
+      const [o, i, pl, m] = await Promise.all([api.listOrganizers(cur.id), api.listInvites(cur.id), pApi.playerInvite(cur.id), pApi.listMembers(cur.id)]);
       setOrganizers(o);
       setInvites(i);
+      setPlayerLink(pl);
+      setMembers(m);
       setLoad('ok');
     } catch (e) {
       setLoad(loadState(e));
@@ -55,8 +66,8 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
     };
   }, [refresh]);
 
-  const share = async (url: string) => {
-    const text = `הצטרפו כמארגנים לקבוצה ״${cur.name}״ בכוחות`;
+  const share = async (url: string, asPlayer = false) => {
+    const text = asPlayer ? `הצטרפו לקבוצה ״${cur.name}״ בכוחות` : `הצטרפו כמארגנים לקבוצה ״${cur.name}״ בכוחות`;
     if (await nativeShare({ title: cur.name, text, url })) return;
     notify((await copyText(url)) ? 'קישור ההזמנה הועתק' : 'ההעתקה נכשלה');
   };
@@ -70,11 +81,46 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
     await share(url);
   };
 
+  const newPlayerLink = async () => {
+    setBusy(true);
+    try {
+      const token = await playersApi(await client()).createPlayerInvite(cur.id);
+      setPlayerLink(token);
+      await share(inviteUrl(token, redirectUrl()), true);
+    } catch (e) {
+      notify(loadState(e) === 'offline' ? 'צריך חיבור לאינטרנט' : 'יצירת הקישור לא הצליחה');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** A change to a player member; the list is read again after it (and the votes, which it may change). */
+  const memberDo = async (f: (api: ReturnType<typeof playersApi>) => Promise<void>, done?: string) => {
+    setBusy(true);
+    try {
+      await f(playersApi(await client()));
+      if (done) notify(done);
+    } catch (e) {
+      notify(loadState(e) === 'offline' ? 'צריך חיבור לאינטרנט' : 'זה לא הצליח, נסו שוב');
+    } finally {
+      setBusy(false);
+      setConfirm(null);
+      void refresh();
+      votes.refresh();
+    }
+  };
+
+  const setCanRate = (m: PlayerMemberRow, can: boolean) => {
+    setMembers((list) => list.map((x) => (x.userId === m.userId ? { ...x, canRate: can } : x)));
+    void memberDo((api) => api.setCanRate(cur.id, m.userId, can));
+  };
+
   const revoke = async (token: string) => {
     setBusy(true);
     try {
       await remoteApi(await client()).revokeInvite(token);
       setInvites((list) => list.filter((i) => i.token !== token));
+      if (token === playerLink) setPlayerLink(null);
       notify('הקישור בוטל');
     } catch (e) {
       notify(loadState(e) === 'offline' ? 'צריך חיבור לאינטרנט' : 'הביטול לא הצליח');
@@ -179,6 +225,106 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
             <Icon name="plus" size={20} /> קישור חדש
           </button>
           <p className="hint small">קישור תקף לשבועיים, ואפשר להצטרף איתו כמה פעמים. ביטול לא מוציא מי שכבר הצטרף.</p>
+
+          <h3 className="sheet-sub">שחקנים</h3>
+          {playerLink ? (
+            <ul className="org-list invites">
+              <li>
+                {confirm === playerLink ? (
+                  <div className="org-confirm">
+                    <span>לבטל את הקישור לשחקנים? מי שכבר הצטרף נשאר.</span>
+                    <div className="row-2">
+                      <button type="button" className="btn btn-danger btn-small" disabled={busy} onClick={() => void revoke(playerLink)}>
+                        כן, לבטל
+                      </button>
+                      <button type="button" className="btn btn-quiet btn-small" onClick={() => setConfirm(null)}>
+                        לא
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="org-avatar link" aria-hidden="true">
+                      <Icon name="link" size={16} />
+                    </span>
+                    <span className="group-text">
+                      <strong>קישור לשחקנים</strong>
+                    </span>
+                    <span className="org-actions">
+                      <button type="button" className="text-btn" aria-label="שיתוף הקישור לשחקנים" onClick={() => void share(inviteUrl(playerLink, redirectUrl()), true)}>
+                        <Icon name="share" size={18} />
+                      </button>
+                      <button type="button" className="text-btn danger" onClick={() => setConfirm(playerLink)}>
+                        ביטול
+                      </button>
+                    </span>
+                  </>
+                )}
+              </li>
+            </ul>
+          ) : (
+            <button type="button" className="btn btn-quiet btn-block" disabled={busy} onClick={() => void newPlayerLink()}>
+              <Icon name="link" size={18} /> קישור לשחקנים
+            </button>
+          )}
+          <p className="hint small">שחקנים רואים את הכוחות, המשחק וההיסטוריה. לא את הדירוגים.</p>
+
+          {rows.length > 0 && (
+            <>
+              <h3 className="sheet-sub">שחקנים שהתחברו ({rows.length})</h3>
+              <ul className="org-list members">
+                {rows.map((m) => {
+                  const { claimed } = m;
+                  const key = `m:${m.userId}`;
+                  return (
+                    <li key={m.userId}>
+                      {confirm === key ? (
+                        <div className="org-confirm">
+                          <span>
+                            <bdi>{m.name}</bdi>
+                          </span>
+                          <div className="row-2">
+                            {m.canUnclaim && (
+                              <button type="button" className="btn btn-quiet btn-small" disabled={busy} onClick={() => void memberDo((api) => api.unclaimPlayer(cur.id, m.userId))}>
+                                לבטל את הבחירה
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-small"
+                              disabled={busy}
+                              onClick={() => void memberDo((api) => api.removePlayer(cur.id, m.userId), 'הוסר מהקבוצה')}
+                            >
+                              להסיר מהקבוצה
+                            </button>
+                          </div>
+                          <button type="button" className="text-btn" onClick={() => setConfirm(null)}>
+                            חזרה
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="org-avatar" aria-hidden="true">
+                            {m.name.slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="group-text">
+                            <strong>
+                              <bdi>{m.name}</bdi>
+                            </strong>
+                            <small>{claimed ? <>בחר: <bdi>{claimed}</bdi></> : 'עוד לא בחר'}</small>
+                          </span>
+                          <Toggle checked={m.canRate} onChange={(v) => setCanRate(m, v)} label="יכול לדרג" />
+                          <button type="button" className="icon-btn" aria-label={`הסרה של ${m.name}`} onClick={() => setConfirm(key)}>
+                            ✕
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
         </>
       )}
     </Sheet>

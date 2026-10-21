@@ -2401,6 +2401,26 @@ thead th {
   white-space: normal;
 }
 
+/* ---------- players who joined (v10) ---------- */
+.org-list.members li {
+  gap: 10px;
+}
+.org-list.members .group-text {
+  min-inline-size: 0;
+}
+.org-list.members .toggle,
+.sheet .org-list.members .toggle {
+  flex: none;
+  gap: 6px;
+  margin: 0;
+  min-block-size: 0;
+}
+.org-list.members .toggle-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
 /* ---------- add to home screen (v6) ---------- */
 .install-card {
   margin-block: 8px 4px;

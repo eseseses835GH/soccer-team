@@ -958,6 +958,96 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await ev.context().close();
 }
 
+// 9. Organizer of a cloud group (v10), with a mocked session; every Supabase call is answered here
+// (nothing reaches the real project): tonight is published to the live row, ended with null, and
+// a permitted player's vote moves a level (pushed with the group).
+{
+  const octx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const pg = await octx.newPage();
+  pg.on('pageerror', (e) => errors.push(`org: ${e.message}`));
+  const ME = '00000000-0000-4000-8000-0000000000aa';
+  const RATER = '00000000-0000-4000-8000-0000000000bb';
+  const lives = [];
+  const pushes = [];
+  let votes = [];
+  let roster = [];
+  await pg.routeWebSocket(/supabase\.co/, () => {});
+  await pg.route(/supabase\.co/, async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (u.pathname.endsWith('/rest/v1/groups')) {
+      if (req.method() === 'GET') return json({ id: u.searchParams.get('id').slice(3), name: 'ערב', version: 1 + pushes.length, data: { v: 1, players: roster, constraints: { together: [], apart: [] } } });
+      pushes.push(req.postDataJSON());
+      return json([{ version: 1 + pushes.length }]);
+    }
+    const rpc = u.pathname.split('/rpc/')[1];
+    if (rpc === 'live_set') lives.push(req.postDataJSON().p_data);
+    if (rpc === 'group_votes') return json(votes);
+    if (rpc === 'live_get') return json([]);
+    return json(null);
+  });
+  await pg.goto(base);
+  await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await pg.waitForTimeout(200);
+  roster = await pg.evaluate((me) => {
+    const idx = JSON.parse(localStorage.getItem('kochot:groups'));
+    idx.groups = idx.groups.map((g) => (g.id === idx.currentId ? { ...g, synced: true } : g));
+    localStorage.setItem('kochot:groups', JSON.stringify(idx));
+    const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const user = { id: me, aud: 'authenticated', role: 'authenticated', email: 'o@example.com', app_metadata: {}, user_metadata: {}, created_at: '2026-10-18T10:00:00Z' };
+    const access_token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: me, exp, role: 'authenticated' })}.c2ln`;
+    localStorage.setItem('sb-cieyeoyuwddobrxjcffw-auth-token', JSON.stringify({ access_token, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: exp, user }));
+    return JSON.parse(localStorage.getItem(`kochot:group:${idx.currentId}`)).players;
+  }, ME);
+  const target = roster.find((p) => p.attrs.overall !== 2);
+  votes = [{ rater: RATER, player_id: target.id, level: 2, updated_at: '2026-10-21T18:00:00Z' }];
+  await pg.reload();
+  await pg.waitForFunction(
+    (id) => {
+      const idx = JSON.parse(localStorage.getItem('kochot:groups'));
+      return JSON.parse(localStorage.getItem(`kochot:group:${idx.currentId}`)).players.find((p) => p.id === id).attrs.overall === 2;
+    },
+    target.id,
+    { timeout: 10000 },
+  ).catch(() => errors.push("org: a player's vote didn't set the level"));
+  await pg.waitForTimeout(2500);
+  assert(pushes.some((d) => d.data.players.find((p) => p.id === target.id)?.attrs.overall === 2), 'org: the voted level is pushed');
+  assert(!pushes.some((d) => JSON.stringify(d).includes(RATER)), "org: players' votes stay out of the doc");
+  const pushesAfterVote = pushes.length;
+  assert(lives.length === 0, `org: nothing to publish before teams (${lives.length})`);
+
+  await pg.goto(base + '#home');
+  await pg.getByRole('button', { name: 'עושים כוחות' }).click();
+  await pg.waitForSelector('.team');
+  await pg.waitForTimeout(1600);
+  assert(lives.length === 1 && lives[0]?.v === 1 && lives[0].teams.length >= 2 && lives[0].match === null, `org: teams published once (${lives.length})`);
+  assert(!/attrs|levelVotes|overall|cards/.test(JSON.stringify(lives)), 'org: no ratings in the live data');
+  await pg.getByRole('button', { name: /התחלת משחק/ }).click();
+  await pg.getByRole('button', { name: /התחלה/ }).click();
+  await pg.getByRole('button', { name: '+ גול' }).first().click();
+  await pg.getByRole('button', { name: 'דילוג' }).click();
+  await pg.waitForTimeout(1600);
+  const last = lives.at(-1);
+  assert(last?.match?.clock.running === true && last.match.score[0] + last.match.score[1] === 1, `org: running match with the goal published: ${JSON.stringify(last?.match?.score)}`);
+  const n = lives.length;
+  await pg.waitForTimeout(1500);
+  assert(lives.length === n, 'org: a ticking clock is not republished');
+  await pg.getByRole('button', { name: 'סיום משחק' }).click();
+  await pg.getByRole('button', { name: 'סיום הערב' }).click();
+  await pg.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
+  await pg.waitForTimeout(1600);
+  assert(lives.at(-1) === null, `org: the end of the evening publishes null (${JSON.stringify(lives.at(-1))?.slice(0, 40)})`);
+  const ended = lives.length;
+  await pg.reload();
+  await pg.waitForTimeout(2000);
+  assert(lives.length === ended, 'org: an ended evening is not republished on open');
+  assert(pushes.length - pushesAfterVote <= 2, `org: no push loop (${pushes.length - pushesAfterVote} pushes after the vote)`);
+  console.log(`organizer: ${lives.length} live writes (${lives.map((l) => (l ? (l.match ? 'match' : 'teams') : 'ended')).join(', ')}), ${pushes.length} group pushes`);
+  await octx.close();
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {

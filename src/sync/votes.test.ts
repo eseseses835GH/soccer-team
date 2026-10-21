@@ -45,6 +45,7 @@ describe('votes helpers', () => {
     expect(votesLine({ [B]: 7 }, null)).toBe('');
     expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, A)).toBe('ממוצע של 3 מארגנים: 6 · שלך: 7');
     expect(votesLine({ [B]: 6, [C]: 5 }, A)).toBe('ממוצע של 2 מארגנים: 6 · עוד לא דירגת');
+    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, A, 'מדרגים')).toBe('ממוצע של 3 מדרגים: 6 · שלך: 7');
   });
 });
 

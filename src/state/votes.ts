@@ -60,11 +60,14 @@ export function mergeVotes(base: LevelVotes | undefined, local: LevelVotes | und
   return Object.keys(out).length ? out : undefined;
 }
 
-/** One-line summary under the level in the edit sheet ('' = nothing to show). */
-export function votesLine(votes: LevelVotes | undefined, me: string | null): string {
+/**
+ * One-line summary under the level in the edit sheet ('' = nothing to show). `who` names the
+ * voters: organizers only, or 'מדרגים' once players' votes count too (v10).
+ */
+export function votesLine(votes: LevelVotes | undefined, me: string | null, who = 'מארגנים'): string {
   const n = Object.keys(votes ?? {}).length;
   const mine = me ? votes?.[me] : undefined;
-  if (n >= 2) return `ממוצע של ${n} מארגנים: ${averageLevel(votes)} · ${mine !== undefined ? `שלך: ${mine}` : 'עוד לא דירגת'}`;
+  if (n >= 2) return `ממוצע של ${n} ${who}: ${averageLevel(votes)} · ${mine !== undefined ? `שלך: ${mine}` : 'עוד לא דירגת'}`;
   if (n === 1 && mine === undefined && me) return 'עוד לא דירגת';
   return '';
 }

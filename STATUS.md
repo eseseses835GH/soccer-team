@@ -201,3 +201,7 @@
 # v9: level = organizers' average
 - **Built:** in a synced group each logged-in organizer's level tap is their vote; the level is the rounded average (.5 up). Edit sheet shows your vote + one line ("ממוצע של 3 מארגנים: 6 · שלך: 7"). Votes merge per organizer on sync. Logged out / local groups unchanged. See DECISIONS → "Level = organizers' average (v9)".
 - **Tested:** unit (`src/sync/votes.test.ts`: concurrent votes, vote + rename, tuned sliders, old players); mocked-session Playwright check of the edit sheet and the pushed doc (light + dark). e2e's "settings folds start closed" now ignores the account fold (open by default since 61ce017; it failed before this change).
+
+# v10: organizer side of players + live evening
+- **Built:** organizers' phones publish tonight to the live row (debounced, offline-queued, `null` when the evening ends); players' votes count in the level; "מארגנים והזמנות" has the player link and the players who joined (claim, "יכול לדרג", remove / undo claim). See DECISIONS → "Players and live evening — organizer side (v10)".
+- **Tested:** unit (`src/sync/publish.test.ts`), e2e block 9 and screenshots 17a–c with a mocked session (nothing sent to the real project).

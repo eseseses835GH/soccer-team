@@ -305,6 +305,80 @@ for (const scheme of ['light', 'dark']) {
   }
   await ctx.close();
 
+  // Organizers sheet with the player link and players who joined (v10): a mocked session, every
+  // Supabase call answered locally (nothing reaches the real project).
+  {
+    const octx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: scheme, isMobile: true, hasTouch: true, locale: 'he-IL', reducedMotion: 'reduce' });
+    const pg = await octx.newPage();
+    pg.on('pageerror', (e) => errors.push(`${scheme} org: ${e.message}`));
+    pg.on('console', (m) => m.type() === 'error' && !/fonts\.g/.test(m.text()) && errors.push(`${scheme} org console: ${m.text()}`));
+    const ME = '00000000-0000-4000-8000-0000000000aa';
+    const calls = [];
+    let roster = [];
+    let members = [];
+    await pg.routeWebSocket(/supabase\.co/, () => {}); // realtime: accepted, silent
+    await pg.route(/supabase\.co/, async (route) => {
+      const req = route.request();
+      const u = new URL(req.url());
+      const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      calls.push(`${req.method()} ${u.pathname}`);
+      if (u.pathname.endsWith('/rest/v1/groups')) {
+        if (req.method() === 'GET') return json({ id: u.searchParams.get('id').slice(3), name: 'שישי בשכונה', version: 1, data: { v: 1, players: roster, constraints: { together: [], apart: [] } } });
+        return json([{ version: 2 }]);
+      }
+      if (u.pathname.endsWith('/rest/v1/group_invites')) {
+        if (u.searchParams.get('role') === 'eq.player') return json([{ token: 'player-token' }]);
+        return json([]);
+      }
+      const rpc = u.pathname.split('/rpc/')[1];
+      if (rpc === 'group_organizers') return json([{ user_id: ME, display_name: 'אלי', joined_at: '2026-10-18T10:00:00Z', is_me: true }]);
+      if (rpc === 'group_members_list') return json(members);
+      if (rpc === 'group_votes') return json([]);
+      if (rpc === 'live_get') return json([]);
+      return json(null);
+    });
+    await pg.goto(base);
+    await pg.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+    await pg.waitForTimeout(200);
+    roster = await pg.evaluate(() => {
+      const idx = JSON.parse(localStorage.getItem('kochot:groups'));
+      return JSON.parse(localStorage.getItem(`kochot:group:${idx.currentId}`)).players;
+    });
+    const at = (n) => `2026-10-${n}T18:00:00Z`;
+    members = [
+      { user_id: ME, display_name: 'אלי', role: 'organizer', player_id: null, can_rate: false, joined_at: at(18), is_me: true },
+      { user_id: 'u1', display_name: 'Moshe Levi', role: 'player', player_id: roster[0].id, can_rate: true, joined_at: at(19), is_me: false },
+      { user_id: 'u2', display_name: 'דני', role: 'player', player_id: roster[3].id, can_rate: false, joined_at: at(20), is_me: false },
+      { user_id: 'u3', display_name: 'yossi.k', role: 'player', player_id: null, can_rate: false, joined_at: at(21), is_me: false },
+    ];
+    await pg.evaluate((me) => {
+      const idx = JSON.parse(localStorage.getItem('kochot:groups'));
+      idx.groups = idx.groups.map((g) => (g.id === idx.currentId ? { ...g, name: 'שישי בשכונה', synced: true } : g));
+      localStorage.setItem('kochot:groups', JSON.stringify(idx));
+      const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const exp = Math.floor(Date.now() / 1000) + 3600;
+      const user = { id: me, aud: 'authenticated', role: 'authenticated', email: 'eli@example.com', app_metadata: {}, user_metadata: { name: 'אלי' }, created_at: '2026-10-18T10:00:00Z' };
+      const access_token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: me, exp, role: 'authenticated', aud: 'authenticated', email: user.email })}.c2ln`;
+      localStorage.setItem('sb-cieyeoyuwddobrxjcffw-auth-token', JSON.stringify({ access_token, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: exp, user }));
+    }, ME);
+    await pg.reload();
+    await pg.goto(base + '#settings');
+    await pg.getByRole('button', { name: 'מארגנים והזמנות' }).click();
+    await pg.getByText('שחקנים שהתחברו').waitFor();
+    await pg.waitForTimeout(200);
+    await pg.screenshot({ path: `${out}/${scheme}-17a-organizers-players.png` });
+    await pg.getByRole('dialog').locator('.org-list.members li').last().scrollIntoViewIfNeeded();
+    await pg.waitForTimeout(150);
+    await pg.screenshot({ path: `${out}/${scheme}-17b-organizers-members.png` });
+    await pg.getByRole('button', { name: 'הסרה של דני' }).click();
+    await pg.waitForTimeout(150);
+    await pg.screenshot({ path: `${out}/${scheme}-17c-member-menu.png` });
+    const sw = await pg.evaluate(() => document.documentElement.scrollWidth);
+    if (sw > 390) errors.push(`${scheme}: horizontal overflow on organizers: ${sw}px`);
+    if (!calls.some((c) => c.endsWith('/rpc/group_members_list'))) errors.push(`${scheme}: members were never asked for`);
+    await octx.close();
+  }
+
   // Left early (v6): pick → confirm → the best sub comes in; then (no subs) a swap suggestion.
   {
     const lctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: scheme, isMobile: true, hasTouch: true, locale: 'he-IL', reducedMotion: 'reduce' });

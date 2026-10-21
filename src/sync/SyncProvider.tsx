@@ -10,6 +10,7 @@ import { localKV, useGroups, useStore } from '../state/store';
 import { applyDoc, docFromState, mergeDocs, sanitizeDoc } from './doc';
 import { EMPTY_META, hasLocalChanges, loadMeta, saveMeta, syncGroup } from './engine';
 import { JOIN_HASH, inviteUrl } from './organizers';
+import { OrganizerSync } from './OrganizerSync';
 import { SyncError, getClient, hasStoredAuth, redirectUrl, remoteApi, syncConfigured } from './supabase';
 
 export type SyncStatus = 'local' | 'signedOut' | 'syncing' | 'pending' | 'synced' | 'offline' | 'error' | 'gone';
@@ -384,7 +385,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     [session, current.synced, status, loginReason, message, ensureClient, schedule, upload, doJoin, say],
   );
 
-  return <SyncCtx.Provider value={api}>{children}</SyncCtx.Provider>;
+  return (
+    <SyncCtx.Provider value={api}>
+      {/* Organizer-only: live evening publishing + players' votes (OrganizerSync.tsx). */}
+      <OrganizerSync>{children}</OrganizerSync>
+    </SyncCtx.Provider>
+  );
 }
 
 export function useSync() {
