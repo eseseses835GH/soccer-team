@@ -15,6 +15,8 @@ import { SettingsFold } from './SettingsFold';
 
 const RULE_LABEL = { apart: 'לא באותה קבוצה', together: 'תמיד באותה קבוצה' } as const;
 
+const THEME_NAMES = { light: 'בהיר', dark: 'כהה', auto: 'לפי הטלפון' } as const;
+
 export function SettingsScreen({ focus }: { focus?: string }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
@@ -169,7 +171,7 @@ export function SettingsScreen({ focus }: { focus?: string }) {
       </SettingsFold>
 
       <SettingsFold id="rules" title="מי עם מי" value={ruleCount ? String(ruleCount) : 'אין'}>
-        <p className="hint">אפשר לבקש שני שחקנים שתמיד יהיו בקבוצות שונות, או תמיד באותה קבוצה. החלוקה תשמור על זה.</p>
+        <p className="hint">אפשר לבקש שני שחקנים שתמיד יהיו בקבוצות שונות, או תמיד באותה קבוצה. החלוקה תשמור על זה. הכללים שייכים לקבוצה ״{current.name}״.</p>
         <ul className="rule-examples">
           <li>
             <strong>לא באותה קבוצה</strong>: למשל שני אחים שתמיד רבים, או שני השוערים.
@@ -234,37 +236,6 @@ export function SettingsScreen({ focus }: { focus?: string }) {
         )}
       </SettingsFold>
 
-      {sync.configured && (
-        <SettingsFold id="account" title="חשבון" value={sync.email ? 'מחוברים' : 'לא מחוברים'}>
-          {sync.email ? (
-            <>
-              <p className="account-who">
-                מחוברים בתור <bdi dir="ltr">{sync.email}</bdi>
-              </p>
-              <p className="hint">
-                ״{current.name}״: {current.synced ? STATUS_TEXT[sync.status] : 'בטלפון הזה בלבד. אפשר לסנכרן אותה מתפריט הקבוצות (שם הקבוצה למעלה במסך הראשי).'}
-              </p>
-              <div className="stack">
-                {current.synced && (
-                  <button type="button" className="btn btn-quiet btn-block" onClick={() => setOrganizers(true)}>
-                    מארגנים והזמנות
-                  </button>
-                )}
-                <button type="button" className="btn btn-quiet btn-block" onClick={() => void sync.signOut()}>
-                  יציאה מהחשבון
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="hint">לא חובה. צריך רק אם עוד מארגן ינהל איתכם את הקבוצה מהטלפון שלו: השחקנים נשמרים בשרת ומתעדכנים אצל כולם לבד.</p>
-              <button type="button" className="btn btn-quiet btn-block" onClick={() => sync.openLogin('account')}>
-                התחברות
-              </button>
-            </>
-          )}
-        </SettingsFold>
-      )}
 
       <SettingsFold id="backup" title="גיבוי" value={undefined}>
         <p className="hint">קובץ עם השחקנים, הדירוגים והערבים. שחזור: במסך השחקנים, ״ייבוא רשימה״.</p>
@@ -300,8 +271,9 @@ export function SettingsScreen({ focus }: { focus?: string }) {
         </button>
       </SettingsFold>
 
-      <div className="group">
-        <h2>מראה</h2>
+
+
+      <SettingsFold id="look" title="מראה" value={THEME_NAMES[settings.theme]}>
         <Segmented
           label="מצב תצוגה"
           value={settings.theme}
@@ -329,7 +301,7 @@ export function SettingsScreen({ focus }: { focus?: string }) {
             </button>
           ))}
         </div>
-      </div>
+      </SettingsFold>
 
       <SettingsFold id="data" title="נתונים" value={undefined}>
         {current.synced && <p className="hint">הקבוצה מסונכרנת: מחיקה כאן תמחק את השחקנים גם אצל שאר המארגנים.</p>}
@@ -357,6 +329,37 @@ export function SettingsScreen({ focus }: { focus?: string }) {
         </div>
       </SettingsFold>
 
+      {sync.configured && (
+        <SettingsFold id="account" startOpen title="חשבון" value={sync.email ? 'מחוברים' : 'לא מחוברים'}>
+          {sync.email ? (
+            <>
+              <p className="account-who">
+                מחוברים בתור <bdi dir="ltr">{sync.email}</bdi>
+              </p>
+              <p className="hint">
+                ״{current.name}״: {current.synced ? STATUS_TEXT[sync.status] : 'בטלפון הזה בלבד. אפשר לסנכרן אותה מתפריט הקבוצות (שם הקבוצה למעלה במסך הראשי).'}
+              </p>
+              <div className="stack">
+                {current.synced && (
+                  <button type="button" className="btn btn-quiet btn-block" onClick={() => setOrganizers(true)}>
+                    מארגנים והזמנות
+                  </button>
+                )}
+                <button type="button" className="btn btn-quiet btn-block" onClick={() => void sync.signOut()}>
+                  יציאה מהחשבון
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="hint">לא חובה. צריך רק אם עוד מארגן ינהל איתכם את הקבוצה מהטלפון שלו: השחקנים נשמרים בשרת ומתעדכנים אצל כולם לבד.</p>
+              <button type="button" className="btn btn-quiet btn-block" onClick={() => sync.openLogin('account')}>
+                התחברות
+              </button>
+            </>
+          )}
+        </SettingsFold>
+      )}
       {organizers && <OrganizersSheet onBack={() => setOrganizers(false)} onClose={() => setOrganizers(false)} />}
     </section>
   );

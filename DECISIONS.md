@@ -468,3 +468,4 @@ Supersedes "Late arrivals" (v2): a late arrival no longer joins the smallest tea
 - **Two groups can't have the same name** ("כבר יש קבוצה בשם הזה").
 - The phone's back button while a popup is open leaves that screen (nothing is lost); every popup has its own ✕. Left as is, per the user.
 - **Organizers are also reachable from Settings → חשבון** ("מארגנים והזמנות", for a synced group), not only from the group menu — the user couldn't find them.
+- **Settings bottom (user):** … הנוסחה לחלוקה · **מראה** (fold) · **נתונים** (fold) · **חשבון** last, **open by default but foldable** (`startOpen`; a phone that closes it keeps it closed). "מי עם מי" says the rules belong to the open group.
