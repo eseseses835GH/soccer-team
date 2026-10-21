@@ -9,11 +9,14 @@
 // - Players / history records are merged by id. A change on one side wins; if both sides changed
 //   the same record, the local copy wins; a record deleted on one side and edited on the other is
 //   kept. A record added on either side is always kept, so a new player is never lost.
+//   Exception (v9): a player with level votes that both sides changed is merged per field, and his
+//   votes per organizer, so no organizer's rating is lost (see mergePlayer).
 // - Pair rules are a set: added on either side → kept, removed on one side → removed.
 // - Settings merge per field the same way.
 import type { Constraints, Pair } from '../engine';
 import { mergeHistory, sanitizeHistory, type EveningRecord } from '../state/history';
 import { sanitizePlayer, sanitizeSettings, type AppState, type Player, type Settings } from '../state/model';
+import { attrsAtLevel, averageLevel, mergeVotes } from '../state/votes';
 
 /** Settings that belong to the phone, never synced (each organizer keeps their own look). */
 export const LOCAL_SETTINGS = ['theme', 'accent', 'goalSound'] as const;
@@ -92,8 +95,11 @@ export function applyDoc(state: AppState, doc: SyncDoc): AppState {
   };
 }
 
-/** Three-way merge of records keyed by `id`. Order: local order, then records only the remote has. */
-export function mergeById<T extends { id: string }>(base: T[], local: T[], remote: T[]): T[] {
+/**
+ * Three-way merge of records keyed by `id`. Order: local order, then records only the remote has.
+ * `both` resolves a record both sides changed (default: this phone's copy).
+ */
+export function mergeById<T extends { id: string }>(base: T[], local: T[], remote: T[], both?: (b: T | undefined, l: T, r: T) => T): T[] {
   const b = new Map(base.map((x) => [x.id, x]));
   const l = new Map(local.map((x) => [x.id, x]));
   const r = new Map(remote.map((x) => [x.id, x]));
@@ -105,7 +111,7 @@ export function mergeById<T extends { id: string }>(base: T[], local: T[], remot
     if (same(lv, bv)) return rv; // only the remote changed (or deleted) it
     if (same(rv, bv)) return lv; // only this phone changed (or deleted) it
     // Both changed it: an edit beats a delete, otherwise this phone wins.
-    return lv ?? rv;
+    return lv && rv && both ? both(bv, lv, rv) : (lv ?? rv);
   };
   const out: T[] = [];
   const seen = new Set<string>();
@@ -116,6 +122,42 @@ export function mergeById<T extends { id: string }>(base: T[], local: T[], remot
     if (v) out.push(v);
   }
   return out;
+}
+
+/** One value three-way: the remote's if this phone didn't change it, else this phone's. */
+const pick3 = <V>(b: V, l: V, r: V): V => (same(l, b) ? r : l);
+
+/**
+ * A player both phones changed. Without votes anywhere: this phone's copy, as before. With votes:
+ * name, keeper, positions (any other field) and the profile (level + cards + sliders, one unit so they stay consistent)
+ * merge per field (this phone wins a field both changed); votes merge per organizer. If the merged
+ * votes differ from the ones behind the chosen profile, the level becomes their average.
+ */
+export function mergePlayer(base: Player | undefined, local: Player, remote: Player): Player {
+  if (!base?.levelVotes && !local.levelVotes && !remote.levelVotes) return local;
+  if (!base) return local;
+  const profileBase = { attrs: base.attrs, cards: base.cards };
+  const profileLocal = { attrs: local.attrs, cards: local.cards };
+  const profile = pick3(profileBase, profileLocal, { attrs: remote.attrs, cards: remote.cards });
+  const votesBehind = profile === profileLocal ? local.levelVotes : remote.levelVotes;
+  const levelVotes = mergeVotes(base.levelVotes, local.levelVotes, remote.levelVotes);
+  const avg = averageLevel(levelVotes);
+  const attrs = avg !== null && !same(levelVotes, votesBehind) ? attrsAtLevel(profile.attrs, profile.cards, avg) : profile.attrs;
+  // Every other field (name, keeper, positions, and any added later) merges on its own.
+  const out = { ...remote, ...local } as Record<string, unknown>;
+  const bo = base as unknown as Record<string, unknown>;
+  const lo = local as unknown as Record<string, unknown>;
+  const ro = remote as unknown as Record<string, unknown>;
+  for (const k of new Set([...Object.keys(lo), ...Object.keys(ro), ...Object.keys(bo)])) {
+    const v = pick3(bo[k], lo[k], ro[k]);
+    if (v === undefined) delete out[k];
+    else out[k] = v;
+  }
+  out.attrs = attrs;
+  out.cards = profile.cards;
+  if (levelVotes) out.levelVotes = levelVotes;
+  else delete out.levelVotes;
+  return out as unknown as Player;
 }
 
 const pairKey = (kind: string, [a, b]: Pair) => `${kind}:${a < b ? `${a}|${b}` : `${b}|${a}`}`;
@@ -156,7 +198,7 @@ function mergeFields<T extends object>(base: T, local: T, remote: T): T {
  */
 export function mergeDocs(base: SyncDoc | null, local: SyncDoc, remote: SyncDoc): SyncDoc {
   const b: SyncDoc = base ?? { v: 1, players: [], constraints: { together: [], apart: [] }, settings: remote.settings };
-  const players = mergeById(b.players, local.players, remote.players);
+  const players = mergeById(b.players, local.players, remote.players, mergePlayer);
   const ids = new Set(players.map((p) => p.id));
   const doc: SyncDoc = {
     v: 1,

@@ -31,6 +31,8 @@ interface SyncApi {
   configured: boolean;
   /** null while unknown (library not loaded), false = signed out. */
   email: string | null | false;
+  /** Logged-in user's id; null when signed out or unknown. */
+  userId: string | null;
   status: SyncStatus;
   loginReason: LoginReason | null;
   openLogin(reason?: LoginReason): void;
@@ -294,6 +296,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     () => ({
       configured: syncConfigured,
       email: session === undefined ? null : session ? (session.user.email ?? '') : false,
+      userId: session?.user.id ?? null,
       status: current.synced ? status : 'local',
       loginReason,
       message,
@@ -388,4 +391,11 @@ export function useSync() {
   const ctx = useContext(SyncCtx);
   if (!ctx) throw new Error('useSync outside SyncProvider');
   return ctx;
+}
+
+/** Whose level vote this phone casts: the logged-in organizer in a synced group, else null (no votes). */
+export function useVoterId(): string | null {
+  const sync = useContext(SyncCtx);
+  const { current } = useGroups();
+  return current.synced && sync?.userId ? sync.userId.toLowerCase() : null;
 }

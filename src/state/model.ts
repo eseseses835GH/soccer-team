@@ -13,12 +13,15 @@ import {
 } from '../engine';
 import { migrateCards, type CardId } from './cards';
 import { sanitizePositions } from './positions';
+import { sanitizeVotes, type LevelVotes } from './votes';
 import type { MatchState } from '../match/match';
 import { sanitizeMatch } from '../match/match';
 import { addEvening, buildEvening, sanitizeHistory, type EveningRecord } from './history';
 
 export interface Player extends EnginePlayer {
   cards: CardId[];
+  /** Synced groups: each organizer's 1–10 level by auth user id; the level is their average (votes.ts). */
+  levelVotes?: LevelVotes;
 }
 
 export type GkMode = 'rotate' | 'fixed';
@@ -255,7 +258,17 @@ export function sanitizePlayer(p: unknown): Player | null {
   // No positions (and players from before positions existed) = the field is left out, so such a
   // player looks exactly as before: synced docs and backups don't change for nothing.
   const positions = sanitizePositions([...(Array.isArray(r.positions) ? r.positions : []), ...(m.addDef ? ['def'] : [])]);
-  return { id: r.id, name: r.name.trim().slice(0, 24), attrs: m.attrs, canGK: !!r.canGK, cards: m.cards, ...(positions.length ? { positions } : {}) };
+  // Same for votes: players nobody voted on (local groups, logged out) have no field.
+  const levelVotes = sanitizeVotes(r.levelVotes);
+  return {
+    id: r.id,
+    name: r.name.trim().slice(0, 24),
+    attrs: m.attrs,
+    canGK: !!r.canGK,
+    cards: m.cards,
+    ...(positions.length ? { positions } : {}),
+    ...(levelVotes ? { levelVotes } : {}),
+  };
 }
 
 export function sanitizeSettings(raw: unknown): Settings {

@@ -445,6 +445,12 @@ select.input {
   margin-block-start: 6px;
   color: var(--ink-3);
 }
+.votes-line {
+  margin: 6px 0 0;
+}
+.votes-line + .level-hint {
+  margin-block-start: 2px;
+}
 .fold.detailed summary small,
 .fold.more summary small {
   font-weight: 400;

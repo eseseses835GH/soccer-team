@@ -197,3 +197,7 @@
   5. **Two groups can have the same name** ("בבסיס" twice).
   6. **The countdown rounds down:** it shows 7:59 right after "התחלה" and 0:00 for the last second before time-up. Cosmetic.
   7. Deleting a group says "השחקנים וההגדרות יימחקו" but its evenings history goes too.
+
+# v9: level = organizers' average
+- **Built:** in a synced group each logged-in organizer's level tap is their vote; the level is the rounded average (.5 up). Edit sheet shows your vote + one line ("ממוצע של 3 מארגנים: 6 · שלך: 7"). Votes merge per organizer on sync. Logged out / local groups unchanged. See DECISIONS → "Level = organizers' average (v9)".
+- **Tested:** unit (`src/sync/votes.test.ts`: concurrent votes, vote + rename, tuned sliders, old players); mocked-session Playwright check of the edit sheet and the pushed doc (light + dark). e2e's "settings folds start closed" now ignores the account fold (open by default since 61ce017; it failed before this change).

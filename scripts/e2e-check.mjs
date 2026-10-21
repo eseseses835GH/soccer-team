@@ -186,8 +186,8 @@ assert(await page.getByRole('button', { name: 'ערבים קודמים' }).isVis
 
 // 8. Keep-apart pair is respected on a fresh split.
 await page.getByRole('button', { name: 'הגדרות' }).click();
-// Settings v7: only "משחק" is open; everything else is a fold.
-assert((await page.locator('details.settings-fold[open]').count()) === 0, 'settings folds start closed');
+// Settings v7: only "משחק" is open; everything else is a fold (except "חשבון", open by default since 61ce017).
+assert((await page.locator('details.settings-fold[open]:not(#set-account)').count()) === 0, 'settings folds start closed');
 assert(await page.getByText('אורך משחק').isVisible(), 'game settings open');
 assert(/גופיות\s*· אין/.test(await page.locator('details.settings-fold > summary', { hasText: 'גופיות' }).innerText()), 'bibs summary says none');
 await page.locator('summary', { hasText: 'מי עם מי' }).click();

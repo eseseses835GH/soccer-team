@@ -6,6 +6,7 @@ import { inProgress } from '../state/leave';
 import { newId, teamLook, type Player } from '../state/model';
 import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
+import { useVoterId } from '../sync/SyncProvider';
 import { useUi } from './App';
 import { CardBadges, LevelPicker, Sheet } from './components';
 
@@ -119,6 +120,7 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
   const { state } = useStore();
   const [name, setName] = useState('');
   const [level, setLevel] = useState(5);
+  const voter = useVoterId();
   const inGame = new Set([...(state.result?.playerIds ?? []), ...(state.result?.subIds ?? [])]);
   const others = state.players.filter((p) => !inGame.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'he'));
   const taken = state.players.some((p) => p.name.trim() === name.trim());
@@ -141,7 +143,7 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
         onSubmit={(e) => {
           e.preventDefault();
           if (!name.trim() || taken) return;
-          onPick({ id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [] }, true);
+          onPick({ id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [], ...(voter ? { levelVotes: { [voter]: level } } : {}) }, true);
         }}
       >
         <label className="label" htmlFor="late-name">

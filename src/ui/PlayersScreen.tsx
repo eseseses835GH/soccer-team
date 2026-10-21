@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ATTR_KEYS, type Attributes, type Position } from '../engine';
+import type { Attributes, Position } from '../engine';
 import { playersCount } from '../i18n';
 import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
 import { ROSTER_TEMPLATE, parseBackup, parseRoster, restoreBackup, type ParsedRoster } from '../state/io';
@@ -7,6 +7,8 @@ import { newId, type Player } from '../state/model';
 import { withPositions } from '../state/positions';
 import { loadJSON, saveJSON } from '../state/storage';
 import { useStore } from '../state/store';
+import { averageLevel, isTuned, votesLine } from '../state/votes';
+import { useVoterId } from '../sync/SyncProvider';
 import { downloadText } from '../share';
 import { useUi } from './App';
 import { AttrSliders, CardBadges, CardPicker, LevelPicker, PositionBadges, PositionPicker, Sheet } from './components';
@@ -19,12 +21,6 @@ const MAX_NAME = 24;
 const SWIPE_TIP_KEY = 'kochot:swipe-tip-seen';
 /** What "level" means, so everyone rates on the same scale. */
 const LEVEL_HINT = '1 = רק התחיל לשחק · 5 = באמצע החבורה · 10 = הכי טוב אצלנו';
-
-/** True when the sliders were moved away from what level + cards give. */
-const isTuned = (attrs: Attributes, cards: CardId[]) => {
-  const base = applyCards(attrs.overall, cards);
-  return ATTR_KEYS.some((k) => attrs[k] !== base[k]);
-};
 
 const POSITIONS_LABEL = (
   <span className="label">
@@ -93,6 +89,7 @@ export function PlayersScreen() {
   const [tipSeen, setTipSeen] = useState(() => !!loadJSON<boolean>(SWIPE_TIP_KEY));
   const [nudge, setNudge] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const voter = useVoterId();
   const showTip = !tipSeen && !selecting && state.players.length >= 2;
 
   const hideTip = () => {
@@ -133,7 +130,8 @@ export function PlayersScreen() {
     const n = name.trim();
     if (!n) return setError('צריך שם');
     if (nameTaken(n)) return setError('כבר יש שחקן בשם הזה. אפשר להוסיף כינוי, למשל "דני ג׳"');
-    const player = withPositions<Player>({ id: newId(), name: n, attrs: { ...attrs, overall: level }, canGK, cards }, positions);
+    const votes = voter ? { levelVotes: { [voter]: level } } : {};
+    const player = withPositions<Player>({ id: newId(), name: n, attrs: { ...attrs, overall: level }, canGK, cards, ...votes }, positions);
     dispatch({ type: 'addPlayer', player, present: true });
     notify(`${n} נוסף ומסומן שהגיע`);
     setName('');
@@ -329,6 +327,15 @@ function PlayerSheet({
 }) {
   const [draft, setDraft] = useState<Player>(player);
   const [error, setError] = useState<string | null>(null);
+  const voter = useVoterId();
+  const myVote = voter ? draft.levelVotes?.[voter] : undefined;
+  // In a synced group the organizer's tap is their vote; the level is the organizers' average.
+  const setLevel = (v: number) => {
+    if (!voter) return setProfile(v, draft.cards);
+    const levelVotes = { ...draft.levelVotes, [voter]: v };
+    setDraft((d) => ({ ...d, levelVotes, attrs: applyCards(averageLevel(levelVotes) ?? v, d.cards) }));
+  };
+  const line = votesLine(draft.levelVotes, voter);
   // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
   const setProfile = (level: number, cards: CardId[]) => setDraft((d) => ({ ...d, cards, attrs: applyCards(level, cards) }));
 
@@ -360,7 +367,8 @@ function PlayerSheet({
         />
         {error && <p className="field-error">{error}</p>}
         <span className="label">רמה</span>
-        <LevelPicker value={draft.attrs.overall} onChange={(v) => setProfile(v, draft.cards)} />
+        <LevelPicker value={myVote ?? draft.attrs.overall} onChange={setLevel} />
+        {line && <p className="hint small votes-line">{line}</p>}
         <p className="hint small level-hint">{LEVEL_HINT}</p>
         {POSITIONS_LABEL}
         <PositionPicker
