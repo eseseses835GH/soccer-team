@@ -3,6 +3,7 @@ import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { GID, ME, ORG, playerContext, SB_URL } from './player-mock.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -1132,6 +1133,65 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await fp.getByText('Google לא נטען כאן').waitFor({ timeout: 10000 }).catch(() => errors.push('gis fallback: no note when Google fails to load'));
   assert(await fp.getByRole('button', { name: 'המשך עם Google' }).isEnabled(), 'gis fallback: the redirect button works');
   await fctx.close();
+}
+
+// 14. A player runs the match from his phone (v12), on a mocked Supabase: take control (asks first,
+// since the organizer runs it) → match controls → a goal is published with the rev → reload resumes →
+// "stop" → viewer; again, then the organizer takes it back → the next write conflicts → viewer + toast.
+if (SB_URL) {
+  const { ctx: rctx, page: rp, db } = await playerContext(browser, { me: 'p3', canRate: false });
+  rp.on('pageerror', (e) => errors.push(`runner: ${e.message}`));
+  const runnerKey = `kochot:runner:${GID}`;
+  const stored = () => rp.evaluate((k) => localStorage.getItem(k), runnerKey);
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 40 && !fn(); i++) await rp.waitForTimeout(100);
+    assert(fn(), `runner: ${what}`);
+  };
+  await rp.goto(base);
+  await rp.waitForSelector('.live');
+  assert(await rp.getByText('מנוהל מהטלפון של אלי').count(), 'runner: "run by" line missing');
+  assert(!(await rp.locator('.clock-ctrl').count()), 'runner: controls before taking control');
+  await rp.getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+  await rp.getByRole('dialog').getByText('מי שמנהל עכשיו יעבור לצפייה').waitFor();
+  await rp.getByRole('dialog').getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+  await rp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('runner: no controls after taking control'));
+  assert(db.runner === ME && db.rev === 5, `runner: take_control ${db.runner} ${db.rev}`);
+  for (const gone of ['סיום הערב', 'מישהו הגיע?', 'מישהו עזב?']) assert(!(await rp.getByRole('button', { name: gone }).count()), `runner: "${gone}" shown to a player`);
+  await rp.locator('.btn-goal').first().click();
+  await rp.getByRole('dialog').getByRole('button', { name: 'גיל' }).click();
+  await waitFor(() => db.sets.length === 1, `goal not published (${db.sets.length})`);
+  assert(db.sets[0]?.rev === 5, `runner: live_set rev ${db.sets[0]?.rev}`);
+  assert(JSON.stringify(db.data.match?.score) === '[3,1]', `runner: published score ${JSON.stringify(db.data.match?.score)}`);
+  assert(db.data.match?.goals.at(-1)?.by === 'p3', 'runner: scorer not published');
+  assert(!/attrs|levelVotes|cards/.test(JSON.stringify(db.data)), 'runner: ratings in the snapshot');
+  const groupState = await rp.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '{}'), `kochot:group:${GID}`);
+  assert(!groupState.result && !groupState.match, 'runner: the evening leaked into the group state');
+  assert(JSON.parse((await stored()) ?? 'null')?.rev === 6, 'runner: rev not kept');
+  // Reload: still the controls, from this phone.
+  await rp.reload();
+  await rp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('runner: no controls after reload'));
+  assert((await rp.locator('.match .goals').first().textContent()) === '3', 'runner: score lost on reload');
+  // Stop running → viewer, nobody runs it.
+  await rp.getByRole('button', { name: 'להפסיק לנהל' }).click();
+  await rp.waitForSelector('.live');
+  await waitFor(() => db.runner === null, 'release_control not called');
+  assert((await stored()) === null, 'runner: local evening kept after release');
+  assert(!(await rp.getByText('מנוהל מהטלפון של').count()), 'runner: "run by" shown with nobody running');
+  // Nobody runs it: one tap, no question. Then the organizer takes it back.
+  await rp.getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+  await rp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('runner: no controls on the second take'));
+  db.runner = ORG;
+  db.runnerName = 'אלי';
+  db.rev++;
+  const sets = db.sets.length;
+  await rp.locator('.btn-goal').first().click();
+  await rp.getByRole('dialog').getByRole('button', { name: 'דילוג' }).click();
+  await rp.waitForSelector('.live', { timeout: 5000 }).catch(() => errors.push('runner: still the controls after losing control'));
+  await rp.getByText('הניהול עבר לאלי').waitFor({ timeout: 3000 }).catch(() => errors.push('runner: no "control moved" toast'));
+  assert(db.sets.length === sets, 'runner: wrote after losing control');
+  assert((await stored()) === null, 'runner: local evening kept after losing control');
+  console.log(`runner: ${db.sets.length} live writes, revs ${db.sets.map((x) => x.rev).join(',')}`);
+  await rctx.close();
 }
 
 console.log(`split 22 players in ${dt}ms`);

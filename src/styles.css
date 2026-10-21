@@ -186,6 +186,15 @@ small {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+/* A player's "run it from my phone" under the live match. */
+.run-ctl {
+  display: grid;
+  justify-items: center;
+  margin-block: 2px 8px;
+}
+.run-ctl .hint {
+  margin: 0;
+}
 .row-links {
   display: flex;
   flex-wrap: wrap;

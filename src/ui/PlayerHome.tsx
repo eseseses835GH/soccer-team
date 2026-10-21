@@ -1,15 +1,17 @@
 // A player's main screen (read-only): tonight's evening live, a rating card when allowed, and
 // "who are you?" the first time. DECISIONS → "Players and live evening — player side (v10)".
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { bibLook, verb, type TeamLook } from '../state/model';
-import { useGroups, useStore } from '../state/store';
-import { liveClockMs, type LiveData } from '../sync/live';
+import { LocalStore, useGroups, useStore } from '../state/store';
+import { liveClockMs, someoneElseRuns, type LiveData } from '../sync/live';
 import { claimChoices, clockText, liveName, liveNow, rateCard } from '../sync/playerGroup';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
+import { useRunner } from '../sync/RunnerProvider';
 import { useSync } from '../sync/SyncProvider';
 import { loadJSON, saveJSON } from '../state/storage';
 import { useUi } from './App';
-import { Empty, PositionBadges } from './components';
+import { Empty, PositionBadges, Sheet } from './components';
+import { MatchScreen } from './MatchScreen';
 import type { PublicPlayer } from '../sync/players';
 
 const laterKey = (gid: string) => `kochot:claim-later:${gid}`;
@@ -18,10 +20,11 @@ export function PlayerHome() {
   const pg = usePlayerGroup();
   const sync = useSync();
   const { current } = useGroups();
-  const { go } = useUi();
+  const { go, notify } = useUi();
   const [later, setLater] = useState(() => loadJSON<boolean>(laterKey(current.id)) === true);
   useEffect(() => setLater(loadJSON<boolean>(laterKey(current.id)) === true), [current.id]);
   const now = useNow(1000);
+  const runner = useRunner();
 
   if (pg.load === 'signedOut') {
     return (
@@ -48,6 +51,19 @@ export function PlayerHome() {
     );
   }
 
+  // This phone runs the match: the organizer's match controls on the local evening.
+  if (runner.app?.match) {
+    const release = async () => {
+      const err = await runner.release();
+      if (err) notify(err === 'offline' ? 'אין חיבור לאינטרנט' : 'משהו השתבש, נסו שוב');
+    };
+    return (
+      <LocalStore value={{ state: runner.app, dispatch: runner.dispatch }}>
+        <MatchScreen runner={{ onRelease: () => void release() }} />
+      </LocalStore>
+    );
+  }
+
   const live = liveNow(pg.live, now);
   const card = rateCard(pg.pub, pg.votes);
   return (
@@ -64,11 +80,53 @@ export function PlayerHome() {
         </div>
       )}
       {live ? (
-        <LiveView data={live} roster={pg.pub.players} me={pg.pub.me.playerId} now={now} />
+        <LiveView data={live} roster={pg.pub.players} me={pg.pub.me.playerId} now={now} control={<TakeControl />} />
       ) : (
         <Empty icon="🌙" title="אין ערב עכשיו" />
       )}
     </section>
+  );
+}
+
+/** "Run it from my phone" under the live match, with who runs it now. */
+function TakeControl() {
+  const pg = usePlayerGroup();
+  const sync = useSync();
+  const runner = useRunner();
+  const { notify } = useUi();
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const row = pg.live;
+  if (!row) return null;
+  const take = async () => {
+    setAsk(false);
+    if (busy) return;
+    setBusy(true);
+    const err = await runner.take();
+    setBusy(false);
+    if (err) notify(err === 'offline' ? 'אין חיבור לאינטרנט' : err === 'invalid' ? 'אין ערב עכשיו' : 'משהו השתבש, נסו שוב');
+  };
+  const other = someoneElseRuns(row, sync.userId);
+  return (
+    <div className="run-ctl">
+      {other && <p className="hint small center">מנוהל מהטלפון של {row.runnerName || 'מישהו אחר'}</p>}
+      <button type="button" className="text-btn" disabled={busy} onClick={() => (other ? setAsk(true) : void take())}>
+        לנהל מהטלפון שלי
+      </button>
+      {ask && (
+        <Sheet title="לקחת את ניהול המשחק?" onClose={() => setAsk(false)}>
+          <p className="lead">מי שמנהל עכשיו יעבור לצפייה.</p>
+          <div className="stack">
+            <button type="button" className="btn btn-primary btn-block" onClick={() => void take()}>
+              לנהל מהטלפון שלי
+            </button>
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => setAsk(false)}>
+              ביטול
+            </button>
+          </div>
+        </Sheet>
+      )}
+    </div>
   );
 }
 
@@ -123,7 +181,7 @@ export function ClaimView({ onLater, onDone }: { onLater?: () => void; onDone?: 
 }
 
 /** Tonight, as the organizer's phone publishes it. */
-export function LiveView({ data, roster, me, now }: { data: LiveData; roster: PublicPlayer[]; me: string | null; now: number }) {
+export function LiveView({ data, roster, me, now, control }: { data: LiveData; roster: PublicPlayer[]; me: string | null; now: number; control?: ReactNode }) {
   const name = (id: string) => liveName(data, roster, id);
   const badges = (id: string) => {
     const p = roster.find((x) => x.id === id);
@@ -177,6 +235,7 @@ export function LiveView({ data, roster, me, now }: { data: LiveData; roster: Pu
           )}
         </>
       )}
+      {control}
 
       <div className="team-grid">
         {data.teams.map((team, t) => {

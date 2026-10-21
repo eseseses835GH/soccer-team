@@ -172,6 +172,11 @@ export function StoreProvider({ children, kv = localKV }: { children: ReactNode;
   );
 }
 
+/** The match screen on a state that isn't the open group's (a player running the match, sync/runner.ts). */
+export function LocalStore({ value, children }: { value: { state: AppState; dispatch: Dispatch<Action> }; children: ReactNode }) {
+  return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
+}
+
 export function useStore() {
   const ctx = useContext(StoreCtx);
   if (!ctx) throw new Error('useStore outside StoreProvider');

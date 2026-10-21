@@ -76,7 +76,11 @@ function useWakeLock(on: boolean) {
   }, [on]);
 }
 
-export function MatchScreen() {
+/**
+ * `runner`: a player running the match from his phone (sync/runner.ts) — no late/left, no
+ * re-split, no end of the evening; "stop running" instead.
+ */
+export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {}) {
   const { state, dispatch } = useStore();
   const { go, notify } = useUi();
   const m = state.match;
@@ -354,19 +358,23 @@ export function MatchScreen() {
             <Icon name="undo" size={18} /> ביטול גול אחרון
           </button>
         )}
-        <button type="button" className="text-btn" onClick={() => setArriving(true)}>
-          <Icon name="plus" size={18} /> מישהו הגיע?
-        </button>
-        <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
-          <Icon name="leave" size={18} /> מישהו עזב?
-        </button>
+        {!runner && (
+          <>
+            <button type="button" className="text-btn" onClick={() => setArriving(true)}>
+              <Icon name="plus" size={18} /> מישהו הגיע?
+            </button>
+            <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
+              <Icon name="leave" size={18} /> מישהו עזב?
+            </button>
+          </>
+        )}
       </div>
       {arriving && <LateSheet onClose={() => setArriving(false)} />}
       {leaving && <LeaveSheet onClose={() => setLeaving(false)} />}
 
       <BorrowCard m={m} r={r} set={set} />
 
-      {dom !== null && weaken && (
+      {!runner && dom !== null && weaken && (
         <div className="notice tip">
           <p>
             {teamLook(state.settings, dom).the} {verb(teamLook(state.settings, dom), 'שולטים', 'שולטת')} ({m.streak[dom] >= 3 ? `${m.streak[dom]} ניצחונות ברצף` : 'רוב המשחקים'}). להחליף את{' '}
@@ -448,9 +456,15 @@ export function MatchScreen() {
       )}
 
       <div className="row-links">
-        <button type="button" className="text-btn danger" onClick={() => setConfirmEnd(true)}>
-          סיום הערב
-        </button>
+        {runner ? (
+          <button type="button" className="text-btn" onClick={runner.onRelease}>
+            להפסיק לנהל
+          </button>
+        ) : (
+          <button type="button" className="text-btn danger" onClick={() => setConfirmEnd(true)}>
+            סיום הערב
+          </button>
+        )}
       </div>
 
       {scorerFor !== null && (

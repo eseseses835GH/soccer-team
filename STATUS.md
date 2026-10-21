@@ -209,3 +209,7 @@
 # v10: player side
 - **Built:** player link → read-only player group ("שחקן" tag): "מי אתה?", live evening (me highlighted, ticking clock), past evenings, rating survey when allowed. Organizer sync never runs on it. See DECISIONS → "Players and live evening — player side (v10)".
 - **Tested:** unit (`src/sync/playerGroup.test.ts`); mocked-Supabase screenshots p01–p08 (light + dark).
+
+# v12: a player runs the match
+- **Built:** a player can run the match from his phone ("לנהל מהטלפון שלי"; asks first if someone else runs it). Same match screen, without late/left, re-split or ending the evening; "להפסיק לנהל". Losing control → back to watching with a toast. See DECISIONS → "Match runner handoff — player side (v12)".
+- **Tested:** unit (`src/sync/runner.test.ts`), e2e block 14 and screenshots p09–p11 on a mocked Supabase.

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { playersCount } from '../i18n';
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
 import { useGroups, useStore } from '../state/store';
+import { useRunner } from '../sync/RunnerProvider';
 import { JOIN_HASH, STATUS_TEXT, useSync, type SyncStatus } from '../sync/SyncProvider';
 import { AccountSheet } from './AccountSheet';
 import { Sheet, Toast } from './components';
@@ -151,6 +152,12 @@ export function App() {
   useEffect(() => {
     if (sync.message) notify(sync.message.text);
   }, [sync.message, notify]);
+
+  // A player was running the match and someone else took it.
+  const { lost } = useRunner();
+  useEffect(() => {
+    if (lost) notify(lost.name ? `הניהול עבר ל${lost.name}` : 'הניהול עבר לטלפון אחר');
+  }, [lost, notify]);
 
   // Say hello when a login finishes.
   const prevEmail = useRef(sync.email);

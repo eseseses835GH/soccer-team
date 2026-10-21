@@ -2,7 +2,7 @@
 // Usage: npm run build && npx vite preview --port 4173 & npm run screenshots -- [outDir]
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
-import { playerContext, SB_URL } from './player-mock.mjs';
+import { ORG, playerContext, SB_URL } from './player-mock.mjs';
 
 const out = process.argv[2] ?? 'screenshots';
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
@@ -501,6 +501,34 @@ for (const scheme of ['light', 'dark']) {
     await pp.waitForSelector('text=אין ערב עכשיו');
     await pshot('p08-no-evening');
     await pctx.close();
+
+    // A player runs the match from his phone (v12): viewer → confirm → controls → the organizer takes it back.
+    const { ctx: rctx, page: rp, db: rdb } = await playerContext(browser, { scheme, me: 'p3', canRate: false, live: true });
+    rp.on('pageerror', (e) => errors.push(`${scheme} runner: ${e.message}`));
+    const rshot = async (name, full = false) => {
+      await rp.waitForTimeout(250);
+      await rp.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: full });
+      const sw = await rp.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    await rp.goto(base);
+    await rp.waitForSelector('.live');
+    await rshot('p09-run-viewer');
+    await rp.getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+    await rshot('p09b-run-confirm');
+    await rp.getByRole('dialog').getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+    await rp.waitForSelector('.clock-ctrl');
+    await rshot('p10-runner');
+    await rshot('p10b-runner-full', true);
+    rdb.runner = ORG;
+    rdb.runnerName = 'אלי';
+    rdb.rev++;
+    await rp.locator('.btn-goal').first().click();
+    await rp.getByRole('dialog').getByRole('button', { name: 'דילוג' }).click();
+    await rp.waitForSelector('.live');
+    await rp.getByText('הניהול עבר לאלי').waitFor();
+    await rshot('p11-run-lost');
+    await rctx.close();
   }
 }
 await browser.close();

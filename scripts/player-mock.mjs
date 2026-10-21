@@ -14,6 +14,8 @@ const REF = SB_URL ? new URL(SB_URL).hostname.split('.')[0] : '';
 
 export const GID = '11111111-2222-4333-8444-555555555555';
 export const ME = '99999999-8888-4777-8666-555555555555';
+/** The organizer whose phone runs the evening until a player takes it (v12). */
+export const ORG = '12121212-3434-4565-8787-909090909090';
 const NAMES = ['אבי', 'בני', 'גיל', 'דני', 'הדר', 'ורד', 'זיו', 'חן', 'טל', 'יוסי', 'כפיר', 'ליאור', 'מתן'];
 const POS = [['att'], [], ['mid', 'att'], ['def'], ['mid'], ['att'], ['def', 'mid'], [], ['def'], ['att'], [], ['mid'], ['def']];
 const GK = new Set([1, 4, 8]);
@@ -86,6 +88,9 @@ export function liveData(now) {
 /**
  * A browser context whose page is a logged-in player of one group. `db` (returned) is the mocked
  * server state: change it and reload. Options: me (claimed roster id or null), canRate, live (bool).
+ * v12: `db.runner`/`runnerName`/`rev` (who runs the evening), `db.data` (the live JSON; live_set
+ * writes it), `db.sets` (every accepted live_set: { rev, data }). Set `db.runner = ORG` to have
+ * the organizer take control back: the player's next write gets 40001.
  */
 export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true } = {}) {
   const now = Date.now();
@@ -96,7 +101,22 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     live,
     votes: {},
     calls: [],
+    runner: ORG,
+    runnerName: 'אלי',
+    rev: 4,
+    data: liveData(now),
+    sets: [],
   };
+  const liveRow = () => ({
+    data: db.data,
+    updated_by: db.runner ?? ORG,
+    by_name: db.runnerName || 'אלי',
+    updated_at: new Date(Date.now() - 60e3).toISOString(),
+    runner: db.runner,
+    runner_name: db.runnerName,
+    runner_since: null,
+    rev: db.rev,
+  });
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -149,7 +169,29 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
         updatedAt: new Date(now).toISOString(),
       });
     if (path.endsWith('/rpc/live_get'))
-      return json(route, db.live ? [{ data: liveData(now), updated_by: null, by_name: 'אלי', updated_at: new Date(Date.now() - 60e3).toISOString() }] : []);
+      return json(route, db.live ? [liveRow()] : []);
+    if (path.endsWith('/rpc/take_control')) {
+      if (!db.live) return json(route, { code: 'P0002', message: 'no evening' }, 404);
+      db.runner = ME;
+      db.runnerName = 'גיל';
+      db.rev++;
+      return json(route, [liveRow()]);
+    }
+    if (path.endsWith('/rpc/live_set')) {
+      if (db.runner !== ME || (args.p_rev !== undefined && args.p_rev !== db.rev)) return json(route, { code: '40001', message: 'someone else runs it' }, 409);
+      db.data = args.p_data;
+      db.rev++;
+      db.sets.push({ rev: args.p_rev, data: args.p_data });
+      return json(route, db.rev);
+    }
+    if (path.endsWith('/rpc/release_control')) {
+      if (db.runner === ME) {
+        db.runner = null;
+        db.runnerName = '';
+        db.rev++;
+      }
+      return json(route, db.rev);
+    }
     if (path.endsWith('/rpc/my_votes')) return json(route, db.votes);
     if (path.endsWith('/rpc/claim_player')) {
       if (db.claimed.includes(args.p_player_id)) return json(route, { code: '23505', message: 'taken' }, 409);

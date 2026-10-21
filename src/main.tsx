@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { StoreProvider } from './state/store';
 import { SyncProvider } from './sync/SyncProvider';
 import { PlayerGroupProvider } from './sync/PlayerGroupProvider';
+import { RunnerProvider } from './sync/RunnerProvider';
 import { App } from './ui/App';
 import './styles.css';
 
@@ -11,7 +12,9 @@ createRoot(document.getElementById('root')!).render(
     <StoreProvider>
       <SyncProvider>
         <PlayerGroupProvider>
-          <App />
+          <RunnerProvider>
+            <App />
+          </RunnerProvider>
         </PlayerGroupProvider>
       </SyncProvider>
     </StoreProvider>
