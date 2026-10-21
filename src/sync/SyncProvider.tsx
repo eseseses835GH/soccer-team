@@ -9,6 +9,7 @@ import { sanitize } from '../state/model';
 import { localKV, useGroups, useStore } from '../state/store';
 import { applyDoc, docFromState, mergeDocs, sanitizeDoc } from './doc';
 import { EMPTY_META, hasLocalChanges, loadMeta, saveMeta, syncGroup } from './engine';
+import { afterLoginQueue, limitText, shouldAutoUpload } from './gate';
 import { JOIN_HASH, inviteUrl } from './organizers';
 import { OrganizerSync } from './OrganizerSync';
 import { isPlayerGroup, joinPlan, publicKey, runsOrganizerSync } from './playerGroup';
@@ -27,7 +28,8 @@ export const STATUS_TEXT: Record<SyncStatus, string> = {
   gone: 'הקבוצה לא נמצאה בחשבון',
 };
 
-export type LoginReason = 'join' | 'upload' | 'account';
+/** players / group: a logged-out phone hit the free limits (sync/gate.ts). */
+export type LoginReason = 'join' | 'upload' | 'account' | 'players' | 'group';
 
 interface SyncApi {
   configured: boolean;
@@ -35,15 +37,20 @@ interface SyncApi {
   email: string | null | false;
   /** Logged-in user's id; null when signed out or unknown. */
   userId: string | null;
+  /** Known to be logged out (login is available here). The free limits apply then. */
+  loggedOut: boolean;
   status: SyncStatus;
   loginReason: LoginReason | null;
-  openLogin(reason?: LoginReason): void;
+  /** `then` runs once the login succeeds in this page (closing the sheet drops it). */
+  openLogin(reason?: LoginReason, then?: () => void): void;
   closeLogin(): void;
   client(): Promise<SupabaseClient>;
   signOut(): Promise<void>;
   syncNow(): void;
   /** Put the open (local) group in the cloud. Asks to log in first if needed. */
   uploadCurrent(): Promise<void>;
+  /** A new group, opened. Logged in: a cloud group from the start (uploaded now, retried if that fails). */
+  createGroup(name: string): string;
   /** An invite link for the open cloud group. */
   inviteLink(): Promise<string | null>;
   /** Leave the open cloud group (the last organizer deletes it). Returns false if it failed. */
@@ -57,6 +64,14 @@ interface SyncApi {
 const SyncCtx = createContext<SyncApi | null>(null);
 const PENDING_JOIN = 'kochot:pendingJoin';
 export { JOIN_HASH };
+
+const pendingJoin = () => {
+  try {
+    return !!localStorage.getItem(PENDING_JOIN);
+  } catch {
+    return false;
+  }
+};
 
 const errCode = (e: unknown) => (e instanceof SyncError ? e.code : typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'other');
 
@@ -74,6 +89,17 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [loginReason, setLoginReason] = useState<LoginReason | null>(null);
   const [message, setMessage] = useState<SyncApi['message']>(null);
   const say = useCallback((text: string) => setMessage((m) => ({ text, n: (m?.n ?? 0) + 1 })), []);
+  // A cap the server keeps refusing is said once, not on every retry.
+  const said = useRef(new Set<string>());
+  const sayOnce = useCallback(
+    (key: string, text: string) => {
+      if (said.current.has(key)) return;
+      said.current.add(key);
+      say(text);
+    },
+    [say],
+  );
+  const uploadRef = useRef<(silent?: boolean) => Promise<void>>(async () => {});
 
   const ensureClient = useCallback(async () => {
     if (clientRef.current) return clientRef.current;
@@ -106,7 +132,11 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     const g = groupsRef.current;
     const { gid, app } = g.latest();
     const meta = g.latestIndex().groups.find((x) => x.id === gid);
-    if (!meta?.synced) return setStatus('local');
+    if (!meta?.synced) {
+      // Logged in: a local group goes to the cloud by itself (v13).
+      if (shouldAutoUpload({ loggedIn: !!sessionRef.current && !!clientRef.current, meta, app, pendingJoin: pendingJoin() })) void uploadRef.current(true);
+      return setStatus('local');
+    }
     const c = clientRef.current;
     // Player groups never run the organizer sync (PlayerGroupProvider reads them).
     if (!runsOrganizerSync(meta)) return setStatus(!sessionRef.current ? 'signedOut' : navigator.onLine === false ? 'offline' : 'synced');
@@ -135,6 +165,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       const code = errCode(e);
       setStatus(code === 'offline' ? 'offline' : code === 'auth' ? 'signedOut' : 'error');
+      if (code === 'limit') sayOnce(`${gid}:${(e as Error).message}`, limitText((e as Error).message));
     } finally {
       running.current = false;
       if (again.current || groupsRef.current.latest().gid !== gid) {
@@ -143,7 +174,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         timer.current = window.setTimeout(() => void runSync(), 300);
       }
     }
-  }, []);
+  }, [sayOnce]);
 
   const schedule = useCallback(
     (ms: number) => {
@@ -177,6 +208,24 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     schedule(0);
   }, [session, current.id, current.synced, current.role, schedule]);
+
+  // Logged in with a local group open: upload it once it qualifies (first own player), and retry a
+  // failed upload when back on screen or online.
+  const localOpen = !current.synced && current.role !== 'player' && !!session;
+  useEffect(() => {
+    if (!localOpen) return;
+    if (shouldAutoUpload({ loggedIn: true, meta: current, app: state, pendingJoin: pendingJoin() })) schedule(1500);
+  }, [state.players, localOpen, current, schedule]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!localOpen) return;
+    const again = () => document.visibilityState === 'visible' && schedule(0);
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('online', again);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('online', again);
+    };
+  }, [localOpen, schedule]);
 
   // Local edits → push after a short pause. Tonight-only changes don't count.
   useEffect(() => {
@@ -216,6 +265,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   // ---------- join / upload / invite / leave ----------
   const afterLogin = useRef<LoginReason | null>(null);
+  /** What the login was for (add the 5th player, open a new group…): done once logged in. */
+  const thenQueue = useRef(afterLoginQueue()).current;
 
   const joining = useRef<string | null>(null);
   const doJoin = useCallback(
@@ -274,7 +325,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         } catch {
           /* ignore */
         }
-        say(code === 'invalid' ? 'ההזמנה לא תקפה או שפג תוקפה' : 'ההצטרפות לא הצליחה');
+        say(code === 'invalid' ? 'ההזמנה לא תקפה או שפג תוקפה' : code === 'limit' ? limitText((e as Error).message) : 'ההצטרפות לא הצליחה');
       } finally {
         joining.current = null;
       }
@@ -282,27 +333,44 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     [ensureClient, say],
   );
 
-  const upload = useCallback(async () => {
-    const c = await ensureClient();
-    const api = remoteApi(c);
-    const g = groupsRef.current;
-    const { gid, app } = g.latest();
-    const meta = g.latestIndex().groups.find((x) => x.id === gid);
-    if (!meta || meta.synced) return;
-    if (!isUuid(gid)) return say('לא ניתן לסנכרן את הקבוצה הזו');
-    const doc = docFromState(app);
-    try {
-      const row = await api.createGroup(gid, meta.name, doc);
-      saveMeta(localKV, gid, { base: doc, baseVersion: row.version, baseName: row.name });
-    } catch (e) {
-      // Already uploaded earlier (e.g. the answer got lost): merge with what is there.
-      const existing = errCode(e) === 'other' ? await api.fetchGroup(gid).catch(() => null) : null;
-      if (!existing) return say(errCode(e) === 'offline' ? 'אין חיבור לאינטרנט' : 'הסנכרון לא הצליח, נסו שוב');
-      saveMeta(localKV, gid, { ...EMPTY_META, baseName: existing.name });
-    }
-    g.setMeta(gid, { synced: true });
-    say('הקבוצה מסונכרנת. עכשיו אפשר להזמין מארגנים');
-  }, [ensureClient, say]);
+  // `silent`: the automatic upload after login (v13) says nothing unless a server cap refused it.
+  const uploading = useRef(new Set<string>());
+  const upload = useCallback(
+    async (silent = false) => {
+      const c = await ensureClient();
+      const api = remoteApi(c);
+      const g = groupsRef.current;
+      const { gid, app } = g.latest();
+      const meta = g.latestIndex().groups.find((x) => x.id === gid);
+      if (!meta || meta.synced || meta.role === 'player' || uploading.current.has(gid)) return;
+      if (!isUuid(gid)) return silent ? undefined : say('לא ניתן לסנכרן את הקבוצה הזו');
+      uploading.current.add(gid);
+      try {
+        const doc = docFromState(app);
+        try {
+          const row = await api.createGroup(gid, meta.name, doc);
+          if (!row || typeof row.version !== 'number') throw new SyncError('no row', 'other');
+          saveMeta(localKV, gid, { base: doc, baseVersion: row.version, baseName: row.name });
+        } catch (e) {
+          const code = errCode(e);
+          // Already uploaded earlier (e.g. the answer got lost): merge with what is there.
+          const existing = code === 'other' || code === 'taken' ? await api.fetchGroup(gid).catch(() => null) : null;
+          if (!existing) {
+            if (code === 'limit') return sayOnce(`${gid}:${(e as Error).message}`, limitText((e as Error).message));
+            if (!silent) say(code === 'offline' ? 'אין חיבור לאינטרנט' : 'הסנכרון לא הצליח, נסו שוב');
+            return;
+          }
+          saveMeta(localKV, gid, { ...EMPTY_META, baseName: existing.name });
+        }
+        g.setMeta(gid, { synced: true, upload: undefined });
+        if (!silent) say('הקבוצה מסונכרנת. עכשיו אפשר להזמין מארגנים');
+      } finally {
+        uploading.current.delete(gid);
+      }
+    },
+    [ensureClient, say, sayOnce],
+  );
+  uploadRef.current = upload;
 
   // After logging in: finish what the login was for.
   useEffect(() => {
@@ -317,22 +385,26 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     if (afterLogin.current === 'upload') void upload();
     afterLogin.current = null;
     setLoginReason(null);
-  }, [session, doJoin, upload]);
+    thenQueue.run();
+  }, [session, doJoin, upload, thenQueue]);
 
   const api = useMemo<SyncApi>(
     () => ({
       configured: syncConfigured,
       email: session === undefined ? null : session ? (session.user.email ?? '') : false,
       userId: session?.user.id ?? null,
+      loggedOut: syncConfigured && session === null,
       status: current.synced ? status : 'local',
       loginReason,
       message,
-      openLogin(reason = 'account') {
+      openLogin(reason = 'account', then) {
+        thenQueue.set(then ?? null);
         afterLogin.current = reason;
         setLoginReason(reason);
         ensureClient().catch(() => say('אין חיבור לאינטרנט'));
       },
       closeLogin() {
+        thenQueue.clear();
         afterLogin.current = null;
         setLoginReason(null);
       },
@@ -346,12 +418,22 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       syncNow: () => schedule(0),
       async uploadCurrent() {
         if (!sessionRef.current) {
+          thenQueue.clear();
           afterLogin.current = 'upload';
           setLoginReason('upload');
           ensureClient().catch(() => say('אין חיבור לאינטרנט'));
           return;
         }
         await upload();
+      },
+      createGroup(name) {
+        const g = groupsRef.current;
+        const id = g.create(name);
+        if (sessionRef.current) {
+          g.setMeta(id, { upload: true });
+          void upload(true);
+        }
+        return id;
       },
       async inviteLink() {
         const c = clientRef.current;
@@ -364,7 +446,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           const token = await remoteApi(c).createInvite(gid);
           return inviteUrl(token, redirectUrl());
         } catch (e) {
-          say(errCode(e) === 'offline' ? 'צריך אינטרנט כדי ליצור הזמנה' : 'יצירת ההזמנה לא הצליחה');
+          const code = errCode(e);
+          say(code === 'offline' ? 'צריך אינטרנט כדי ליצור הזמנה' : code === 'limit' ? limitText((e as Error).message) : 'יצירת ההזמנה לא הצליחה');
           return null;
         }
       },
@@ -407,6 +490,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           .then(() => {
             if (sessionRef.current) void doJoin(token);
             else {
+              thenQueue.clear();
               afterLogin.current = 'join';
               setLoginReason('join');
             }
@@ -414,7 +498,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           .catch(() => say('אין חיבור לאינטרנט'));
       },
     }),
-    [session, current.synced, status, loginReason, message, ensureClient, schedule, upload, doJoin, say],
+    [session, current.synced, status, loginReason, message, ensureClient, schedule, upload, doJoin, say, thenQueue],
   );
 
   return (

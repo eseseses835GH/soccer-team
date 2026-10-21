@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { GID, ME, ORG, playerContext, SB_URL } from './player-mock.mjs';
 import { liveServer, organizerRoutes, ORG_ME, groupState, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
+import { cloudRoutes, cloudServer, loginInSheet } from './cloud-mock.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -48,6 +49,9 @@ const teamSizes = () => page.locator('.team').evaluateAll((cs) => cs.map((c) => 
 const teamOf = (name) =>
   page.locator('.team').evaluateAll((cs, n) => cs.findIndex((c) => [...c.querySelectorAll('.name')].some((x) => x.textContent === n)), name);
 
+// Supabase is mocked for this phone: it logs in from the login sheet at step 3 (v13), then syncs.
+const cloud = cloudServer();
+await cloudRoutes(ctx, cloud);
 await page.goto(base);
 
 // 1. Quick add with level + positions + card (cards and sliders are folded under "עוד על השחקן"), duplicate rejected.
@@ -91,14 +95,29 @@ await back();
 assert(await page.getByRole('button', { name: 'עושים כוחות' }).isDisabled(), 'split disabled with 3 players');
 assert(await page.getByText(/צריך לפחות 4 שחקנים/).isVisible(), 'not-enough hint');
 
-// 3. Import a pasted list (19 more players → 22).
+// 3. Import a pasted list (19 more players → 22). Logged out that's past the 4 free players (v13):
+// the login sheet opens; after logging in the import goes through and the group is uploaded by itself.
 await page.getByRole('button', { name: 'השחקנים' }).click();
 await page.getByRole('button', { name: /ייבוא רשימה/ }).click();
 const list = Array.from({ length: 19 }, (_, i) => `שחקן ${i + 1}, ${1 + (i % 10)}${i === 3 ? ', שוער' : ''}${i === 5 ? ', הסלע' : ''}${i % 4 === 1 ? ', הגנה' : ''}${i % 4 === 2 ? ', חלוץ קשר' : ''}`).join('\n');
 await page.getByLabel('רשימת שחקנים').fill(list + '\nאלון 5');
 assert(await page.getByText('19 שחקנים מוכנים, אחד דולג').isVisible(), 'import preview counts');
 await page.getByRole('button', { name: /הוספת 19 שחקנים/ }).click();
-assert((await page.locator('.roster li').count()) === 22, 'import adds 19');
+assert(await page.getByRole('dialog', { name: 'התחברות' }).getByText('כדי להוסיף עוד שחקנים צריך להתחבר').isVisible(), 'gate: import past 4 asks to log in');
+assert((await page.locator('.roster li').count()) === 3, 'gate: nothing imported before the login');
+// Closing the login sheet drops the action; trying again asks again.
+await page.getByRole('dialog', { name: 'התחברות' }).getByRole('button', { name: 'סגירה' }).click();
+assert((await page.locator('.roster li').count()) === 3 && cloud.logins === 0, 'gate: closing the login adds nobody');
+await page.getByRole('button', { name: /הוספת 19 שחקנים/ }).click();
+await loginInSheet(page);
+await page.waitForFunction(() => document.querySelectorAll('.roster li').length === 22, null, { timeout: 5000 }).catch(() => {});
+assert((await page.locator('.roster li').count()) === 22, 'import adds 19 after logging in');
+assert(!(await page.getByLabel('רשימת שחקנים').count()), 'the import sheet closes after the login');
+await page.waitForFunction(() => JSON.parse(localStorage.getItem('kochot:groups')).groups[0].synced, null, { timeout: 5000 }).catch(() => {});
+const up = cloud.calls.filter((c) => c.rpc === 'create_group');
+assert(up.length === 1 && up[0].body.p_data.players.length >= 3, `the local group is uploaded after login (${up.length} uploads, ${up[0]?.body.p_data.players.length} players)`);
+assert(await page.evaluate(() => JSON.parse(localStorage.getItem('kochot:groups')).groups[0].synced), 'the local group is a cloud group now');
+await page.waitForFunction(() => JSON.parse(localStorage.getItem('kochot:sync:' + JSON.parse(localStorage.getItem('kochot:groups')).currentId) ?? 'null')?.base?.players?.length === 22, null, { timeout: 8000 }).catch(() => errors.push('the imported players reach the server'));
 await back();
 
 // 4. Persistence across reload; tick everyone; 22 players, 5-a-side → 4 teams of 5 + 2 subs.
@@ -234,11 +253,18 @@ assert((await page.getByRole('button', { name: /שליחת קישור/ }).count(
 const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'הורדת קובץ גיבוי' }).click()]);
 const backupFile = await download.path();
 {
-  const other = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  // Logged out, 23 players are past the free 4 (v13): log in first, then the restore goes through.
+  const octx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ocloud = cloudServer();
+  await cloudRoutes(octx, ocloud);
+  const other = await octx.newPage();
   other.on('pageerror', (e) => errors.push(e.message));
   await other.goto(base + '#players');
   await other.getByRole('button', { name: /ייבוא רשימה/ }).click();
   await other.locator('input[type=file]').setInputFiles({ name: 'kochot-backup.json', mimeType: 'application/json', buffer: (await import('node:fs')).readFileSync(backupFile) });
+  await other.getByRole('dialog', { name: 'התחברות' }).getByText('כדי להוסיף עוד שחקנים').waitFor({ timeout: 5000 }).catch(() => errors.push('gate: a backup past 4 asks to log in'));
+  assert((await other.locator('.roster li').count()) === 0, 'gate: nothing restored before the login');
+  await loginInSheet(other);
   await other.waitForSelector('.roster li');
   const imported = await other.locator('.roster li').count();
   assert(imported === 23, `restored ${imported} players from the file`);
@@ -484,14 +510,22 @@ const backupFile = await download.path();
   await pg.context().close();
 }
 
-// 11. Groups: a second group starts empty, switching back keeps the first one's roster.
+// 11. Groups (logged in): two groups can't share a name; a second group starts empty and is a cloud
+// group from the start (v13); switching back keeps the first one's roster.
 await page.goto(base + '#home');
 await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
 await page.getByRole('button', { name: /קבוצה חדשה/ }).click();
+assert(!(await page.getByRole('dialog', { name: 'התחברות' }).count()), 'logged in: a new group needs no login');
+await page.getByLabel('שם הקבוצה').fill('הקבוצה שלי');
+await page.getByRole('button', { name: 'יצירה' }).click();
+assert(await page.getByText('כבר יש קבוצה בשם הזה').isVisible(), 'groups: a duplicate name is refused');
 await page.getByLabel('שם הקבוצה').fill('כדורגל בבסיס');
 await page.getByRole('button', { name: 'יצירה' }).click();
 assert(await page.getByRole('button', { name: /קבוצה: כדורגל בבסיס/ }).isVisible(), 'new group is open');
 assert(await page.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).isVisible(), 'new group starts empty');
+await page.waitForFunction(() => JSON.parse(localStorage.getItem('kochot:groups')).groups.every((g) => g.synced), null, { timeout: 5000 }).catch(() => {});
+assert(cloud.calls.some((c) => c.rpc === 'create_group' && c.body.p_name === 'כדורגל בבסיס'), 'logged in: the new group is created on the server');
+assert(await page.evaluate(() => JSON.parse(localStorage.getItem('kochot:groups')).groups.every((g) => g.synced && !g.upload)), 'logged in: both groups are cloud groups');
 await page.getByRole('button', { name: /החלפת קבוצה/ }).click();
 await page.getByRole('button', { name: /הקבוצה שלי/ }).click();
 await page.getByRole('button', { name: 'השחקנים' }).click();
@@ -927,8 +961,8 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await qc.close();
 }
 
-// 17. During an evening: ticking someone at home asks "in now or wait" (no reshuffle), a re-roll asks
-// first, and two groups can't share a name.
+// 17. During an evening: ticking someone at home asks "in now or wait" (no reshuffle), and a re-roll asks
+// first.
 {
   const ev = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   ev.on('pageerror', (e) => errors.push(e.message));
@@ -952,13 +986,85 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await ev.getByRole('button', { name: /הגרלה מחדש/ }).click();
   assert(await ev.getByRole('dialog', { name: 'להגריל מחדש?' }).isVisible(), 'evening: re-roll asks first');
   await ev.getByRole('dialog').getByRole('button', { name: 'ביטול' }).click();
-  await ev.goto(base + '#home');
-  await ev.getByRole('button', { name: /החלפת קבוצה/ }).click();
-  await ev.getByRole('button', { name: /קבוצה חדשה/ }).click();
-  await ev.getByLabel('שם הקבוצה').fill('הקבוצה שלי');
-  await ev.getByRole('button', { name: 'יצירה' }).click();
-  assert(await ev.getByText('כבר יש קבוצה בשם הזה').isVisible(), 'groups: a duplicate name is refused');
   await ev.context().close();
+}
+
+// 18. Logged out (v13): the sample squad is free, 4 own players are free; the 5th asks to log in and
+// is added after it, and the group goes to the cloud; "+ קבוצה חדשה" asks too and goes on to the
+// new group; a late "מישהו חדש" past the limit asks and goes on; an old phone keeps its 6 players.
+{
+  const gctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const gs = cloudServer();
+  await cloudRoutes(gctx, gs);
+  const gp = await gctx.newPage();
+  gp.on('pageerror', (e) => errors.push(`gate: ${e.message}`));
+  const login = () => gp.getByRole('dialog', { name: 'התחברות' });
+  const roster = () => gp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).players);
+  await gp.goto(base);
+  await gp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await gp.goto(base + '#players');
+  for (const n of ['אחד', 'שתיים', 'שלוש', 'ארבע']) {
+    await gp.getByPlaceholder('איך קוראים לו?').fill(n);
+    await gp.getByRole('button', { name: /^הוספה$/ }).click();
+  }
+  assert(!(await login().count()) && (await roster()).length === 18, 'gate: 14 sample + 4 own need no login');
+  await gp.getByPlaceholder('איך קוראים לו?').fill('חמש');
+  await gp.getByRole('button', { name: /^הוספה$/ }).click();
+  assert(await login().getByText('כדי להוסיף עוד שחקנים צריך להתחבר. זה חינם ולוקח רגע.').isVisible(), 'gate: the 5th own player asks to log in');
+  assert((await roster()).length === 18 && gs.logins === 0, 'gate: not added before logging in');
+  await loginInSheet(gp);
+  await gp.waitForFunction(() => document.body.textContent.includes('חמש נוסף'), null, { timeout: 5000 }).catch(() => {});
+  assert((await roster()).some((p) => p.name === 'חמש'), 'gate: the 5th is added after logging in');
+  assert((await gp.getByPlaceholder('איך קוראים לו?').inputValue()) === '', 'gate: the add form is cleared after it');
+  await gp.waitForFunction(() => JSON.parse(localStorage.getItem('kochot:groups')).groups[0].synced, null, { timeout: 5000 }).catch(() => {});
+  assert(gs.calls.filter((c) => c.rpc === 'create_group').length === 1, 'gate: the local group is uploaded after the login');
+  await gctx.close();
+
+  // "+ קבוצה חדשה" while logged out → login → on to the new group, created in the cloud.
+  const nctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ns = cloudServer();
+  await cloudRoutes(nctx, ns);
+  const np = await nctx.newPage();
+  np.on('pageerror', (e) => errors.push(`gate group: ${e.message}`));
+  await np.goto(base);
+  await np.getByRole('button', { name: /החלפת קבוצה/ }).click();
+  await np.getByRole('button', { name: /קבוצה חדשה/ }).click();
+  assert(await np.getByRole('dialog', { name: 'התחברות' }).getByText('כדי לפתוח עוד קבוצה צריך להתחבר').isVisible(), 'gate: a second group asks to log in');
+  await loginInSheet(np);
+  await np.getByLabel('שם הקבוצה').fill('בבסיס');
+  await np.getByRole('button', { name: 'יצירה' }).click();
+  assert(await np.getByRole('button', { name: /קבוצה: בבסיס/ }).isVisible(), 'gate: the new group opens after logging in');
+  await np.waitForFunction(() => JSON.parse(localStorage.getItem('kochot:groups')).groups.some((g) => g.name === 'בבסיס' && g.synced), null, { timeout: 5000 }).catch(() => {});
+  const made = ns.calls.filter((c) => c.rpc === 'create_group').map((c) => c.body.p_name);
+  assert(JSON.stringify(made) === '["בבסיס"]', `gate: only the new group goes up (the empty default stays local): ${made}`);
+  await nctx.close();
+
+  // Late arrival "מישהו חדש" past the limit; an old phone with 6 own players keeps them.
+  const lctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ls = cloudServer();
+  await cloudRoutes(lctx, ls);
+  const lp = await lctx.newPage();
+  lp.on('pageerror', (e) => errors.push(`gate late: ${e.message}`));
+  await lp.goto(base);
+  await lp.evaluate(() => {
+    const idx = JSON.parse(localStorage.getItem('kochot:groups'));
+    const players = ['א', 'ב', 'ג', 'ד', 'ה', 'ו'].map((name, i) => ({ id: `old${i}`, name: `ותיק ${name}`, attrs: { overall: 5 + (i % 3) }, canGK: false, cards: [] }));
+    localStorage.setItem(`kochot:group:${idx.currentId}`, JSON.stringify({ version: 2, players, presentIds: players.map((p) => p.id), dayAt: Date.now(), teamSize: 3, settings: {}, constraints: { together: [], apart: [] }, result: null, match: null }));
+  });
+  await lp.reload();
+  await lp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await lp.waitForSelector('.team');
+  const kept = await lp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)).players.length);
+  assert(kept === 6, `gate: an old phone keeps its ${kept} players`);
+  await lp.getByRole('button', { name: /הגיע מאוחר/ }).click();
+  await lp.getByPlaceholder('שם').fill('אורח');
+  await lp.getByRole('button', { name: 'המשך' }).click();
+  assert(await lp.getByRole('dialog', { name: 'התחברות' }).getByText('כדי להוסיף עוד שחקנים').isVisible(), 'gate: a new late arrival past the limit asks to log in');
+  await loginInSheet(lp);
+  assert(await lp.getByRole('dialog', { name: 'אורח הגיע' }).isVisible(), 'gate: after logging in, on to "in now or wait"');
+  await lp.getByRole('button', { name: 'מחכה בצד' }).click();
+  assert((await lp.locator('.bench .member', { hasText: 'אורח' }).count()) === 1, 'gate: the late arrival waits on the side');
+  await lctx.close();
 }
 
 // 9. Organizer of a cloud group (v10), with a mocked session; every Supabase call is answered here

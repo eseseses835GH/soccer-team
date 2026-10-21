@@ -16,6 +16,8 @@ export interface GroupMeta {
   createdAt: number;
   /** 'player' = joined with the player link: a read-only view of someone else's group (never runs the organizer sync). Missing or 'organizer' = this phone organizes it. */
   role?: 'organizer' | 'player';
+  /** Created while logged in: goes to the cloud even before it has players (retried until it does). */
+  upload?: boolean;
 }
 
 export interface GroupIndex {
@@ -73,6 +75,7 @@ function sanitizeIndex(raw: unknown): GroupIndex | null {
       synced: !!g.synced,
       createdAt: Number(g.createdAt) || 0,
       ...(g.role === 'player' || g.role === 'organizer' ? { role: g.role } : {}),
+      ...(g.upload === true && !g.synced ? { upload: true } : {}),
     });
   }
   if (!groups.length) return null;

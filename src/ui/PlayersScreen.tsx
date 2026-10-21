@@ -6,7 +6,7 @@ import { ROSTER_TEMPLATE, parseBackup, parseRoster, restoreBackup, type ParsedRo
 import { newId, type Player } from '../state/model';
 import { withPositions } from '../state/positions';
 import { loadJSON, saveJSON } from '../state/storage';
-import { useStore } from '../state/store';
+import { useGroups, useStore } from '../state/store';
 import { averageLevel, isTuned, votesLine } from '../state/votes';
 import { useVoterId } from '../sync/SyncProvider';
 import { usePlayerVotes } from '../sync/OrganizerSync';
@@ -17,6 +17,7 @@ import { AttrSliders, CardBadges, CardPicker, LevelPicker, PositionBadges, Posit
 import { DeletePlayerSheet } from './DeletePlayerSheet';
 import { Icon } from './icons';
 import { SwipeRow, closeSwipeRows } from './SwipeRow';
+import { usePlayerGate } from './useGate';
 
 const MAX_NAME = 24;
 /** Per phone: the "swipe to delete" tip was dismissed (or the user already swiped). */
@@ -92,6 +93,7 @@ export function PlayersScreen() {
   const [nudge, setNudge] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const voter = useVoterId();
+  const gate = usePlayerGate();
   const showTip = !tipSeen && !selecting && state.players.length >= 2;
 
   const hideTip = () => {
@@ -134,14 +136,17 @@ export function PlayersScreen() {
     if (nameTaken(n)) return setError('כבר יש שחקן בשם הזה. אפשר להוסיף כינוי, למשל "דני ג׳"');
     const votes = voter ? { levelVotes: { [voter]: level } } : {};
     const player = withPositions<Player>({ id: newId(), name: n, attrs: { ...attrs, overall: level }, canGK, cards, ...votes }, positions);
-    dispatch({ type: 'addPlayer', player, present: true });
-    notify(`${n} נוסף ומסומן שהגיע`);
-    setName('');
-    setProfile(5, []);
-    setCanGK(false);
-    setPositions([]);
-    setError(null);
-    nameRef.current?.focus();
+    // Logged out past the free limit: log in first, then he's added (v13).
+    gate([player], () => {
+      dispatch({ type: 'addPlayer', player, present: true });
+      notify(`${n} נוסף ומסומן שהגיע`);
+      setName('');
+      setProfile(5, []);
+      setCanGK(false);
+      setPositions([]);
+      setError(null);
+      nameRef.current?.focus();
+    });
   };
 
   const fixedKeepers = state.settings.gkMode === 'fixed';
@@ -406,15 +411,18 @@ function PlayerSheet({
 function ImportSheet({ onClose }: { onClose: () => void }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
+  const groups = useGroups();
+  const gate = usePlayerGate();
   const [text, setText] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const parsed: ParsedRoster = parseRoster(text, state.players.map((p) => p.name));
 
-  const commit = (players: Player[]) => {
-    for (const p of players) dispatch({ type: 'addPlayer', player: p });
-    notify(players.length === 1 ? 'נוסף שחקן אחד' : `נוספו ${players.length} שחקנים`);
-    onClose();
-  };
+  const commit = (players: Player[]) =>
+    gate(players, () => {
+      for (const p of players) dispatch({ type: 'addPlayer', player: p });
+      notify(players.length === 1 ? 'נוסף שחקן אחד' : `נוספו ${players.length} שחקנים`);
+      onClose();
+    });
 
   const onFile = async (file: File) => {
     try {
@@ -422,11 +430,16 @@ function ImportSheet({ onClose }: { onClose: () => void }) {
       if (file.name.toLowerCase().endsWith('.json')) {
         const b = parseBackup(JSON.parse(content));
         if (!b) return notify('הקובץ לא נראה כמו גיבוי של כוחות');
-        const r = restoreBackup(state.players, state.constraints, b);
-        dispatch({ type: 'importPlayers', players: r.players, constraints: r.constraints });
-        if (b.history?.length) dispatch({ type: 'mergeHistory', records: b.history });
-        notify(r.added === 0 ? 'כל השחקנים מהקובץ כבר ברשימה' : r.added === 1 ? 'נוסף שחקן אחד' : `נוספו ${r.added} שחקנים`);
-        onClose();
+        const added = restoreBackup(state.players, state.constraints, b).players.filter((p) => !state.players.some((x) => x.id === p.id));
+        gate(added, () => {
+          // After a login the roster may have changed meanwhile: merge into the latest one.
+          const now = groups.latest().app;
+          const r = restoreBackup(now.players, now.constraints, b);
+          dispatch({ type: 'importPlayers', players: r.players, constraints: r.constraints });
+          if (b.history?.length) dispatch({ type: 'mergeHistory', records: b.history });
+          notify(r.added === 0 ? 'כל השחקנים מהקובץ כבר ברשימה' : r.added === 1 ? 'נוסף שחקן אחד' : `נוספו ${r.added} שחקנים`);
+          onClose();
+        });
         return;
       }
       setText(content.replace(/^﻿/, ''));

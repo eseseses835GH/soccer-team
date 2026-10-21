@@ -10,6 +10,7 @@ import { copyText, nativeShare } from '../share';
 import { useUi } from './App';
 import { Sheet, Toggle } from './components';
 import { Icon } from './icons';
+import { limitText } from '../sync/gate';
 
 type Load = 'loading' | 'offline' | 'auth' | 'error' | 'ok';
 
@@ -88,7 +89,7 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
       setPlayerLink(token);
       await share(inviteUrl(token, redirectUrl()), true);
     } catch (e) {
-      notify(loadState(e) === 'offline' ? 'צריך חיבור לאינטרנט' : 'יצירת הקישור לא הצליחה');
+      notify(loadState(e) === 'offline' ? 'צריך חיבור לאינטרנט' : e instanceof SyncError && e.code === 'limit' ? limitText(e.message) : 'יצירת הקישור לא הצליחה');
     } finally {
       setBusy(false);
     }

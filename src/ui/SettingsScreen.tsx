@@ -1,3 +1,4 @@
+import { FREE_PLAYERS } from '../sync/gate';
 import { useEffect, useState } from 'react';
 import { ATTR_KEYS, type Constraints } from '../engine';
 import { ATTR_LABELS, goalsEvery } from '../i18n';
@@ -352,7 +353,7 @@ export function SettingsScreen({ focus }: { focus?: string }) {
             </>
           ) : (
             <>
-              <p className="hint">לא חובה. צריך רק אם עוד מארגן ינהל איתכם את הקבוצה מהטלפון שלו: השחקנים נשמרים בשרת ומתעדכנים אצל כולם לבד.</p>
+              <p className="hint">בלי חשבון: קבוצה אחת ועד {FREE_PLAYERS} שחקנים, בטלפון הזה בלבד.</p>
               <button type="button" className="btn btn-quiet btn-block" onClick={() => sync.openLogin('account')}>
                 התחברות
               </button>

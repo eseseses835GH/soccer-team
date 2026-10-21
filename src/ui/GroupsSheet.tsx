@@ -8,6 +8,7 @@ import { Sheet } from './components';
 import { Icon } from './icons';
 import { OrganizersSheet } from './OrganizersSheet';
 import { isPlayerGroup } from '../sync/playerGroup';
+import { gateNewGroup } from '../sync/gate';
 
 type Mode = 'list' | 'new' | 'rename' | 'remove' | 'organizers';
 
@@ -39,7 +40,7 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     if (!name.trim()) return;
     if (taken(name)) return notify('כבר יש קבוצה בשם הזה');
-    groups.create(name);
+    sync.createGroup(name);
     notify(`נוצרה הקבוצה ״${name.trim()}״`);
     onClose();
   };
@@ -151,8 +152,13 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
         type="button"
         className="btn btn-quiet btn-block"
         onClick={() => {
-          setName('');
-          setMode('new');
+          const go = () => {
+            setName('');
+            setMode('new');
+          };
+          // Logged out: one group only. After logging in, on to the new group (v13).
+          if (gateNewGroup(sync.loggedOut) === 'group') sync.openLogin('group', go);
+          else go();
         }}
       >
         <Icon name="plus" size={20} /> קבוצה חדשה
