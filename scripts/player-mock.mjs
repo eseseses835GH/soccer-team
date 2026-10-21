@@ -15,7 +15,11 @@ const REF = SB_URL ? new URL(SB_URL).hostname.split('.')[0] : '';
 export const GID = '11111111-2222-4333-8444-555555555555';
 export const ME = '99999999-8888-4777-8666-555555555555';
 const NAMES = ['אבי', 'בני', 'גיל', 'דני', 'הדר', 'ורד', 'זיו', 'חן', 'טל', 'יוסי', 'כפיר', 'ליאור', 'מתן'];
+const POS = [['att'], [], ['mid', 'att'], ['def'], ['mid'], ['att'], ['def', 'mid'], [], ['def'], ['att'], [], ['mid'], ['def']];
+const GK = new Set([1, 4, 8]);
 export const ROSTER = NAMES.map((name, i) => ({ id: `p${i + 1}`, name }));
+/** The public roster (positions and "good in goal" are public since public_positions). */
+const PUBLIC_ROSTER = ROSTER.map((p, i) => ({ ...p, ...(POS[i].length ? { positions: POS[i] } : {}), ...(GK.has(i) ? { canGK: true } : {}) }));
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const jwt = (exp) => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: ME, role: 'authenticated', aud: 'authenticated', exp, email: 'player@example.test' })}.c2ln`;
@@ -138,7 +142,7 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
       return json(route, {
         groupId: GID,
         name: 'כדורגל בשכונה',
-        players: ROSTER,
+        players: PUBLIC_ROSTER,
         history: history(now),
         claimed: db.claimed,
         me: { role: 'player', playerId: db.me, canRate: db.canRate },

@@ -40,7 +40,7 @@ export function loadPublic(kv: KV, id: string): PublicGroup | null {
 export function publicToState(prev: AppState, pub: PublicGroup): AppState {
   return {
     ...prev,
-    players: pub.players.map((p) => sanitizePlayer({ id: p.id, name: p.name })).filter((p): p is Player => !!p),
+    players: pub.players.map((p) => sanitizePlayer({ id: p.id, name: p.name, positions: p.positions, canGK: p.canGK })).filter((p): p is Player => !!p),
     presentIds: [],
     lastPresentIds: [],
     result: null,

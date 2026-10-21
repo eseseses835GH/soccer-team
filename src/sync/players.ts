@@ -6,6 +6,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sanitizeHistory, type EveningRecord } from '../state/history';
 import type { Player } from '../state/model';
+import type { Position } from '../engine';
+import { sanitizePositions } from '../state/positions';
 import { attrsAtLevel, averageLevel, sanitizeVotes, type LevelVotes } from '../state/votes';
 import { fail } from './supabase';
 
@@ -23,11 +25,19 @@ export interface Member {
   isMe: boolean;
 }
 
+export interface PublicPlayer {
+  id: string;
+  name: string;
+  positions?: Position[];
+  canGK?: boolean;
+}
+
 /** What a player may see of a group (group_public_get). Never any rating. */
 export interface PublicGroup {
   groupId: string;
   name: string;
-  players: { id: string; name: string }[];
+  /** Positions and "good in goal" are shown to players (the organizer's "strong in"); never a rating. */
+  players: PublicPlayer[];
   history: EveningRecord[];
   /** Roster ids already claimed by some login (grey them out in "who are you?"). */
   claimed: string[];
@@ -71,7 +81,10 @@ export function parsePublic(raw: unknown): PublicGroup | null {
   const players = (Array.isArray(r.players) ? r.players : [])
     .map(obj)
     .filter((p) => typeof p.id === 'string' && typeof p.name === 'string' && (p.name as string).trim())
-    .map((p) => ({ id: p.id as string, name: p.name as string }));
+    .map((p) => {
+      const positions = sanitizePositions(p.positions);
+      return { id: p.id as string, name: p.name as string, ...(positions.length ? { positions } : {}), ...(p.canGK === true ? { canGK: true } : {}) };
+    });
   return {
     groupId: r.groupId,
     name: str(r.name),

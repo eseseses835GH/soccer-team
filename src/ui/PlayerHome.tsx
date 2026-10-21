@@ -9,7 +9,8 @@ import { usePlayerGroup } from '../sync/PlayerGroupProvider';
 import { useSync } from '../sync/SyncProvider';
 import { loadJSON, saveJSON } from '../state/storage';
 import { useUi } from './App';
-import { Empty } from './components';
+import { Empty, PositionBadges } from './components';
+import type { PublicPlayer } from '../sync/players';
 
 const laterKey = (gid: string) => `kochot:claim-later:${gid}`;
 
@@ -122,8 +123,13 @@ export function ClaimView({ onLater, onDone }: { onLater?: () => void; onDone?: 
 }
 
 /** Tonight, as the organizer's phone publishes it. */
-export function LiveView({ data, roster, me, now }: { data: LiveData; roster: { id: string; name: string }[]; me: string | null; now: number }) {
+export function LiveView({ data, roster, me, now }: { data: LiveData; roster: PublicPlayer[]; me: string | null; now: number }) {
   const name = (id: string) => liveName(data, roster, id);
+  const badges = (id: string) => {
+    const p = roster.find((x) => x.id === id);
+    // Field positions only: the 🧤 in these lists already means "in goal now".
+    return p ? <PositionBadges player={{ canGK: false, positions: p.positions }} /> : null;
+  };
   const look = (t: number): TeamLook => bibLook(data.teams[t]?.bib, t);
   const m = data.match;
   const elapsed = m ? liveClockMs(m.clock, now) : 0;
@@ -189,6 +195,7 @@ export function LiveView({ data, roster, me, now }: { data: LiveData; roster: { 
                     <span className={`member ${id === me ? 'me' : ''} ${borrowed.has(id) ? 'away' : ''}`} aria-current={id === me ? 'true' : undefined}>
                       <span className="slot">{id === team.keeper ? '🧤' : ''}</span>
                       <span className="name">{name(id)}</span>
+                      {badges(id)}
                     </span>
                   </li>
                 ))}
@@ -203,7 +210,7 @@ export function LiveView({ data, roster, me, now }: { data: LiveData; roster: { 
           <span className="label">מחליפים</span>
           {data.subs.map((id) => (
             <span key={id} className={`member chip ${id === me ? 'me' : ''}`}>
-              {name(id)}
+              {name(id)} {badges(id)}
             </span>
           ))}
         </div>

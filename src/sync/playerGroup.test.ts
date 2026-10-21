@@ -18,7 +18,7 @@ import {
   surveyList,
   surveyStart,
 } from './playerGroup';
-import type { PublicGroup } from './players';
+import { parsePublic, type PublicGroup } from './players';
 
 function memKV(init: Record<string, unknown> = {}) {
   const m = new Map<string, string>(Object.entries(init).map(([k, v]) => [k, JSON.stringify(v)]));
@@ -99,6 +99,24 @@ describe('public copy on the phone', () => {
     expect(s.presentIds).toEqual([]);
     expect(s.result).toBeNull();
     expect(s.settings.theme).toBe('dark');
+  });
+
+  it('keeps positions and "good in goal" (sanitized), never ratings', () => {
+    const raw = {
+      groupId: 'g1',
+      players: [
+        { id: 'a', name: 'אבי', positions: ['att', 'xx', 'def', 'att'], canGK: true, attrs: { overall: 9 }, levelVotes: { u: 9 } },
+        { id: 'b', name: 'בני', positions: 'mid', canGK: 'yes' },
+      ],
+      me: {},
+    };
+    const p = parsePublic(raw)!;
+    expect(p.players[0]).toEqual({ id: 'a', name: 'אבי', positions: expect.arrayContaining(['att', 'def']), canGK: true });
+    expect(p.players[0].positions).toHaveLength(2);
+    expect(p.players[1]).toEqual({ id: 'b', name: 'בני' });
+    const s = publicToState(newGroupState({ theme: 'auto', accent: 'green' }), p);
+    expect(s.players[0].canGK).toBe(true);
+    expect(s.players[0].attrs.overall).toBe(5);
   });
 
   it('is cached per group and read back', () => {
