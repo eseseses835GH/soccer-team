@@ -24,7 +24,7 @@ describe('card set', () => {
         expect(ATTR_KEYS).toContain(k);
         expect(Math.abs(v ?? 0)).toBeLessThanOrEqual(4);
       }
-      // A weakness always lowers the player; a strength never does (the magician is net zero: flashy, loses the ball).
+      // A weakness always lowers the player; a strength never does.
       if (c.kind === 'strength') expect(sum(c)).toBeGreaterThanOrEqual(0);
       else expect(sum(c)).toBeLessThan(0);
     }
@@ -45,8 +45,8 @@ describe('card set', () => {
     expect(applyCards(5, ['captain'])).toMatchObject({ leadership: 9, teamwork: 6 });
     expect(applyCards(5, ['donkey'])).toMatchObject({ defense: 3, teamwork: 3, passing: 4 });
     expect(applyCards(5, ['noDefense'])).toMatchObject({ defense: 1, stamina: 4, teamwork: 4 });
-    // Unchanged since v3.
-    expect(applyCards(5, ['magician'])).toMatchObject({ dribbling: 9, passing: 3, teamwork: 3 });
+    // v13: the magician is a pure strength (it used to lose the ball: passing/teamwork −2).
+    expect(applyCards(5, ['magician'])).toMatchObject({ dribbling: 9, shooting: 6, passing: 5, teamwork: 5 });
     expect(applyCards(5, ['noPass'])).toMatchObject({ passing: 2, teamwork: 2 });
   });
   it('weakness cards lower attributes, clamped at 1, and leave the level alone', () => {
@@ -114,7 +114,13 @@ describe('stored cards (migration)', () => {
   });
   it('unchanged cards need no migration', () => {
     const odd = { overall: 5, stamina: 2, passing: 9, dribbling: 5, shooting: 5, defense: 5, teamwork: 5, leadership: 5 };
-    expect(migrateCards(['magician', 'tired'], odd)).toEqual({ cards: ['magician', 'tired'], attrs: odd, addDef: false });
+    expect(migrateCards(['brain', 'tired'], odd)).toEqual({ cards: ['brain', 'tired'], attrs: odd, addDef: false });
+  });
+  it('the v13 magician: untouched ratings move to the new card, hand-tuned ones stay', () => {
+    const old = { overall: 6, stamina: 6, passing: 4, dribbling: 10, shooting: 6, defense: 6, teamwork: 4, leadership: 6 };
+    expect(migrateCards(['magician'], old).attrs).toEqual(applyCards(6, ['magician']));
+    const tuned = { ...old, stamina: 9 };
+    expect(migrateCards(['magician'], tuned).attrs).toEqual(tuned);
   });
   it('drops unknown ids and duplicates, resolves opposites, caps the count', () => {
     expect(sanitizeCards(['beast', 'ghost', 'beast', 7])).toEqual(['beast']);

@@ -41,7 +41,7 @@ export const CARDS: Card[] = [
   { id: 'beast', kind: 'strength', emoji: '🦍', name: 'גורילה', blurb: 'גדול, חזק, ואף אחד לא עובר אותו בכתף', delta: { defense: 3, stamina: 2, shooting: 1, dribbling: -1 }, aliases: ['הגורילה', 'החיה'] },
   { id: 'cheetah', kind: 'strength', emoji: '🐆', name: "צ'יטה", blurb: 'עד שהסתובבת, הוא כבר ליד השער', delta: { stamina: 2, dribbling: 2, defense: 1 }, aliases: ['צ׳יטה', 'ציטה', 'מהיר'] },
   { id: 'sniper', kind: 'strength', emoji: '🎯', name: 'מדויק', blurb: 'מסירה לרגל, בעיטה לפינה', delta: { passing: 3, shooting: 3 }, aliases: ['מדוייק', 'המדויק', 'הצלף', 'צלף'] },
-  { id: 'magician', kind: 'strength', emoji: '🪄', name: 'קוסם', blurb: 'עובר שלושה, מאבד ברביעי', delta: { dribbling: 4, passing: -2, teamwork: -2 }, aliases: ['הקוסם'] },
+  { id: 'magician', kind: 'strength', emoji: '🪄', name: 'קוסם', blurb: 'הכדור דבוק לו לרגל, ועובר שניים-שלושה בקלות', delta: { dribbling: 4, shooting: 1 }, aliases: ['הקוסם'] },
   { id: 'brain', kind: 'strength', emoji: '🧠', name: 'מוח', blurb: 'רואה את כל המגרש ומחלק כדורים', delta: { passing: 4, teamwork: 2 }, aliases: ['המוח'] },
   { id: 'captain', kind: 'strength', emoji: '⭐', name: 'כוכב', blurb: 'מסדר, מעודד ומרים את כולם', delta: { leadership: 4, teamwork: 1 }, aliases: ['הכוכב', 'הקפטן', 'קפטן'] },
 
@@ -120,12 +120,14 @@ export function sanitizeCards(raw: unknown): CardId[] {
   return out;
 }
 
-/** v3–v6 deltas of the cards whose effect changed in v7, and of the dropped 🧱 'rock'. */
+/** Earlier deltas of cards whose effect changed since (v7, and the magician in v13), and of the dropped 🧱 'rock'. */
 const LEGACY_DELTAS: Record<string, Card['delta']> = {
   beast: { stamina: 4, defense: 1, teamwork: 1 },
   sniper: { shooting: 4, passing: -1 },
   noDefense: { defense: -4, teamwork: -1 },
   rock: { defense: 4, leadership: 2, dribbling: -1 },
+  // v3–v13: the magician also lost the ball (passing/teamwork −2); the user said it's a pure strength.
+  magician: { dribbling: 4, passing: -2, teamwork: -2 },
 };
 
 /**
