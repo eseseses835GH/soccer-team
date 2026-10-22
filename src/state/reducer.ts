@@ -2,7 +2,7 @@ import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solutio
 import { addTeam, type MatchState } from '../match/match';
 import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, teamBibs, type AppState, type Player, type Settings } from './model';
 import { addEvening, buildEvening, mergeHistory, stampSides, type EveningRecord } from './history';
-import { lateJoin, type LateChoice } from './late';
+import { addFromBench, lateJoin, type LateChoice } from './late';
 import { leaveEarly, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
@@ -41,6 +41,8 @@ export type Action =
   | { type: 'leave'; id: string; now: number }
   /** A sub joins a team that is short (after someone left). */
   | { type: 'subIn'; subId: string; team: number }
+  /** A sub joins a team on request, nobody goes out: the team grows by one (late.ts). */
+  | { type: 'addFromBench'; subId: string; team: number }
   | { type: 'clearResult' }
   | { type: 'setMatch'; match: MatchState | null; now: number }
   /** End the evening: save it to the history (as `id`) and close the match session. */
@@ -265,6 +267,11 @@ function baseReducer(state: AppState, action: Action): AppState {
       if (!state.result) return state;
       const result = subIn(state.result, state.match, action.subId, action.team, leaveCtx(state));
       return result === state.result ? state : { ...state, result };
+    }
+    case 'addFromBench': {
+      if (!state.result) return state;
+      const a = addFromBench(state.result, state.match, action.subId, action.team, leaveCtx(state));
+      return a.result === state.result ? state : { ...state, result: a.result, match: a.match };
     }
     case 'clearResult':
       return { ...state, result: null, match: null };

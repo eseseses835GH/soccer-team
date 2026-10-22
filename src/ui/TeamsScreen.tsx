@@ -84,6 +84,8 @@ export function TeamsScreen() {
   const [busy, setBusy] = useState(false);
   const [late, setLate] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  /** "להוסיף לקבוצה…": the selected sub joins a team on request (nobody goes out). */
+  const [adding, setAdding] = useState<string | null>(null);
   /** A re-split while an evening is on ends it (it's saved to the history): ask first, like the main screen. */
   const [confirmResplit, setConfirmResplit] = useState(false);
   /** Re-rolling once matches were played reshuffles who is "קבוצה 1" in tonight's table: ask first. */
@@ -277,6 +279,13 @@ export function TeamsScreen() {
             </button>
           ))}
           {sel === null && <p className="hint small bench-hint">להכנסה: נוגעים במחליף ואז בשחקן שיוצא</p>}
+          {sel?.kind === 'sub' && (
+            <p className="bench-hint">
+              <button type="button" className="text-btn" onClick={() => setAdding(sel.id)}>
+                להוסיף לקבוצה…
+              </button>
+            </p>
+          )}
         </div>
       )}
 
@@ -336,6 +345,31 @@ export function TeamsScreen() {
         <p className="hint small">משווים ממוצע לשחקן, כדי שקבוצה קצרה שמשלימה מהמפסידה תהיה הוגנת.</p>
       </details>
 
+      {adding && r.subIds.includes(adding) && (
+        <Sheet title={`להוסיף את ${nameOf(adding)} לקבוצה`} onClose={() => setAdding(null)}>
+          <div className="leave-chips center" role="group" aria-label="לאיזו קבוצה">
+            {Array.from({ length: k }, (_, t) => {
+              const look = teamLook(state.settings, t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  className="member chip late-team"
+                  style={{ '--team': look.color } as React.CSSProperties}
+                  onClick={() => {
+                    dispatch({ type: 'addFromBench', subId: adding, team: t });
+                    notify(`${nameOf(adding)} הצטרף ${look.to}`);
+                    setAdding(null);
+                    setSel(null);
+                  }}
+                >
+                  <span className="dot" aria-hidden="true" /> {look.name}
+                </button>
+              );
+            })}
+          </div>
+        </Sheet>
+      )}
       {leaving && (
         <LeaveSheet
           onClose={() => {

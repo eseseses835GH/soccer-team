@@ -201,9 +201,39 @@ export function leaveEarly(r: GameResult, m: MatchState | null, id: string, ctx:
 }
 
 /**
- * The small fix offered after someone left a team: the best sub for his team, otherwise up to two
- * swaps. Teams in the middle of a match aren't touched by swaps (a sub coming in is fine: that's
- * what subs are for). Null when there's nothing worth offering.
+ * Which kind of leave this is, for the confirm step and the follow-up:
+ * - 'sub': he was on the bench (he just goes, nothing offered);
+ * - 'live': his team is on the pitch in a match under way (a sub may come in now, never a swap);
+ * - 'off': his team is outside, or it's between matches (a sub, else at most a swap away from the
+ *   pitch and the next team in).
+ */
+export type LeaveCase = 'sub' | 'live' | 'off';
+
+export function leaveCase(r: GameResult, m: MatchState | null, id: string): LeaveCase | null {
+  if (r.subIds.includes(id)) return 'sub';
+  const i = r.playerIds.indexOf(id);
+  if (i < 0) return null;
+  return inProgress(m) && m!.onPitch.includes(r.assignment[i]) ? 'live' : 'off';
+}
+
+/**
+ * Teams a swap after someone left never touches: once there is a match session, the two on the
+ * pitch and the next one to come on (`queue[0]`), and a borrowing team and its lender. Before
+ * any session (`m` null) nothing is locked: the evening hasn't started.
+ */
+export function lockedAfterLeave(m: MatchState | null): number[] {
+  if (!m) return [];
+  const locked = new Set<number>(m.onPitch);
+  if (m.queue.length) locked.add(m.queue[0]);
+  if (m.borrow?.ids.length) [m.borrow.team, m.borrow.from].forEach((x) => locked.add(x));
+  return [...locked];
+}
+
+/**
+ * The small fix offered after someone left a team: the best sub for his team (also mid-match:
+ * that's what subs are for), otherwise up to two swaps among teams not in `lockedAfterLeave`.
+ * His team on the pitch mid-match and no sub: they play one short. Null when there's nothing
+ * worth offering.
  */
 export function suggestAfterLeave(l: Leave, ctx: LeaveCtx): LeaveSuggestion | null {
   if (l.outcome !== 'short' || l.team === null) return null;
@@ -214,9 +244,7 @@ export function suggestAfterLeave(l: Leave, ctx: LeaveCtx): LeaveSuggestion | nu
     const best = bestSub(r, t, ctx);
     return best ? { kind: 'sub', team: t, ...best } : null;
   }
-  const m = l.match;
-  const locked = new Set<number>(inProgress(m) ? m!.onPitch : []);
-  if (m?.borrow?.ids.length) [m.borrow.team, m.borrow.from].forEach((x) => locked.add(x));
+  const locked = new Set<number>(lockedAfterLeave(l.match));
   if (locked.has(t) || locked.size >= r.numTeams - 1) return null;
   const ps = engineRoster(ctx, r.playerIds);
   if (!ps) return null;

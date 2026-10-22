@@ -225,3 +225,6 @@
 # v14: WhatsApp import and quick rating
 - **Built:** "ייבוא רשימה" takes a WhatsApp chat export (.txt/.zip, iPhone and Android formats), a share from WhatsApp to the installed app (Android), the phone's contacts (Android Chrome) and participant CSVs → a names checklist → a quick 1–10 rating of the new players. Phone numbers are never stored. See DECISIONS → "WhatsApp import and quick rating (v14)".
 - **Tested:** unit (`whatsapp.test.ts`, `quickRate.test.ts`, `sw.test.ts`), e2e block 19 (zip, login at the 5th, rating, share target through the service worker, contacts), screenshots 03i–03l.
+
+# v15: bench add and leave cases
+- **Built:** tap a sub → "להוסיף לקבוצה…" → pick a team; he joins without anyone going out (3×3 → 4×3). Left early now follows the case shown in one line on the confirm step: a sub just goes; on the pitch mid-match a sub comes in now or "משחקים חסר", never a swap; otherwise a sub, else a swap that never touches the pitch or the next team in. See DECISIONS → Bench add and leave cases (v15).

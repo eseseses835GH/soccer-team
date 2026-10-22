@@ -393,6 +393,45 @@ for (const scheme of ['light', 'dark']) {
     await wctx.close();
   }
 
+  // Bench add and leave cases (v15): a sub waits (6 players at 4-a-side, 3×3 + 1 sub), "להוסיף
+  // לקבוצה…" → the team step; then mid-match someone on the pitch leaves → the confirm with its case line.
+  {
+    const bctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: scheme, isMobile: true, hasTouch: true, locale: 'he-IL', reducedMotion: 'reduce' });
+    const bp = await bctx.newPage();
+    bp.on('pageerror', (e) => errors.push(`${scheme} bench: ${e.message}`));
+    const bshot = async (name) => {
+      await bp.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+      await bp.waitForTimeout(150);
+      await bp.screenshot({ path: `${out}/${scheme}-${name}.png` });
+      const sw = await bp.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    await bp.goto(base);
+    await bp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+    await bp.getByRole('button', { name: 'ניקוי' }).click();
+    for (let i = 0; i < 6; i++) await bp.locator('.attend label').nth(i).click();
+    await bp.getByRole('radiogroup', { name: 'כמה בקבוצה' }).getByRole('radio', { name: '4' }).click();
+    await bp.getByRole('button', { name: 'עושים כוחות' }).click();
+    await bp.waitForSelector('.team');
+    for (let n = 0; n < 2; n++) {
+      await bp.getByRole('button', { name: /הגיע מאוחר/ }).click();
+      await bp.locator('.pick-list button').first().click();
+      await bp.getByRole('button', { name: /^מחכה בצד$/ }).click();
+    }
+    await bp.locator('.bench .member').first().click();
+    await bp.locator('.bench').scrollIntoViewIfNeeded();
+    await bshot('06b-sub-selected');
+    await bp.getByRole('button', { name: 'להוסיף לקבוצה…' }).click();
+    await bshot('06c-bench-add');
+    await bp.getByRole('dialog').getByRole('button', { name: 'סגירה' }).click();
+    await bp.getByRole('button', { name: /התחלת משחק/ }).click();
+    await bp.getByRole('button', { name: 'התחלה' }).click();
+    await bp.getByRole('button', { name: 'מישהו עזב?' }).click();
+    await bp.getByRole('dialog').locator('.leave-team').first().locator('.member').first().click();
+    await bshot('09m-leave-confirm-live');
+    await bctx.close();
+  }
+
   // Organizers sheet with the player link and players who joined (v10): a mocked session, every
   // Supabase call answered locally (nothing reaches the real project).
   {
@@ -551,20 +590,13 @@ for (const scheme of ['light', 'dark']) {
     await lshot('16d-teams-after-leave');
     await pg.getByRole('button', { name: /חזרה למשחק/ }).click();
     await lshot('16e-match-leave-link');
-    // No subs left: try the team outside until a swap is suggested (at most 3 leave).
-    let swapShown = false;
-    for (let n = 0; n < 3 && !swapShown; n++) {
-      await pg.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
-      await pg.getByRole('button', { name: 'מישהו עזב?' }).click();
-      await outside().locator('.member').last().click();
-      await pg.getByRole('button', { name: 'כן, הוא עזב' }).click();
-      if (await pg.getByRole('dialog').isVisible()) {
-        swapShown = true;
-        await lshot('16f-leave-swaps');
-        await pg.getByRole('button', { name: 'להשאיר ככה' }).click();
-      }
-    }
-    if (!swapShown) console.log(`${scheme}: no swap suggestion came up`);
+    // No subs left, between matches, 3 teams: the two on the pitch and the next one in are locked,
+    // so nothing is offered (v15).
+    await pg.waitForSelector('.toast.show', { state: 'detached', timeout: 8000 }).catch(() => {});
+    await pg.getByRole('button', { name: 'מישהו עזב?' }).click();
+    await outside().locator('.member').last().click();
+    await pg.getByRole('button', { name: 'כן, הוא עזב' }).click();
+    if (await pg.getByRole('dialog').isVisible()) errors.push(`${scheme}: a swap was offered with every team locked`);
     await lctx.close();
   }
 

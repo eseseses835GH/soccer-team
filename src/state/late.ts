@@ -121,3 +121,27 @@ export function suggestAfterLate(j: LateJoin, ctx: LeaveCtx): SwapSuggestion | n
   const sizes = countsOf(r).sort((a, b) => b - a);
   return suggestSwaps(ps as Player[], r.assignment, r.numTeams, ctx.options, ctx.constraints, sizes, { locked: [...locked] });
 }
+
+/**
+ * "להוסיף לקבוצה…": a sub who waited joins a team on request, without anyone going out (the team
+ * grows by one, e.g. 3×3 → 4×3). Never suggested by the app. Same rules as "נכנס עכשיו": last in
+ * the keeper rotation, whoever is in goal stays, a team on the pitch mid-match gets him right away,
+ * and into a short team with borrowers he takes a borrower's place. Attendance doesn't change (he
+ * was already here), so the teams aren't "changed since the split".
+ */
+export function addFromBench(
+  r: GameResult,
+  m: MatchState | null,
+  subId: string,
+  team: number,
+  ctx: Pick<LeaveCtx, 'rotate' | 'every'>,
+): { result: GameResult; match: MatchState | null } {
+  const result = subIn(r, m, subId, team, ctx);
+  if (result === r) return { result: r, match: m };
+  let match = m;
+  if (m?.borrow?.team === team && m.borrow.ids.length) {
+    const ids = m.borrow.ids.slice(0, Math.max(0, r.teamSize - countsOf(result)[team]));
+    match = { ...m, borrow: ids.length ? { ...m.borrow, ids } : null };
+  }
+  return { result, match };
+}

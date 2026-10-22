@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { scoreFromCost } from '../engine';
 import { teamMembers } from '../state/history';
-import { inProgress, leaveEarly, suggestAfterLeave, type Leave, type LeaveSuggestion } from '../state/leave';
+import { inProgress, leaveCase, leaveEarly, suggestAfterLeave, type Leave, type LeaveCase, type LeaveSuggestion } from '../state/leave';
 import { teamLook } from '../state/model';
 import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
@@ -10,7 +10,7 @@ import { Sheet } from './components';
 
 const names = (list: string[]) => (list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} ו${list[list.length - 1]}`);
 
-type Step = { kind: 'pick' } | { kind: 'confirm'; id: string; plan: Leave } | { kind: 'suggest'; s: LeaveSuggestion; team: number };
+type Step = { kind: 'pick' } | { kind: 'confirm'; id: string; plan: Leave } | { kind: 'suggest'; s: LeaveSuggestion; team: number; live: boolean };
 
 /**
  * "מישהו עזב?": pick who left → confirm (with what will happen) → an optional small fix
@@ -73,16 +73,20 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
     const tl = t !== null ? look(t) : null;
     const n = t !== null ? count(plan.result, t) : 0;
     const onPitchNow = t !== null && live && !!m?.onPitch.includes(t);
+    const kase: LeaveCase = leaveCase(r, m, id) ?? 'sub';
+    const subs = plan.result.subIds.length ? 'יש מחליף' : 'אין מחליף';
+    const where = kase === 'live' ? 'באמצע משחק' : live ? 'מחכים בחוץ' : m?.history.length ? 'בין משחקים' : 'עוד לא התחיל משחק';
+    const caseLine = kase === 'sub' ? 'מחליף' : `${where} · ${subs}`;
     let what: string;
     if (plan.outcome === 'sub') what = 'הוא יוצא מהמחליפים.';
     else if (plan.outcome === 'blocked') what = `אי אפשר: ${tl?.in} יישאר שחקן אחד ואין מחליף. כדי להמשיך צריך חלוקה מחדש מהמסך הראשי.`;
     else if (plan.outcome === 'subIn') what = `${nameOf(plan.subId!)} נכנס במקומו ${tl?.to}.`;
     else if (plan.outcome === 'toBench') what = `${tl?.in} נשארים ${n}, מעט מדי לקבוצה: ${names(plan.result.subIds.map(nameOf))} מחכים בחוץ כמחליפים.`;
-    else what = `${tl?.in} נשארים ${n}${onPitchNow ? ' וממשיכים ככה במשחק הזה' : ''}.`;
+    else what = `${tl?.in} נשארים ${n}${onPitchNow && !plan.result.subIds.length ? ' וממשיכים ככה במשחק הזה' : ''}.`;
     const confirm = () => {
       dispatch({ type: 'leave', id, now: Date.now() });
       const s = suggestAfterLeave(plan, leaveCtx(state));
-      if (s) return setStep({ kind: 'suggest', s, team: t! });
+      if (s) return setStep({ kind: 'suggest', s, team: t!, live: kase === 'live' });
       notify(
         plan.outcome === 'toBench'
           ? `${name} עזב · שחקני ${tl?.the} מחכים כמחליפים`
@@ -96,6 +100,7 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
     };
     return (
       <Sheet title={`${name} עזב?`} onClose={onClose}>
+        <p className="hint small leave-case">{caseLine}</p>
         <p className="lead">{what}</p>
         {plan.outcome === 'blocked' ? (
           <button type="button" className="btn btn-quiet btn-block" onClick={onClose}>
@@ -115,7 +120,7 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const { s, team } = step;
+  const { s, team, live: wasLive } = step;
   const tl = look(team);
   const n = count(r, team);
   if (s.kind === 'sub') {
@@ -152,7 +157,7 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
             </div>
           )}
           <button type="button" className="btn btn-quiet btn-block" onClick={onClose}>
-            להשאיר ככה
+            {wasLive ? 'משחקים חסר' : 'להשאיר ככה'}
           </button>
         </div>
       </Sheet>

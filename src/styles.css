@@ -2924,3 +2924,8 @@ thead th {
 .quick-rate .row-links {
   margin-block: 0;
 }
+
+/* ---------- bench add and leave cases (v15) ---------- */
+.leave-case {
+  margin: 0 0 4px;
+}
