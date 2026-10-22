@@ -705,6 +705,37 @@ for (const scheme of ['light', 'dark']) {
     await lshot('p12d-runner-leave-sub');
     await lctx.close();
   }
+
+  // My page (v17): the avatar in the top bar (Google photo, then the letter), "הדף שלי" with a
+  // player group and an organizer group, my numbers, last evenings; the organizer's "who am I".
+  if (SB_URL) {
+    for (const [tag, opts] of [
+      ['photo', { google: true, orgMe: 'o1' }],
+      ['letter', { google: false, orgMe: null }],
+    ]) {
+      const { ctx: mctx, page: mp } = await playerContext(browser, { scheme, me: 'p3', canRate: false, live: false, org: true, ...opts });
+      mp.on('pageerror', (e) => errors.push(`${scheme} me: ${e.message}`));
+      mp.on('console', (m) => m.type() === 'error' && !/fonts\.g/.test(m.text()) && errors.push(`${scheme} me console: ${m.text()}`));
+      const mshot = async (name, full = false) => {
+        await mp.waitForTimeout(250);
+        await mp.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: full });
+        const sw = await mp.evaluate(() => document.documentElement.scrollWidth);
+        if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+      };
+      await mp.goto(base);
+      await mp.getByRole('button', { name: 'הדף שלי' }).waitFor();
+      await mp.waitForTimeout(400);
+      await mshot(`me01-topbar-${tag}`);
+      await mp.getByRole('button', { name: 'הדף שלי' }).click();
+      await mp.getByRole('heading', { name: 'הקבוצות שלי' }).waitFor();
+      await mshot(`me02-page-${tag}`, true);
+      if (tag === 'letter') {
+        await mp.getByRole('button', { name: 'עוד לא בחרת מי אתה' }).click();
+        await mshot('me03-org-claim');
+      }
+      await mctx.close();
+    }
+  }
 }
 await browser.close();
 if (errors.length) {

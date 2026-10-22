@@ -92,7 +92,49 @@ export function liveData(now) {
  * writes it), `db.sets` (every accepted live_set: { rev, data }). Set `db.runner = ORG` to have
  * the organizer take control back: the player's next write gets 40001.
  */
-export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true } = {}) {
+/** A round test picture (no network): the mocked Google profile photo of "הדף שלי" (v17). */
+export const TEST_AVATAR =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#db2777"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/><circle cx="32" cy="25" r="11" fill="#fde7d4"/><path d="M10 64c2-14 11-21 22-21s20 7 22 21z" fill="#1e3a8a"/></svg>',
+  );
+
+/** v17: a second group on the phone that this login organizes (not the open one), with its own history. */
+export const ORG_GID = '22222222-3333-4444-8555-666666666666';
+const ORG_NAMES = ['גיל', 'רון', 'עומר', 'נדב', 'שי', 'אסף', 'יואב', 'עידו'];
+export const ORG_ROSTER = ORG_NAMES.map((name, i) => ({ id: `o${i + 1}`, name }));
+export function orgHistory(now) {
+  const day = 24 * 3600e3;
+  const ids = (a, b) => ORG_ROSTER.slice(a, b).map((p) => p.id);
+  const ev = (id, t, matches) => ({
+    id,
+    v: 1,
+    startedAt: t,
+    endedAt: t + 60 * 60e3,
+    teamSize: 4,
+    players: ORG_ROSTER,
+    teams: [
+      { bib: 'green', ids: ids(0, 4) },
+      { bib: 'white', ids: ids(4, 8) },
+    ],
+    subIds: [],
+    matches: matches.map((m, i) => ({ ...m, endedAt: t + (i + 1) * 10 * 60e3 })),
+  });
+  return [
+    ev('org-ev2', now - 2 * day, [
+      { a: 0, b: 1, goalsA: 3, goalsB: 1, goals: [{ team: 0, by: 'o1' }, { team: 0, by: 'o1' }, { team: 0, by: 'o2' }, { team: 1, by: 'o5' }] },
+      { a: 0, b: 1, goalsA: 2, goalsB: 2, goals: [{ team: 0, by: 'o3' }, { team: 0 }, { team: 1 }, { team: 1 }] },
+      { a: 0, b: 1, goalsA: 1, goalsB: 0, goals: [{ team: 0, by: 'o1' }] },
+    ]),
+    ev('org-ev1', now - 9 * day, [
+      { a: 0, b: 1, goalsA: 0, goalsB: 1, goals: [{ team: 1, by: 'o6' }] },
+      { a: 0, b: 1, goalsA: 2, goalsB: 0, goals: [{ team: 0, by: 'o4' }, { team: 0, by: 'o1' }] },
+      { a: 0, b: 1, goalsA: 1, goalsB: 3, goals: [{ team: 0 }, { team: 1 }, { team: 1 }, { team: 1 }] },
+    ]),
+  ];
+}
+
+export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true, google = false, avatar = TEST_AVATAR, org = false, orgMe = null } = {}) {
   const now = Date.now();
   const db = {
     me,
@@ -106,6 +148,7 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     rev: 4,
     data: liveData(now),
     sets: [],
+    orgMe,
   };
   const liveRow = () => ({
     data: db.data,
@@ -133,17 +176,35 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     token_type: 'bearer',
     expires_in: 3600 * 24,
     expires_at: exp,
-    user: { id: ME, aud: 'authenticated', role: 'authenticated', email: 'player@example.test', app_metadata: {}, user_metadata: {}, created_at: new Date(now).toISOString() },
+    user: {
+      id: ME,
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'player@example.test',
+      app_metadata: google ? { provider: 'google', providers: ['google'] } : { provider: 'email' },
+      user_metadata: google ? { full_name: 'גיל כהן', avatar_url: avatar } : {},
+      created_at: new Date(now).toISOString(),
+    },
   };
-  const index = { v: 1, currentId: GID, groups: [{ id: GID, name: 'כדורגל בשכונה', synced: true, createdAt: now, role: 'player' }] };
+  const index = {
+    v: 1,
+    currentId: GID,
+    groups: [
+      { id: GID, name: 'כדורגל בשכונה', synced: true, createdAt: now, role: 'player' },
+      ...(org ? [{ id: ORG_GID, name: 'שישי בבוקר', synced: true, createdAt: now }] : []),
+    ],
+  };
+  const orgDoc = { v: 1, players: ORG_ROSTER, constraints: { together: [], apart: [] }, history: orgHistory(now) };
+  let orgVersion = 3;
   await ctx.addInitScript(
-    ([key, session, index]) => {
+    ([key, session, index, org]) => {
       if (localStorage.getItem('kochot:mock-init')) return;
       localStorage.setItem('kochot:mock-init', '1');
       localStorage.setItem(key, JSON.stringify(session));
       localStorage.setItem('kochot:groups', JSON.stringify(index));
+      if (org) localStorage.setItem(`kochot:group:${org.id}`, JSON.stringify({ players: org.doc.players, history: org.doc.history }));
     },
-    [`sb-${REF}-auth-token`, session, index],
+    [`sb-${REF}-auth-token`, session, index, org ? { id: ORG_GID, doc: orgDoc } : null],
   );
   const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   await ctx.route(`${SB_URL}/**`, async (route) => {
@@ -158,6 +219,21 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     db.calls.push(path.split('/').pop());
     if (path.endsWith('/auth/v1/settings')) return json(route, { external: { google: false, email: true } });
     if (path.endsWith('/auth/v1/user')) return json(route, session.user);
+    // v17: the organizer group's doc (only when it is opened) and who I am in it.
+    if (path.endsWith('/rest/v1/groups')) {
+      if (route.request().method() === 'GET') return json(route, { id: ORG_GID, name: 'שישי בבוקר', data: orgDoc, version: orgVersion });
+      return json(route, [{ version: ++orgVersion }]);
+    }
+    if (path.endsWith('/rpc/group_members_list'))
+      return json(route, [
+        { user_id: ME, display_name: 'גיל', role: 'organizer', player_id: db.orgMe, can_rate: false, joined_at: '2026-10-01T10:00:00Z', is_me: true },
+        { user_id: ORG, display_name: 'רון', role: 'organizer', player_id: 'o2', can_rate: false, joined_at: '2026-10-01T10:00:00Z', is_me: false },
+      ]);
+    if (path.endsWith('/rpc/claim_player') && args.p_group_id === ORG_GID) {
+      if (args.p_player_id === 'o2' || db.orgMe) return json(route, { code: '23505', message: 'taken' }, 409);
+      db.orgMe = args.p_player_id;
+      return route.fulfill({ status: 204, body: '' });
+    }
     if (path.endsWith('/rpc/group_public_get'))
       return json(route, {
         groupId: GID,

@@ -4,6 +4,7 @@
 //   kochot:groups          index { v, currentId, groups: GroupMeta[] }
 //   kochot:group:<id>      the group's AppState (the same shape `kochot:v1` used to hold)
 //   kochot:sync:<id>       sync bookkeeping for groups that live in the cloud (see sync/engine)
+//   kochot:me:<id>         which roster player I claimed in an organizer group (my page)
 // Before groups existed the whole state lived in `kochot:v1`. On first run it becomes the first
 // group ("הקבוצה שלי"); the old key is removed only after the new keys were written.
 import { INITIAL_STATE, sanitize, type AppState } from './model';
@@ -37,6 +38,8 @@ export const LEGACY_KEY = 'kochot:v1';
 export const INDEX_KEY = 'kochot:groups';
 export const groupKey = (id: string) => `kochot:group:${id}`;
 export const syncKey = (id: string) => `kochot:sync:${id}`;
+/** Who I am in an organizer group ("הדף שלי", ui/MeScreen.tsx), as the server said last time. */
+export const meKey = (id: string) => `kochot:me:${id}`;
 export const DEFAULT_GROUP_NAME = 'הקבוצה שלי';
 export const MAX_GROUP_NAME = 40;
 
@@ -136,6 +139,7 @@ export function removeGroup(index: GroupIndex, id: string): GroupIndex {
 export function deleteGroupData(kv: KV, id: string): void {
   kv.remove(groupKey(id));
   kv.remove(syncKey(id));
+  kv.remove(meKey(id));
 }
 
 /** A fresh group's state: empty roster, this phone's look. */

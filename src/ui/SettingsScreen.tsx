@@ -20,7 +20,7 @@ const THEME_NAMES = { light: 'בהיר', dark: 'כהה', auto: 'לפי הטלפ�
 
 export function SettingsScreen({ focus }: { focus?: string }) {
   const { state, dispatch } = useStore();
-  const { notify } = useUi();
+  const { notify, go } = useUi();
   const [organizers, setOrganizers] = useState(false);
   // Opened from a help answer (#settings/<section>): scroll to that section.
   useEffect(() => {
@@ -346,8 +346,8 @@ export function SettingsScreen({ focus }: { focus?: string }) {
                     מארגנים והזמנות
                   </button>
                 )}
-                <button type="button" className="btn btn-quiet btn-block" onClick={() => void sync.signOut()}>
-                  יציאה מהחשבון
+                <button type="button" className="btn btn-quiet btn-block" onClick={() => go('me')}>
+                  לדף שלי
                 </button>
               </div>
             </>

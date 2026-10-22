@@ -3,7 +3,7 @@ import { chromium } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { GID, ME, ORG, playerContext, SB_URL } from './player-mock.mjs';
+import { GID, ME, ORG, ORG_GID, playerContext, SB_URL } from './player-mock.mjs';
 import { liveServer, organizerRoutes, ORG_ME, groupState, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
 import { cloudRoutes, cloudServer, loginInSheet } from './cloud-mock.mjs';
 
@@ -1527,7 +1527,7 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
     await ip.waitForFunction(() => Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k)), null, { timeout: 10000 }).catch(() => errors.push('ios google: not logged in'));
     assert(st.idToken?.provider === 'google' && st.idToken?.id_token === 'stub.ios.token', `ios google: id_token grant ${JSON.stringify(st.idToken)}`);
     assert(!!st.idToken?.nonce && createHash('sha256').update(st.idToken.nonce).digest('hex') === init?.nonce, 'ios google: raw nonce (kept across the redirect) to Supabase, its SHA-256 to Google');
-    await ip.getByText('יציאה מהחשבון').first().waitFor({ timeout: 5000 }).catch(() => errors.push('ios google: settings do not show the account'));
+    await ip.getByRole('button', { name: 'לדף שלי' }).waitFor({ timeout: 5000 }).catch(() => errors.push('ios google: settings do not show the account'));
     await ictx.close();
     console.log('ios google: redirect → /api/gsi → id_token + nonce ok');
   }
@@ -1737,6 +1737,64 @@ if (SB_URL) {
   assert(!/4567|4321/.test(JSON.stringify(ws.calls)), 'wa: a phone number was sent to the server');
   console.log(`whatsapp: ${(await roster()).length} players (zip, share target, contacts)`);
   await wctx.close();
+}
+
+// My page (v17): the avatar opens "הדף שלי"; groups with role and who I am; an organizer claims
+// himself; numbers from both groups' history; a recent evening opens in its group; logging out.
+if (SB_URL) {
+  const { ctx: mctx, page: mp, db } = await playerContext(browser, { me: 'p3', canRate: false, live: false, google: true, org: true, orgMe: null });
+  mp.on('pageerror', (e) => errors.push(`me: ${e.message}`));
+  await mp.goto(base);
+  const avatar = mp.getByRole('button', { name: 'הדף שלי' });
+  await avatar.waitFor({ timeout: 10000 });
+  const img = avatar.locator('img');
+  assert((await img.getAttribute('referrerpolicy')) === 'no-referrer' && (await img.getAttribute('loading')) === 'lazy', 'me: avatar image no-referrer + lazy');
+  await mp.waitForFunction(() => document.querySelector('.avatar-btn img')?.complete);
+  await avatar.click();
+  await mp.getByRole('heading', { name: 'גיל כהן' }).waitFor();
+  const text = async () => (await mp.locator('.me').innerText()).replace(/\s+/g, ' ');
+  let t = await text();
+  assert(/כדורגל בשכונה שחקן · אני: גיל/.test(t) && /שישי בבוקר מארגן/.test(t) && /מחובר עם Google/.test(t), `me: groups/roles (${t.slice(0, 200)})`);
+  const row = (name) => mp.locator('.me-table tbody tr', { hasText: name }).innerText().then((x) => x.replace(/\s+/g, ' ').trim());
+  assert((await row('כדורגל בשכונה')) === 'כדורגל בשכונה 1 3 2 2', `me: player group stats ${await row('כדורגל בשכונה')}`);
+  assert(!(await mp.locator('.me-table tbody tr', { hasText: 'שישי בבוקר' }).count()), 'me: no stats before claiming in the organizer group');
+  // The organizer claims "גיל" in his own group (claim_player), "רון" is taken by another organizer.
+  await mp.getByRole('button', { name: 'עוד לא בחרת מי אתה' }).click();
+  const sheet = mp.getByRole('dialog', { name: 'מי אתה?' });
+  assert(await sheet.getByRole('button', { name: 'רון' }).isDisabled(), 'me: a claimed name is greyed');
+  await sheet.getByRole('button', { name: 'גיל' }).click();
+  await sheet.waitFor({ state: 'detached' });
+  assert(db.orgMe === 'o1', 'me: organizer claim sent');
+  t = await text();
+  assert(/שישי בבוקר מארגן · אני: גיל/.test(t), 'me: organizer group shows the claim');
+  assert((await row('שישי בבוקר')) === 'שישי בבוקר 2 6 3 (50%) 4' && (await row('סה״כ')) === 'סה״כ 3 9 5 (56%) 6', `me: org + total stats ${await row('שישי בבוקר')} / ${await row('סה״כ')}`);
+  const recent = await mp.locator('.me .ev-list').last().locator('li').allInnerTexts();
+  assert(recent.length === 3 && /שישי בבוקר/.test(recent[0]) && /כדורגל בשכונה/.test(recent[1]), `me: recent evenings ${JSON.stringify(recent)}`);
+  // Tap the newest (organizer group): it opens, on that evening.
+  await mp.locator('.me .ev-list').last().locator('li button').first().click();
+  await mp.waitForFunction(() => location.hash === '#evening/org-ev2');
+  const idx = await mp.evaluate(() => JSON.parse(localStorage.getItem('kochot:groups')).currentId);
+  assert(idx === ORG_GID, 'me: the evening switched to its group');
+  assert(await mp.getByRole('heading', { name: 'סיכום הערב' }).isVisible(), 'me: evening summary open');
+  // Settings: "לדף שלי" instead of logging out there.
+  await mp.goto(`${base}#settings`);
+  assert(!(await mp.getByRole('button', { name: 'יציאה מהחשבון' }).count()), 'me: no logout in settings');
+  await mp.getByRole('button', { name: 'לדף שלי' }).click();
+  await mp.getByRole('button', { name: 'יציאה מהחשבון' }).click();
+  await mp.waitForFunction(() => location.hash === '#home');
+  assert(!(await mp.getByRole('button', { name: 'הדף שלי' }).count()), 'me: no avatar after logout');
+  await mp.goto(`${base}#me`);
+  await mp.waitForTimeout(300);
+  assert(!(await mp.locator('.me').count()), 'me: #me logged out falls back home');
+  await mctx.close();
+
+  // A picture that fails to load → the first letter.
+  const { ctx: bctx, page: bp } = await playerContext(browser, { me: 'p3', canRate: false, live: false, google: true, avatar: 'data:image/png;base64,AAAA' });
+  await bp.goto(base);
+  await bp.locator('.avatar-btn .avatar-letter').waitFor({ timeout: 10000 }).catch(() => errors.push('me: broken picture shows no letter'));
+  assert((await bp.locator('.avatar-btn').innerText()) === 'ג', 'me: letter from the name');
+  await bctx.close();
+  console.log('my page: avatar, groups, organizer claim, stats, recent evening, logout');
 }
 
 console.log(`split 22 players in ${dt}ms`);

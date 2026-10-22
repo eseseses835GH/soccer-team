@@ -66,8 +66,8 @@ export function PlayerSettings() {
                 מי אתה?
               </button>
             )}
-            <button type="button" className="btn btn-quiet btn-block" onClick={() => void sync.signOut()}>
-              יציאה מהחשבון
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => go('me')}>
+              לדף שלי
             </button>
           </>
         ) : (
