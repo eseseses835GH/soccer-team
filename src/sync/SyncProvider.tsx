@@ -6,6 +6,7 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { isUuid, newGroupState } from '../state/groups';
 import { sanitize } from '../state/model';
+import { profileOf, type Profile } from '../state/me';
 import { localKV, useGroups, useStore } from '../state/store';
 import { applyDoc, docFromState, mergeDocs, sanitizeDoc } from './doc';
 import { EMPTY_META, hasLocalChanges, loadMeta, saveMeta, syncGroup } from './engine';
@@ -38,6 +39,8 @@ interface SyncApi {
   email: string | null | false;
   /** Logged-in user's id; null when signed out or unknown. */
   userId: string | null;
+  /** Name, email and Google picture of the logged-in user (null when signed out or unknown). */
+  profile: Profile | null;
   /** Known to be logged out (login is available here). The free limits apply then. */
   loggedOut: boolean;
   status: SyncStatus;
@@ -395,6 +398,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       configured: syncConfigured,
       email: session === undefined ? null : session ? (session.user.email ?? '') : false,
       userId: session?.user.id ?? null,
+      profile: profileOf(session?.user),
       loggedOut: syncConfigured && session === null,
       status: current.synced ? status : 'local',
       loginReason,

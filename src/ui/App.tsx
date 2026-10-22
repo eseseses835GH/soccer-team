@@ -15,6 +15,7 @@ import { HomeScreen } from './HomeScreen';
 import { useRecordUse } from './InstallPrompt';
 import { Icon } from './icons';
 import { MatchScreen } from './MatchScreen';
+import { Avatar, MeScreen } from './MeScreen';
 import { PlayersScreen } from './PlayersScreen';
 import { ClaimView, PlayerHome } from './PlayerHome';
 import { PlayerSettings } from './PlayerSettings';
@@ -25,8 +26,8 @@ import { ViewerScreen } from './LiveControl';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
 
-export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help' | 'rate' | 'claim';
-const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening', 'help', 'rate', 'claim'];
+export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help' | 'rate' | 'claim' | 'me';
+const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening', 'help', 'rate', 'claim', 'me'];
 /** Organizer-only screens (a player group never shows them), and player-only ones. */
 const ORGANIZER_ONLY: Route[] = ['teams', 'match', 'players'];
 const PLAYER_ONLY: Route[] = ['rate', 'claim'];
@@ -41,6 +42,7 @@ const TITLES: Record<Route, string> = {
   help: 'שאלות ותשובות',
   rate: 'דירוג',
   claim: 'מי אתה?',
+  me: 'הדף שלי',
 };
 /** Where "back" goes from each screen. */
 const PARENT: Record<Route, Route> = {
@@ -54,9 +56,10 @@ const PARENT: Record<Route, Route> = {
   help: 'home',
   rate: 'home',
   claim: 'home',
+  me: 'home',
 };
 /** Help can be opened from several screens; "back" returns to the one it came from. */
-const HELP_FROM: Route[] = ['home', 'teams', 'match', 'players', 'settings'];
+const HELP_FROM: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'me'];
 
 const isRoute = (s: string): s is Route => (ROUTES as string[]).includes(s);
 
@@ -186,7 +189,9 @@ export function App() {
         : 'home'
       : route === 'evening' && !evening
         ? 'history'
-        : route;
+        : route === 'me' && (sync.email === false || !sync.configured)
+          ? 'home'
+          : route;
 
   const backTo = safeRoute === 'help' ? helpFrom.current : viewing && safeRoute === 'match' ? 'home' : PARENT[safeRoute];
 
@@ -255,6 +260,11 @@ export function App() {
               <button type="button" className="icon-btn" aria-label="הגדרות" onClick={() => go('settings')}>
                 <Icon name="gear" />
               </button>
+              {sync.profile && (
+                <button type="button" className="icon-btn avatar-btn" aria-label="הדף שלי" onClick={() => go('me')}>
+                  <Avatar profile={sync.profile} />
+                </button>
+              )}
             </nav>
           </>
         ) : (
@@ -279,6 +289,7 @@ export function App() {
         {safeRoute === 'rate' && <RateScreen />}
         {safeRoute === 'claim' && <ClaimView onDone={() => go(param === 'rate' ? 'rate' : 'home')} />}
         {safeRoute === 'help' && <HelpScreen focus={param} />}
+        {safeRoute === 'me' && <MeScreen />}
       </main>
       {incoming && (
         <Sheet title="ייבוא סגל" onClose={() => setIncoming(null)}>

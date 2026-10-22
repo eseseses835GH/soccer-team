@@ -30,7 +30,7 @@ const champTitle = (look: TeamLook) => `${look.the} ${verb(look, 'לקחו', 'ל
 /** "ניצחו האדומים" / "ניצחה קבוצה 1". */
 const wonBy = (look: TeamLook) => `${verb(look, 'ניצחו', 'ניצחה')} ${look.the}`;
 
-function dateLabel(ts: number): string {
+export function dateLabel(ts: number): string {
   const d = new Date(ts);
   const sameYear = d.getFullYear() === new Date().getFullYear();
   return d.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', ...(sameYear ? {} : { year: '2-digit' }) });

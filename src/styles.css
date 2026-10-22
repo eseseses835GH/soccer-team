@@ -2945,3 +2945,80 @@ thead th {
   gap: 10px;
   line-height: 1.5;
 }
+
+/* ---------- my page (v17) ---------- */
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--sunk);
+}
+.avatar-letter {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  line-height: 1;
+}
+.avatar-btn {
+  padding: 0;
+}
+.me-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-block: 8px 4px;
+}
+.me-who {
+  min-inline-size: 0;
+}
+.me-name {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+.me-email {
+  overflow-wrap: anywhere;
+}
+.me-groups li {
+  display: flex;
+  flex-direction: column;
+}
+.me-groups li > button:first-child {
+  min-block-size: 56px;
+}
+.me-claim {
+  align-self: flex-start;
+  min-block-size: 36px;
+  margin-block: -18px 4px;
+  font-size: 0.9rem;
+}
+.me-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.me-table th,
+.me-table td {
+  padding: 8px 4px;
+  border-block-end: 1px solid var(--line);
+  text-align: center;
+}
+.me-table thead th {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.me-table tbody th {
+  text-align: start;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.me-total th,
+.me-total td {
+  font-weight: 800;
+  border-block-end: 0;
+}
+.me-out {
+  margin-block-start: 32px;
+}
