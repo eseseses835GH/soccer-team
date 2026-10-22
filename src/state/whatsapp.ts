@@ -93,16 +93,64 @@ function collect(raw: string[]): PickedNames {
   };
 }
 
-/** Senders of an exported chat: system notices and continuation lines of multi-line messages are skipped. */
+/** Who joined, was added, left or was removed, read from a group notice (English and Hebrew exports). */
+export function membershipOf(notice: string): { in: string[]; out: string[] } {
+  const t = notice.replace(MARKS, '').replace(/\s+/g, ' ').trim();
+  const split = (list: string) => list.split(/,\s*|\s+and\s+|\s+ו(?=\S)/).map((x) => x.trim()).filter(Boolean);
+  const self = (n: string) => /^(you|את\/ה|אתה|את)$/i.test(cleanName(n));
+  const keep = (l: string[]) => l.filter((n) => !self(n));
+  let m: RegExpExecArray | null;
+  if ((m = /^(.+?) joined using (?:this group's|a group|the group's) (?:invite )?link$/i.exec(t))) return { in: keep([m[1]]), out: [] };
+  if ((m = /^(.+?) הצטר[פף](?:\/ה|ה)? (?:לקבוצה )?(?:באמצעות|דרך) (?:קישור|הקישור).*$/.exec(t))) return { in: keep([m[1]]), out: [] };
+  if ((m = /^.+? added (.+)$/i.exec(t))) return { in: keep(split(m[1])), out: [] };
+  if ((m = /^.+? הוסי[פף](?:\/ה|ה)? את (.+)$/.exec(t))) return { in: keep(split(m[1])), out: [] };
+  if ((m = /^.+? removed (.+)$/i.exec(t))) return { in: [], out: keep(split(m[1])) };
+  if ((m = /^.+? הסיר(?:\/ה|ה)? את (.+)$/.exec(t))) return { in: [], out: keep(split(m[1])) };
+  if ((m = /^(.+?) left$/i.exec(t))) return { in: [], out: keep([m[1]]) };
+  if ((m = /^(.+?) (?:יצא(?:\/ה|ה)?|עזב(?:\/ה|ה)?)$/.exec(t))) return { in: [], out: keep([m[1]]) };
+  return { in: [], out: [] };
+}
+
+/**
+ * Names in an exported chat: everyone who wrote (most messages first), then members who joined or
+ * were added but never wrote (count 0). Whoever's last notice is "left"/"removed" is dropped.
+ * Polls are read as one message by their author (the export has vote counts only, no voter names).
+ */
 export function parseWhatsAppChat(text: string): PickedNames {
   const senders: string[] = [];
+  const last = new Map<string, { name: string; in: boolean }>();
+  // Keys on the shown (cut) name, so a long name that was cut matches its full form.
+  const short = (n: string) => cleanName(n).slice(0, MAX_NAME).trim();
+  const mark = (n: string, isIn: boolean) => {
+    const name = short(n);
+    if (name) last.set(nameKey(name), { name, in: isIn });
+  };
   for (const line of text.split(/\r?\n/)) {
     const h = header(line);
     if (!h) continue; // a continuation of the message above
     const who = senderOf(h.rest);
-    if (who !== null) senders.push(who);
+    if (who !== null) {
+      senders.push(who);
+      mark(who, true);
+      continue;
+    }
+    // A notice. iPhone files it under someone's (or the group's) name: "X: <LRM>…"; Android has no name.
+    const body = h.ios ? h.rest.replace(/^(.+?):\s/, '') : h.rest;
+    const ms = membershipOf(body);
+    ms.in.forEach((n) => mark(n, true));
+    ms.out.forEach((n) => mark(n, false));
   }
-  return collect(senders);
+  const gone = new Set([...last].filter(([, v]) => !v.in).map(([k]) => k));
+  const wrote = collect(senders.filter((s) => !gone.has(nameKey(short(s)))));
+  const seen = new Set(wrote.names.map((n) => nameKey(n.name)));
+  const silent = [...last.values()].filter((v) => v.in && !isPhone(v.name) && !seen.has(nameKey(v.name)));
+  const silentPhones = [...last.values()].filter((v) => v.in && isPhone(v.name)).length;
+  const wrotePhones = new Set(senders.filter((s) => isPhone(s) && !gone.has(nameKey(short(s)))).map((s) => cleanName(s).replace(/\D/g, '')));
+  const extraPhones = [...last.values()].filter((v) => v.in && isPhone(v.name) && !wrotePhones.has(cleanName(v.name).replace(/\D/g, ''))).length;
+  return {
+    names: [...wrote.names, ...silent.map((v) => ({ name: v.name.slice(0, MAX_NAME).trim(), count: 0 }))],
+    unnamed: wrote.unnamed + (silentPhones ? extraPhones : 0),
+  };
 }
 
 // ---------- participants CSV (WhatsApp Web export extensions) ----------

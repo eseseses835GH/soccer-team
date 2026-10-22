@@ -4,7 +4,7 @@ import android from '../../scripts/fixtures/wa-chat-android.txt?raw';
 import english from '../../scripts/fixtures/wa-chat-android-en.txt?raw';
 import participants from '../../scripts/fixtures/wa-participants.csv?raw';
 import { parseRoster } from './io';
-import { cleanName, fromNames, isPhone, isWhatsAppChat, isZip, nameKey, parseContactsCsv, parseWhatsAppChat, pickNames, readFileText, readZipText } from './whatsapp';
+import { cleanName, fromNames, isPhone, isWhatsAppChat, isZip, nameKey, parseContactsCsv, parseWhatsAppChat, membershipOf, pickNames, readFileText, readZipText } from './whatsapp';
 
 const names = (t: string) => parseWhatsAppChat(t).names.map((n) => n.name);
 // The last digits of every number in the fixtures.
@@ -209,5 +209,40 @@ describe('zip', () => {
     expect(await readFileText(new Blob([z as BlobPart]))).toBe(english);
     expect(await readFileText(new Blob(['\ufeffאבי 8']))).toBe('אבי 8');
     await expect(readFileText(new Blob([(await zip([{ name: 'a.jpg', text: 'x', deflate: false }])) as BlobPart]))).rejects.toThrow();
+  });
+});
+
+describe('members who never wrote (join/add/leave notices)', () => {
+  const L = '‎';
+  const chat = [
+    `[03/08/2025, 17:37:14] כדורגל: ${L}You joined using a group link`,
+    `[03/08/2025, 17:38:43] מיכאל: ${L}מיכאל joined using a group link`,
+    `[03/08/2025, 17:40:00] רון: היי`,
+    `[26/08/2025, 18:31:03] אסף קורן: ${L}~ Matan added אסף קורן`,
+    `[27/08/2025, 12:47:01] ~ Omri: ${L}~ Daniel added ~ Omri, Tal and Ziv`,
+    `[28/08/2025, 10:00:00] Ziv: ${L}Ziv left`,
+    `[30/08/2025, 21:14:41] רון: ${L}POLL:`,
+    `שישי?`,
+    `${L}OPTION: מגיע (3 votes)`,
+    `${L}OPTION: לא (1 vote)`,
+    `[31/08/2025, 09:00:00] Very Long Contact Name Indeed: hi`,
+    `[31/08/2025, 09:01:00] Very Long Contact Name Indeed: ${L}Very Long Contact Name Indeed joined using a group link`,
+  ].join('\n');
+  it('adds joined/added members after the writers, drops whoever left, skips "You", never names poll options', () => {
+    const r = parseWhatsAppChat(chat);
+    const names = r.names.map((n) => n.name);
+    expect(names.slice(0, 2)).toEqual(['רון', 'Very Long Contact Name I']);
+    expect(r.names.find((n) => n.name === 'רון')?.count).toBe(2); // the poll counts as his message
+    expect(names).toEqual(expect.arrayContaining(['מיכאל', 'אסף קורן', 'Omri', 'Tal']));
+    expect(names).not.toContain('Ziv');
+    expect(names).not.toContain('You');
+    expect(names.filter((n) => n.startsWith('Very Long'))).toHaveLength(1);
+    expect(names.some((n) => /מגיע|OPTION/.test(n))).toBe(false);
+    expect(r.names.find((n) => n.name === 'Tal')?.count).toBe(0);
+  });
+  it('reads Hebrew notices too', () => {
+    expect(membershipOf('דני הצטרף/ה באמצעות קישור לקבוצה')).toEqual({ in: ['דני'], out: [] });
+    expect(membershipOf('אלי הוסיף/ה את יוסי ואבי')).toEqual({ in: ['יוסי', 'אבי'], out: [] });
+    expect(membershipOf('דני יצא/ה')).toEqual({ in: [], out: ['דני'] });
   });
 });

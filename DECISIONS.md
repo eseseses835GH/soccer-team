@@ -797,3 +797,8 @@ Only "שלחנו מייל. פותחים אותו ולוחצים על הקישו�
 - **Counting** (`src/state/me.ts`, pure, `me.test.ts`): a match counts for the side my id was on (`sides` first, so a borrowed player counts for the team he played for, else the final team rosters); a penalty win is a win; goals only by scorer id; an evening counts if I was anywhere in it (team, bench, a side or a goal).
 - Group history ("ערבים קודמים") stays per group as before.
 - Mocks: `scripts/player-mock.mjs` takes `google` (name + a local `data:` test picture), `org` (a second, organizer group with its own history) and `orgMe`; answers `group_members_list` and the organizer group's `claim_player`.
+
+## WhatsApp import: members who never wrote, and polls (v14.1, from a real export)
+- Checked against a real iPhone export (Hebrew contacts, English WhatsApp notices). **Polls** appear as `POLL:` + the question + `OPTION: <text> (N votes)` lines — **vote counts only, no voter names** — so "who said they're coming" can't be read from an export. A poll counts as one message by its author; its lines are never names.
+- **Members who never wrote** are now included from the group's notices: "X joined using a group link", "A added B, C and D", and Hebrew "הצטרף/ה באמצעות קישור", "הוסיף/ה את". Whoever's last notice is "left"/"removed" (or "יצא/ה", "הסיר/ה את") is dropped; "You" is skipped. They come after the writers with count 0. On the real export: 47 writers + 33 silent members + 6 number-only senders.
+- Names are matched on their shown (24-char) form, so a long contact name that was cut doesn't appear twice.
