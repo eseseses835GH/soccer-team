@@ -123,6 +123,13 @@ body.no-scroll {
   margin-inline: auto;
   min-block-size: 100dvh;
 }
+.crash {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  padding: 30vh 16px 0;
+  text-align: center;
+}
 h1,
 h2,
 h3,

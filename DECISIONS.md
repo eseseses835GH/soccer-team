@@ -741,3 +741,41 @@ User: a sub who waited should be addable to a team (not only swapped), on reques
   - **Anything else** ("מחכים בחוץ" / "בין משחקים" / "עוד לא התחיל משחק" · יש/אין מחליף): a sub if one waits; otherwise at most the swap suggestion, which now never touches the two teams on the pitch **or the next team to come on** (`queue[0]`), nor a borrowing pair (`lockedAfterLeave`). His own team locked, or nothing left to swap with: nothing offered. With 3 teams (or 4) between matches that means no swap at all, by design. *(my call: before any match session exists nothing is locked — the evening hasn't started and a re-roll is just as fine.)*
   - The confirm line no longer says "ממשיכים ככה במשחק הזה" when a sub is waiting (a sub is offered next).
 - e2e 11b/11d, screenshots `06b`/`06c` (sub selected, the team step) and `09m` (live leave confirm). The old `16f-leave-swaps` screenshot is gone: with 3 teams every team is locked between matches.
+
+## Login fixes from a real iPhone (v16)
+*Updates "Email login on the free plan (v6)", "Google sign-in on our own domain (v11)" and v13's "a login that leaves the page".*
+
+### What a friend hit on his iPhone
+1. **Email link opened in another browser.** He asked for the link in Safari; Mail opened it in Chrome (his default browser) and the app asked him to log in again. Cause: PKCE — the code verifier lives in the storage of the browser that asked, so the `?code=` link can only be finished there. And the sheet showed a code field although the free-plan email has only a link.
+2. **Google in iPhone Safari: a white page stuck on accounts.google.com**, refresh didn't help. Cause: GIS popup mode; on iOS the popup can't reliably report back to the opener (WebKit popup handling + ITP).
+
+### Email link: implicit flow
+- The Supabase client is now `flowType: 'implicit'` (`src/sync/supabase.ts`): the link carries the session itself (`#access_token=…&refresh_token=…`), so it logs in **whichever browser opens it**. Same for first-time users ("Confirm your email": `type=signup`) and for the password sign-up confirmation.
+- `detectSessionInUrl: false`: the app reads the address itself, **before the first render** (`captureAuthArrival` in `main.tsx`, `src/sync/authUrl.ts`), replaces it at once (`history.replaceState`), and makes the session once the library has loaded (`setSession` in `SyncProvider.ensureClient`). Errors (`#error=…&error_code=otp_expired`) → "הקישור פג תוקף או שכבר השתמשו בו. שלחו קישור חדש".
+- **Trade-off** *(my call)*: with implicit flow the access and refresh tokens are in the URL fragment for a moment. A fragment never goes to a server or into `Referer`; we clear it before anything renders. What remains: the browser may keep the first URL in its history list. PKCE avoided that but can't work across browsers, which is exactly how iPhone mail apps open links. Supabase still checks the redirect against the allow list.
+- **An invite waiting for the login rides along** as `?join=<token>` in `emailRedirectTo` (`emailRedirect`); on arrival it becomes `#join=<token>`, so the other browser joins the group too. (Not in the hash: Supabase appends `#access_token=…` to the redirect, a second `#` would break it.) The `Redirect URLs` entry `https://www.kadoregel.com/**` covers the query.
+- `ensureClient` is one shared promise now: an invite link and the page load asking at once both wait for the session from the address (no login sheet flashing).
+- A PKCE `?code=` link sent before this version is still tried once (`exchangeCodeForSession`), with a message if it fails.
+- `signInWithIdToken` (Google GIS) and `verifyOtp` (code) don't depend on the flow type.
+
+### After sending the email
+Only "שלחנו מייל. פותחים אותו ולוחצים על הקישור" + one muted line "אם הקישור נפתח בדפדפן אחר — ההתחברות תהיה שם." and "מייל אחר / שליחה מחדש" (`src/ui/EmailSent.tsx`). No code field.
+**`VITE_EMAIL_CODE=1`** (when Resend SMTP is on and the templates have `{{ .Token }}`): the option reads "קוד למייל", the button "שליחת קוד למייל", and after sending "הקלידו את הקוד מהמייל" with the 6-digit field. Both tested (`src/ui/emailSent.test.ts`).
+
+### Google on iPhone/iPad: redirect mode through our own domain
+- `gisUxMode` (`src/sync/googleId.ts`): **redirect** on every iPhone/iPad browser (all WebKit: Safari, Chrome iOS, iPadOS that says "Macintosh" but has touch) and in-app browsers (WhatsApp, Instagram, Facebook, Line, Android WebView); **popup** on desktop and Android Chrome (unchanged).
+- Redirect: GIS `ux_mode: 'redirect'`, `login_uri: <origin>/api/gsi`. Before leaving, the raw nonce and the current screen go to `sessionStorage` (`kochot:gsi`, 15 minutes, read once).
+- **`api/gsi.ts`, a Vercel Function** (Web-standard `POST(request)`; Vercel builds `api/` next to the Vite build, `vercel.json` unchanged, no SPA rewrites needed since the app uses hash routes): checks the CSRF double-submit (`g_csrf_token` cookie = body), checks the credential looks like a JWT (≤ 8 KB), answers **303 → `/#gsi=<token>`** with `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. Every failure also goes back to the app (`/#gsi_error=csrf|bad`); non-POST → 405 with a link home. Nothing logged or stored. The token is in the fragment only, which no server sees, and is cleared before render like the email tokens.
+- The app then calls `signInWithIdToken({ provider: 'google', token, nonce })` with the saved raw nonce and returns to the saved screen. Supabase verifies signature, audience and nonce, so a token posted by someone else (login CSRF) fails without the victim's nonce.
+- Supabase refusing the token (nonce mismatch, audience…) or a failed CSRF check → toast "ההתחברות עם Google לא הצליחה. נסו שוב, או התחברו עם מייל". *(my call: a toast like the other login errors; the sheet isn't reopened.)*
+- **Google Cloud needs** `https://www.kadoregel.com/api/gsi` and `https://kadoregel.com/api/gsi` (and the vercel.app one) under **Authorized redirect URIs** of the Kochot client (GIS refuses an unregistered `login_uri`); the **Authorized JavaScript origins** stay as they are (the button still loads on our page). The Supabase callback URI stays for the fallback.
+- iPhone home screen (`navigator.standalone`) keeps the Supabase redirect (v11), which is now implicit too, so it no longer depends on the storage of the page that started it.
+- Not used: Supabase `signInWithOAuth` for iPhone Safari (works, but shows the supabase.co domain); kept as the fallback when GIS can't load.
+
+### Never a blank page
+- A root error boundary (`src/ui/Crash.tsx`): if rendering throws, "משהו השתבש. הנתונים שמורים בטלפון." + "טעינה מחדש".
+- Every auth arrival ends in a session or a Hebrew toast (`finishArrival`): refused, expired, offline ("אין חיבור לאינטרנט"), thrown errors.
+- v13's "a login that leaves the page loses the gate continuation" still holds (the invite is kept, the 5th-player action isn't).
+
+### Code and tests
+`src/sync/authUrl.ts` (+ test: tokens / signup / `?join=` / errors / `#gsi=` / `#gsi_error=` / old `?code=` / own hashes untouched / setSession / signInWithIdToken with nonce / Hebrew errors / `VITE_EMAIL_CODE`), `src/sync/googleId.ts` (+ test: iOS Safari, Chrome iOS, iPadOS, Android WebView, Instagram → redirect; Android Chrome, desktop, Mac → popup; nonce saved/read once/expired), `api/gsi.ts` (+ `src/sync/gsiFunction.test.ts`: 303 + no-store, CSRF missing/mismatched/empty, not a JWT, too long, JSON body, GET → 405), `src/ui/EmailSent.tsx` (+ test), `AccountSheet`, `SyncProvider`, `supabase.ts`, `main.tsx`, `Crash.tsx`. e2e block 14b (`scripts/gsi-route.mjs` runs the real function behind Playwright): link asked in one context (no PKCE challenge, `redirect_to` carries `?join=`), opened in a fresh one → tokens gone from the URL, logged in, invite joined, no sheet; expired link → message; iPhone Safari UA → GIS redirect config → POST `/api/gsi` → `#gsi=` → id_token grant with the raw nonce whose SHA-256 Google got → back on `#settings` logged in; Supabase refusing → message, app on screen; CSRF cookie mismatch → message, nothing sent to Supabase.

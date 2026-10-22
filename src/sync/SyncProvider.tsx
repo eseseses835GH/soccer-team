@@ -9,6 +9,7 @@ import { sanitize } from '../state/model';
 import { localKV, useGroups, useStore } from '../state/store';
 import { applyDoc, docFromState, mergeDocs, sanitizeDoc } from './doc';
 import { EMPTY_META, hasLocalChanges, loadMeta, saveMeta, syncGroup } from './engine';
+import { finishArrival, hasArrival } from './authUrl';
 import { afterLoginQueue, limitText, shouldAutoUpload } from './gate';
 import { JOIN_HASH, inviteUrl } from './organizers';
 import { OrganizerSync } from './OrganizerSync';
@@ -62,7 +63,7 @@ interface SyncApi {
 }
 
 const SyncCtx = createContext<SyncApi | null>(null);
-const PENDING_JOIN = 'kochot:pendingJoin';
+export const PENDING_JOIN = 'kochot:pendingJoin';
 export { JOIN_HASH };
 
 const pendingJoin = () => {
@@ -101,26 +102,28 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   );
   const uploadRef = useRef<(silent?: boolean) => Promise<void>>(async () => {});
 
-  const ensureClient = useCallback(async () => {
-    if (clientRef.current) return clientRef.current;
-    const c = await getClient();
-    if (!clientRef.current) {
+  // One promise for everyone (an invite link and the page load can ask at once): it resolves once
+  // the session is known, including a login that came back through the address (authUrl.ts).
+  const readyP = useRef<Promise<SupabaseClient> | null>(null);
+  const ensureClient = useCallback(() => {
+    readyP.current ??= (async () => {
+      const c = await getClient();
       clientRef.current = c;
       c.auth.onAuthStateChange((_event, s) => {
         sessionRef.current = s;
         setSession(s);
       });
-      // Waits for a login redirect (?code=…) to be exchanged for a session.
+      const failed = await finishArrival(c.auth, typeof navigator !== 'undefined' && navigator.onLine === false);
+      if (failed) say(failed);
       const { data } = await c.auth.getSession();
       sessionRef.current = data.session;
       setSession(data.session);
-      const url = new URL(location.href);
-      if (url.searchParams.has('code') || url.searchParams.has('error_description') || url.searchParams.has('error')) {
-        if (url.searchParams.has('error') || url.searchParams.has('error_description')) say('ההתחברות לא הצליחה, נסו שוב');
-        history.replaceState(null, '', `${location.pathname}${location.hash}`);
-      }
-    }
-    return clientRef.current;
+      return c;
+    })().catch((e) => {
+      readyP.current = null;
+      throw e;
+    });
+    return readyP.current;
   }, [say]);
 
   // ---------- the sync loop ----------
@@ -187,7 +190,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   // Load the library only if this phone has (or is finishing) a login, or opened an invite.
   useEffect(() => {
     if (!syncConfigured) return;
-    const params = new URLSearchParams(location.search);
     const pending = (() => {
       try {
         return localStorage.getItem(PENDING_JOIN);
@@ -195,7 +197,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         return null;
       }
     })();
-    if (hasStoredAuth() || params.has('code') || params.has('error_description') || pending) {
+    if (hasStoredAuth() || hasArrival() || pending) {
       ensureClient().catch(() => setSession(null));
     } else {
       setSession(null);
