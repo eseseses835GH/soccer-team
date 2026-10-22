@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { GOOGLE_CLIENT_ID, googleMode, iosHomeScreen, loadGis, makeNonce, secureForGis } from '../sync/googleId';
+import { emailCodes, emailRedirect } from '../sync/authUrl';
+import { GOOGLE_CLIENT_ID, gisUxMode, googleMode, gsiLoginUri, iosHomeScreen, loadGis, makeNonce, saveGsiNonce, secureForGis } from '../sync/googleId';
 import { authErrorText, authProviders, redirectUrl } from '../sync/supabase';
-import { useSync, type LoginReason } from '../sync/SyncProvider';
+import { PENDING_JOIN, useSync, type LoginReason } from '../sync/SyncProvider';
 import { Segmented, Sheet } from './components';
+import { EmailSent } from './EmailSent';
+
+const CODES = emailCodes();
+const pendingJoin = () => {
+  try {
+    return localStorage.getItem(PENDING_JOIN);
+  } catch {
+    return null;
+  }
+};
 
 const LEADS: Record<LoginReason, string> = {
   join: 'קיבלתם הזמנה לקבוצה. כדי להצטרף צריך להתחבר (פעם אחת בטלפון הזה).',
@@ -14,7 +25,7 @@ const LEADS: Record<LoginReason, string> = {
 
 type Method = 'code' | 'password';
 
-/** Login: Google, a one-time code by email, or email + password. */
+/** Login: Google, a link (or code) by email, or email + password. */
 export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose: () => void }) {
   const sync = useSync();
   const [method, setMethod] = useState<Method>('code');
@@ -42,20 +53,27 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
   }, []);
 
   // Google's own button (GIS), loaded only now. A fresh nonce each time the sheet opens: Google
-  // gets its SHA-256, Supabase the raw value, and checks that they match.
+  // gets its SHA-256, Supabase the raw value, and checks that they match. iPhone/iPad and in-app
+  // browsers: a full-page redirect to our /api/gsi instead of the popup (v16); the raw nonce waits
+  // in sessionStorage, and the token comes back as #gsi= (authUrl.ts).
   useEffect(() => {
     if (!useGis) return;
     let live = true;
     Promise.all([loadGis(), makeNonce()])
       .then(([id, nonce]) => {
         if (!live) return;
-        id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          nonce: nonce.hashed,
-          ux_mode: 'popup',
-          auto_select: false,
-          callback: (r) => onCredential.current(r.credential, nonce.raw),
-        });
+        if (gisUxMode(navigator.userAgent, navigator.maxTouchPoints) === 'redirect') {
+          saveGsiNonce(nonce.raw, location.hash);
+          id.initialize({ client_id: GOOGLE_CLIENT_ID, nonce: nonce.hashed, ux_mode: 'redirect', login_uri: gsiLoginUri(), auto_select: false });
+        } else {
+          id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            nonce: nonce.hashed,
+            ux_mode: 'popup',
+            auto_select: false,
+            callback: (r) => onCredential.current(r.credential, nonce.raw),
+          });
+        }
         setGis('ready');
       })
       .catch(() => live && setGis('failed'));
@@ -123,10 +141,10 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
     if (!validEmail) return setError('כתובת המייל לא תקינה');
     run(async () => {
       const c = await sync.client();
-      const { error } = await c.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: redirectUrl() } });
+      // An invite waiting for this login rides along in the link (it may open in another browser).
+      const { error } = await c.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: emailRedirect(redirectUrl(), pendingJoin()) } });
       if (error) throw error;
       setCodeSent(true);
-      setInfo('המייל בדרך. לפעמים זה לוקח דקה; כדאי לבדוק גם בספאם.');
     });
   };
 
@@ -152,11 +170,11 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
         const { error } = await c.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
       } else {
-        const { data, error } = await c.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: redirectUrl() } });
+        const { data, error } = await c.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: emailRedirect(redirectUrl(), pendingJoin()) } });
         if (error) throw error;
         if (!data.session) {
           setMode('in');
-          setInfo('נרשמתם! שלחנו מייל לאישור. אחרי האישור חוזרים לכאן ונכנסים.');
+          setInfo('נרשמתם! שלחנו מייל. לוחצים על הקישור שבו ונכנסים.');
         }
       }
     });
@@ -189,7 +207,7 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
           setInfo(null);
         }}
         options={[
-          { value: 'code', label: 'קישור למייל' },
+          { value: 'code', label: CODES ? 'קוד למייל' : 'קישור למייל' },
           { value: 'password', label: 'מייל וסיסמה' },
         ]}
       />
@@ -198,39 +216,22 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
           <form className="auth-form" onSubmit={sendCode}>
             <input className="input" type="email" inputMode="email" autoComplete="email" dir="ltr" placeholder="name@example.com" aria-label="מייל" value={email} onChange={(e) => setEmail(e.target.value)} />
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-              שליחת קישור למייל
+              {CODES ? 'שליחת קוד למייל' : 'שליחת קישור למייל'}
             </button>
           </form>
         ) : (
-          <form className="auth-form" onSubmit={verifyCode}>
-            <p className="hint">
-              שלחנו מייל אל <bdi dir="ltr">{email.trim()}</bdi>. פותחים אותו <strong>בטלפון הזה</strong> ולוחצים על הקישור, וחוזרים לכאן מחוברים. אם במייל יש קוד, אפשר להקליד אותו כאן:
-            </p>
-            <input
-              className="input input-big code-input"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              dir="ltr"
-              placeholder="123456"
-              aria-label="הקוד מהמייל"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-            <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-              כניסה
-            </button>
-            <button
-              type="button"
-              className="text-btn"
-              onClick={() => {
-                setCodeSent(false);
-                setCode('');
-                setInfo(null);
-              }}
-            >
-              מייל אחר / שליחה מחדש
-            </button>
-          </form>
+          <EmailSent
+            codes={CODES}
+            code={code}
+            busy={busy}
+            onCode={setCode}
+            onVerify={verifyCode}
+            onAgain={() => {
+              setCodeSent(false);
+              setCode('');
+              setInfo(null);
+            }}
+          />
         )
       ) : (
         <form className="auth-form" onSubmit={withPassword}>

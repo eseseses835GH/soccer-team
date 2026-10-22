@@ -26,8 +26,11 @@ let clientP: Promise<SupabaseClient> | null = null;
 export function getClient(): Promise<SupabaseClient> {
   if (!syncConfigured) return Promise.reject(new Error('sync not configured'));
   clientP ??= import('@supabase/supabase-js').then(({ createClient }) =>
+    // Implicit flow (v16): an email link carries the session itself, so it logs in whichever browser
+    // the mail app opens (PKCE only worked in the browser that asked). The address is read and
+    // cleaned by us before the app renders (authUrl.ts), so the library doesn't look at it.
     createClient(URL_, KEY, {
-      auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      auth: { flowType: 'implicit', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
     }),
   );
   return clientP;

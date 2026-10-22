@@ -1332,6 +1332,149 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await fctx.close();
 }
 
+// 14b. Login fixes from a real iPhone (v16), on a mocked Supabase and Google.
+// Email link: asked for in one browser, opened in another (implicit flow: the session is in the
+// link) → logged in there, the address cleaned, the invite that rode along joined. An expired link
+// says so. iPhone Safari: Google's button redirects to our /api/gsi (the real handler, api/gsi.ts),
+// which hands the token back as #gsi= → id_token grant with the raw nonce. A refused token or a
+// failed CSRF check says so in Hebrew, never a blank page.
+{
+  const { handleGsi } = await import('./gsi-route.mjs');
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const exp = () => Math.floor(Date.now() / 1000) + 3600;
+  const UID = '00000000-0000-4000-8000-0000000000ee';
+  const user = { id: UID, aud: 'authenticated', role: 'authenticated', email: 'link@example.test', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: '2026-10-21T10:00:00Z' };
+  const jwt = () => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: UID, exp: exp(), role: 'authenticated', aud: 'authenticated' })}.c2ln`;
+  const GID = '33333333-4444-4555-8666-777777777777';
+  const sbMock = async (target, s) => {
+    await target.routeWebSocket(/supabase\.co/, () => {});
+    await target.route(/supabase\.co/, async (route) => {
+      const req = route.request();
+      const u = new URL(req.url());
+      const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+      if (u.pathname.endsWith('/auth/v1/settings')) return json({ external: { google: true, email: true } });
+      if (u.pathname.endsWith('/auth/v1/otp')) {
+        s.otp = { body: req.postDataJSON(), redirectTo: u.searchParams.get('redirect_to') };
+        return json({});
+      }
+      if (u.pathname.endsWith('/auth/v1/user')) return json(user);
+      if (u.pathname.endsWith('/auth/v1/token') && u.searchParams.get('grant_type') === 'id_token') {
+        s.idToken = req.postDataJSON();
+        if (s.refuse) return json({ code: 400, error_code: 'bad_jwt', msg: 'Passed nonce and nonce in id_token should either both exist or not.' }, 400);
+        return json({ access_token: jwt(), refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: exp(), user: { ...user, app_metadata: { provider: 'google' } } });
+      }
+      if (u.pathname.endsWith('/rpc/join_group')) {
+        s.joined = req.postDataJSON();
+        return json([{ group_id: GID, name: 'מהמייל', role: 'organizer' }]);
+      }
+      if (u.pathname.endsWith('/rest/v1/groups')) {
+        if (req.method() === 'GET') return json({ id: GID, name: 'מהמייל', version: 1, data: { v: 1, players: [], constraints: { together: [], apart: [] } } });
+        return json([{ version: 2 }]);
+      }
+      return json(null);
+    });
+  };
+  const sessionStored = (pg) => pg.evaluate(() => Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k)));
+
+  // Safari asks for the link (an invite is waiting)…
+  const s = {};
+  const actx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  await actx.route('https://accounts.google.com/**', (r) => r.abort());
+  await sbMock(actx, s);
+  const ap = await actx.newPage();
+  ap.on('pageerror', (e) => errors.push(`email link: ${e.message}`));
+  await ap.goto(base + '#join=MAILTOK');
+  const sheet = ap.getByRole('dialog', { name: 'התחברות' });
+  await sheet.getByLabel('מייל', { exact: true }).fill('link@example.test');
+  await sheet.getByRole('button', { name: 'שליחת קישור למייל' }).click();
+  await sheet.getByText('שלחנו מייל. פותחים אותו ולוחצים על הקישור').waitFor({ timeout: 5000 }).catch(() => errors.push('email link: no "sent" line'));
+  assert(await sheet.getByText('אם הקישור נפתח בדפדפן אחר — ההתחברות תהיה שם.').isVisible(), 'email link: the other-browser line');
+  assert(!(await sheet.getByLabel('הקוד מהמייל').count()), 'email link: no code field without VITE_EMAIL_CODE');
+  assert(s.otp && !s.otp.body.code_challenge, `email link: implicit flow, no PKCE challenge (${JSON.stringify(s.otp?.body)})`);
+  assert(s.otp?.redirectTo === `${base}?join=MAILTOK`, `email link: the invite rides along (${s.otp?.redirectTo})`);
+  await actx.close();
+
+  // …the mail app opens it in another browser (fresh storage).
+  const bctx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  await bctx.route('https://accounts.google.com/**', (r) => r.abort());
+  await sbMock(bctx, s);
+  const bp = await bctx.newPage();
+  bp.on('pageerror', (e) => errors.push(`email link (other browser): ${e.message}`));
+  await bp.goto(`${s.otp?.redirectTo ?? base}#access_token=${jwt()}&expires_at=${exp()}&expires_in=3600&refresh_token=r&token_type=bearer&type=magiclink`);
+  const firstUrl = await bp.evaluate(() => location.href);
+  assert(!/access_token|refresh_token/.test(firstUrl), `email link: the tokens leave the address at once (${firstUrl})`);
+  await bp.getByText('הצטרפתם לקבוצה ״מהמייל״').waitFor({ timeout: 10000 }).catch(() => errors.push('email link: the invite is not joined in the other browser'));
+  assert(s.joined?.p_token === 'MAILTOK', `email link: joined ${JSON.stringify(s.joined)}`);
+  assert(await sessionStored(bp), 'email link: logged in in the other browser');
+  assert(!(await bp.getByRole('dialog', { name: 'התחברות' }).count()), 'email link: no login sheet after the link');
+  assert(!/access_token|join=/.test(await bp.evaluate(() => location.href)), 'email link: address clean');
+  await bctx.close();
+
+  // An expired / already used link.
+  const ectx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  await sbMock(ectx, {});
+  const ep = await ectx.newPage();
+  ep.on('pageerror', (e) => errors.push(`expired link: ${e.message}`));
+  await ep.goto(`${base}#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`);
+  await ep.getByText('הקישור פג תוקף או שכבר השתמשו בו. שלחו קישור חדש').waitFor({ timeout: 8000 }).catch(() => errors.push('expired link: no message'));
+  assert(!/error/.test(await ep.evaluate(() => location.href)), 'expired link: address clean');
+  await ectx.close();
+
+  // iPhone Safari: Google's button in redirect mode → POST /api/gsi → #gsi= → id_token grant.
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+  const gisStub = `window.__gis = { inits: [] };
+    window.google = { accounts: { id: {
+      initialize(c) { window.__gis.inits.push({ client_id: c.client_id, nonce: c.nonce, ux_mode: c.ux_mode, login_uri: c.login_uri, callback: typeof c.callback }); localStorage.setItem('__gisInit', JSON.stringify(window.__gis.inits.at(-1))); },
+      renderButton(el) { el.textContent = ''; const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Google (stub)';
+        b.onclick = () => { const c = window.__gis.inits.at(-1); document.cookie = 'g_csrf_token=' + (window.__csrfCookie ?? 'csrf1') + '; path=/';
+          const f = document.createElement('form'); f.method = 'POST'; f.action = c.login_uri;
+          for (const [k, v] of [['credential', 'stub.ios.token'], ['g_csrf_token', 'csrf1']]) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); }
+          document.body.appendChild(f); f.submit(); };
+        el.appendChild(b); },
+    } } };`;
+  const iosRun = async (label, opts) => {
+    const st = { refuse: !!opts.refuse };
+    const ictx = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: IPHONE, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+    await ictx.route('https://accounts.google.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: gisStub }));
+    await ictx.route('**/api/gsi', (r) => handleGsi(r, st));
+    await sbMock(ictx, st);
+    const ip = await ictx.newPage();
+    ip.on('pageerror', (e) => errors.push(`${label}: ${e.message}`));
+    if (opts.badCookie) await ip.addInitScript(() => (window.__csrfCookie = 'other'));
+    await ip.goto(base + '#settings');
+    await ip.getByRole('button', { name: 'התחברות', exact: true }).click();
+    await ip.getByRole('button', { name: 'Google (stub)' }).click({ timeout: 10000 });
+    await ip.waitForURL((u) => !u.pathname.startsWith('/api/'), { timeout: 10000 }).catch(() => errors.push(`${label}: stuck on /api/gsi`));
+    await ip.waitForTimeout(300);
+    const r = { ip, ictx, st, init: await ip.evaluate(() => JSON.parse(localStorage.getItem('__gisInit') ?? 'null')), url: await ip.evaluate(() => location.href) };
+    assert(r.init?.ux_mode === 'redirect' && r.init?.login_uri === new URL('/api/gsi', base).href && r.init?.callback === 'undefined', `${label}: GIS redirect mode ${JSON.stringify(r.init)}`);
+    assert(!/gsi/.test(r.url) && r.url.endsWith('#settings'), `${label}: back on the same screen, address clean (${r.url})`);
+    assert(st.gsi?.status === 303 && st.gsi?.cacheControl === 'no-store', `${label}: /api/gsi answered ${JSON.stringify(st.gsi)}`);
+    return r;
+  };
+  {
+    const { ip, ictx, st, init } = await iosRun('ios google', {});
+    await ip.waitForFunction(() => Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k)), null, { timeout: 10000 }).catch(() => errors.push('ios google: not logged in'));
+    assert(st.idToken?.provider === 'google' && st.idToken?.id_token === 'stub.ios.token', `ios google: id_token grant ${JSON.stringify(st.idToken)}`);
+    assert(!!st.idToken?.nonce && createHash('sha256').update(st.idToken.nonce).digest('hex') === init?.nonce, 'ios google: raw nonce (kept across the redirect) to Supabase, its SHA-256 to Google');
+    await ip.getByText('יציאה מהחשבון').first().waitFor({ timeout: 5000 }).catch(() => errors.push('ios google: settings do not show the account'));
+    await ictx.close();
+    console.log('ios google: redirect → /api/gsi → id_token + nonce ok');
+  }
+  {
+    const { ip, ictx } = await iosRun('ios google refused', { refuse: true });
+    await ip.getByText('ההתחברות עם Google לא הצליחה. נסו שוב, או התחברו עם מייל').waitFor({ timeout: 8000 }).catch(() => errors.push('ios google refused: no Hebrew message'));
+    assert((await ip.locator('#root > *').count()) > 0 && !(await sessionStored(ip)), 'ios google refused: the app is on screen, not logged in');
+    await ictx.close();
+  }
+  {
+    const { ip, ictx, st } = await iosRun('ios google csrf', { badCookie: true });
+    await ip.getByText('ההתחברות עם Google לא הצליחה. נסו שוב, או התחברו עם מייל').waitFor({ timeout: 8000 }).catch(() => errors.push('ios google csrf: no Hebrew message'));
+    assert(!st.idToken, 'ios google csrf: no token sent to Supabase');
+    await ictx.close();
+  }
+}
+
 // 14. A player runs the match from his phone (v12), on a mocked Supabase: take control (asks first,
 // since the organizer runs it) → match controls → a goal is published with the rev → reload resumes →
 // "stop" → viewer; again, then the organizer takes it back → the next write conflicts → viewer + toast.

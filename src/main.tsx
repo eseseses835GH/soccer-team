@@ -5,19 +5,26 @@ import { SyncProvider } from './sync/SyncProvider';
 import { PlayerGroupProvider } from './sync/PlayerGroupProvider';
 import { RunnerProvider } from './sync/RunnerProvider';
 import { App } from './ui/App';
+import { Crash } from './ui/Crash';
+import { captureAuthArrival } from './sync/authUrl';
 import './styles.css';
+
+// A login coming back through the address (email link, Google): read it and clean the URL first.
+captureAuthArrival();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <StoreProvider>
-      <SyncProvider>
-        <PlayerGroupProvider>
-          <RunnerProvider>
-            <App />
-          </RunnerProvider>
-        </PlayerGroupProvider>
-      </SyncProvider>
-    </StoreProvider>
+    <Crash>
+      <StoreProvider>
+        <SyncProvider>
+          <PlayerGroupProvider>
+            <RunnerProvider>
+              <App />
+            </RunnerProvider>
+          </PlayerGroupProvider>
+        </SyncProvider>
+      </StoreProvider>
+    </Crash>
   </StrictMode>,
 );
 

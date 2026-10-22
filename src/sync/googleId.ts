@@ -21,11 +21,12 @@ export interface GisButtonOptions {
 export interface GisId {
   initialize(config: {
     client_id: string;
-    callback: (r: { credential?: string }) => void;
+    callback?: (r: { credential?: string }) => void;
     nonce?: string;
     auto_select?: boolean;
     cancel_on_tap_outside?: boolean;
     ux_mode?: 'popup' | 'redirect';
+    login_uri?: string;
     use_fedcm_for_button?: boolean;
   }): void;
   renderButton(parent: HTMLElement, options: GisButtonOptions): void;
@@ -61,6 +62,46 @@ export function secureForGis(): boolean {
 /** Opened from the iOS home screen (Safari's `navigator.standalone`). */
 export function iosHomeScreen(): boolean {
   return typeof navigator !== 'undefined' && (navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+
+/**
+ * How Google's button reports back. Popup everywhere it works; a full-page redirect where the popup
+ * can't talk to our page: every browser on iPhone/iPad (all WebKit: Safari's popup + ITP left a white
+ * accounts.google.com page) and in-app browsers (WhatsApp, Instagram, Facebook, Android WebView).
+ * The redirect lands on our own /api/gsi (api/gsi.ts), which hands the token back to the app.
+ */
+export function gisUxMode(ua: string, maxTouchPoints = 0): 'popup' | 'redirect' {
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && maxTouchPoints > 1); // iPadOS says "Macintosh"
+  const inApp = /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|; wv\)/.test(ua);
+  return ios || inApp ? 'redirect' : 'popup';
+}
+
+/** Where Google posts the token in redirect mode (must be in the client's Authorized redirect URIs). */
+export const gsiLoginUri = () => `${location.origin}/api/gsi`;
+
+const GSI_KEY = 'kochot:gsi';
+const GSI_TTL_MS = 15 * 60_000;
+
+/** Before Google's page opens: the raw nonce (Supabase checks it) and where to come back to. */
+export function saveGsiNonce(raw: string, back: string, now = Date.now()): void {
+  try {
+    sessionStorage.setItem(GSI_KEY, JSON.stringify({ raw, back, at: now }));
+  } catch {
+    /* storage off: Supabase will refuse the token, and the app says so */
+  }
+}
+
+/** Read once, when the token comes back. */
+export function takeGsiNonce(now = Date.now()): { raw: string; back: string } | null {
+  try {
+    const v = sessionStorage.getItem(GSI_KEY);
+    sessionStorage.removeItem(GSI_KEY);
+    const o = v ? (JSON.parse(v) as { raw?: unknown; back?: unknown; at?: unknown }) : null;
+    if (!o || typeof o.raw !== 'string' || typeof o.at !== 'number' || now - o.at > GSI_TTL_MS) return null;
+    return { raw: o.raw, back: typeof o.back === 'string' && o.back.startsWith('#') ? o.back : '' };
+  } catch {
+    return null;
+  }
 }
 
 const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
