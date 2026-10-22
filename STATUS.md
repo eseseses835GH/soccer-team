@@ -229,3 +229,6 @@
 # v15: late and left for a player runner
 - **Built:** a player running the match also has "מישהו הגיע?" (roster or bench only, no new players, no rating-based suggestions) and "מישהו עזב?" (he picks a sub or the team plays short). The organizer's take-back keeps it all. See DECISIONS → "Late and left for a player runner (v15)".
 - **Tested:** unit (`src/sync/runnerLate.test.ts`, incl. the round trip), e2e block 14b, screenshots p12–p12d.
+
+# v15: bench add and leave cases
+- **Built:** tap a sub → "להוסיף לקבוצה…" → pick a team; he joins without anyone going out (3×3 → 4×3). Left early now follows the case shown in one line on the confirm step: a sub just goes; on the pitch mid-match a sub comes in now or "משחקים חסר", never a swap; otherwise a sub, else a swap that never touches the pitch or the next team in. See DECISIONS → Bench add and leave cases (v15).

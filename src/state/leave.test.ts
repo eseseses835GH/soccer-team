@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../engine';
 import { addGoal, endMatch, keeperIndex, setBorrow, startClock, startSession, type MatchState } from '../match/match';
 import { teamMembers } from './history';
-import { keepKeeper, leaveEarly, suggestAfterLeave, type LeaveCtx } from './leave';
+import { keepKeeper, leaveCase, leaveEarly, lockedAfterLeave, suggestAfterLeave, type LeaveCtx } from './leave';
 import { INITIAL_STATE, defaultAttrs, type AppState, type GameResult, type Player } from './model';
 import { reducer } from './reducer';
 import { isResultStale } from './store';
@@ -181,6 +181,58 @@ describe('left early: the small fix', () => {
     const m = startClock(startSession(2), 0);
     const s = suggestAfterLeave(leaveEarly(r, m, 'a1', ctx)!, ctx);
     expect(s).toMatchObject({ kind: 'sub', subId: 's1', team: 0 });
+  });
+});
+
+describe('left early: by case', () => {
+  const three = () => result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 's3']], 3);
+  const four = () => result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 's3'], ['s1', 's2']], 3);
+  const five = () => [...roster, p('x1', 9), p('x2', 2), p('x3', 5)];
+
+  it('names the case: a sub, his team on the pitch mid-match, or off the pitch / between matches', () => {
+    const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 's3']], 3, ['s1']);
+    const live = startClock(startSession(3), 0);
+    expect(leaveCase(r, live, 's1')).toBe('sub');
+    expect(leaveCase(r, live, 'a1')).toBe('live');
+    expect(leaveCase(r, live, 'c1')).toBe('off');
+    expect(leaveCase(r, startSession(3), 'a1')).toBe('off');
+    expect(leaveCase(r, null, 'a1')).toBe('off');
+    expect(leaveCase(r, null, 'zz')).toBeNull();
+  });
+
+  it('a sub who leaves: nothing is offered', () => {
+    const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3']], 3, ['s1', 's2']);
+    for (const m of [null, startClock(startSession(2), 0)]) expect(suggestAfterLeave(leaveEarly(r, m, 's1', ctx)!, ctx)).toBeNull();
+  });
+
+  it('on the pitch mid-match with a sub: the best sub comes in now; without one they play short, no swap', () => {
+    const live = startClock(startSession(3), 0);
+    const withSub = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 's3']], 3, ['s1']);
+    expect(suggestAfterLeave(leaveEarly(withSub, live, 'b1', ctx)!, ctx)).toMatchObject({ kind: 'sub', subId: 's1', team: 1 });
+    expect(suggestAfterLeave(leaveEarly(three(), live, 'b1', ctx)!, ctx)).toBeNull();
+  });
+
+  it('between matches: locks the two on the pitch and the next one in', () => {
+    // After match 1 (team 1 lost): on the pitch 0 and 2, next in 3, then 1.
+    const m = endMatch(addGoal(startSession(4), 0, 1), 1, 2);
+    expect(lockedAfterLeave(m).sort()).toEqual([0, 2, 3]);
+    expect(lockedAfterLeave(null)).toEqual([]);
+    // 4 teams: 3 locked → no swap is possible at all.
+    expect(suggestAfterLeave(leaveEarly(four(), m, 's1', ctx)!, ctx)).toBeNull();
+    // 5 teams (queue 3, 4, 1): a swap may only touch teams 4 and 1.
+    const r5 = result([['a1', 'a2'], ['b1', 'b2', 'b3'], ['c1', 'c2', 's3'], ['s1', 'a3', 'x3'], ['x1', 'x2', 's2']], 3);
+    const m5 = endMatch(addGoal(startSession(5), 0, 1), 1, 2);
+    const l5 = leaveEarly(r5, m5, 'x1', { ...ctx, players: five() })!;
+    const s = suggestAfterLeave(l5, { ...ctx, players: five() });
+    if (s?.kind === 'swaps') for (const [i, j] of s.swaps.swaps) for (const x of [i, j]) expect([1, 4]).toContain(l5.result.assignment[x]);
+    // His team is the next one in: nothing.
+    expect(suggestAfterLeave(leaveEarly(r5, m5, 's1', { ...ctx, players: five() })!, { ...ctx, players: five() })).toBeNull();
+  });
+
+  it('a sub is preferred when one waits, even for a locked team', () => {
+    const m = endMatch(addGoal(startSession(3), 0, 1), 1, 2);
+    const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 's3']], 3, ['s1']);
+    expect(suggestAfterLeave(leaveEarly(r, m, 'b2', ctx)!, ctx)).toMatchObject({ kind: 'sub', subId: 's1', team: 1 });
   });
 });
 

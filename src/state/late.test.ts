@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../engine';
 import { addGoal, endMatch, keeperIndex, setBorrow, startClock, startSession } from '../match/match';
 import { teamMembers } from './history';
-import { lateJoin, nowTarget, suggestAfterLate } from './late';
+import { addFromBench, lateJoin, nowTarget, suggestAfterLate } from './late';
 import type { LeaveCtx } from './leave';
 import { INITIAL_STATE, defaultAttrs, type AppState, type GameResult, type Player } from './model';
 import { reducer } from './reducer';
@@ -159,5 +159,48 @@ describe('late arrival: reducer', () => {
     expect(s.result!.numTeams).toBe(3);
     expect(s.match!.queue).toEqual([2]);
     expect(s.match!.onPitch).toEqual([0, 1]);
+  });
+});
+
+describe('bench: add a sub to a team on request', () => {
+  it('3×3 → 4×3: he joins, nobody goes out, he is last in the keeper rotation', () => {
+    const r = result([['a', 'b', 'c'], ['d', 'e', 'f']], 4, ['x']);
+    const { result: out } = addFromBench(r, null, 'x', 0, ctx);
+    expect(sizes(out)).toEqual([4, 3]);
+    expect(out.subIds).toEqual([]);
+    expect(out.gkOrder[0]).toEqual(['a', 'b', 'c', 'x']);
+    expect(teamMembers(out, 1)).toEqual(['d', 'e', 'f']);
+  });
+
+  it('mid-match into the team on the pitch: joins now, the keeper in goal stays, the match record has him', () => {
+    const r = result([['a', 'b', 'c'], ['d', 'e', 'f']], 4, ['x']);
+    let m = startClock(startSession(2), 0);
+    m = addGoal(m, 0, 1); // team 1 conceded 1 → e in goal
+    const a = addFromBench(r, m, 'x', 1, ctx);
+    const order = a.result.gkOrder[1];
+    expect(order[keeperIndex(1, 1, order.length)]).toBe('e');
+    expect(order).toContain('x');
+    let s: AppState = { ...INITIAL_STATE, players: roster, teamSize: 4, presentIds: [...r.playerIds, 'x'], result: r, match: m };
+    s = reducer(s, { type: 'addFromBench', subId: 'x', team: 1 });
+    expect(isResultStale(s)).toBe(false);
+    s = reducer(s, { type: 'setMatch', match: endMatch(s.match!, 1, 2), now: 2 });
+    expect(s.match!.history[0].sides![1]).toContain('x');
+  });
+
+  it('into a short team with borrowers: he takes a borrower’s place', () => {
+    const r = result([['a', 'b', 'c'], ['d', 'e', 'f'], ['g', 'h']], 3, ['x']);
+    let m = endMatch(addGoal(startSession(3), 0, 1), 1, 2);
+    m = setBorrow(m, { team: 2, from: 1, ids: ['d'] });
+    const a = addFromBench(r, m, 'x', 2, ctx);
+    expect(sizes(a.result)).toEqual([3, 3, 3]);
+    expect(a.match!.borrow).toBeNull();
+  });
+
+  it('not a sub or no such team: nothing changes', () => {
+    const r = result([['a', 'b'], ['d', 'e']], 3, ['x']);
+    expect(addFromBench(r, null, 'a', 1, ctx).result).toBe(r);
+    expect(addFromBench(r, null, 'x', 5, ctx).result).toBe(r);
+    const s: AppState = { ...INITIAL_STATE, players: roster, teamSize: 3, presentIds: [...r.playerIds, 'x'], result: r };
+    expect(reducer(s, { type: 'addFromBench', subId: 'zz', team: 0 })).toBe(s);
   });
 });
