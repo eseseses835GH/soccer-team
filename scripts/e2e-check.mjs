@@ -1,5 +1,6 @@
 // Functional smoke test of the main flows against `vite preview` (see README).
 import { chromium } from '@playwright/test';
+import { quietWelcome } from './no-welcome.mjs';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -9,7 +10,7 @@ import { cloudRoutes, cloudServer, loginInSheet } from './cloud-mock.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const browser = await chromium.launch({ executablePath: exe });
+const browser = quietWelcome(await chromium.launch({ executablePath: exe }));
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['clipboard-read', 'clipboard-write'] });
 const page = await ctx.newPage();
 const errors = [];
@@ -1737,6 +1738,33 @@ if (SB_URL) {
   assert(!/4567|4321/.test(JSON.stringify(ws.calls)), 'wa: a phone number was sent to the server');
   console.log(`whatsapp: ${(await roster()).length} players (zip, share target, contacts)`);
   await wctx.close();
+}
+
+// 20. First visit: "פעם ראשונה בכוחות?" once, then never again; not when arriving through an invite.
+{
+  const wc = await browser.newContext({ viewport: { width: 390, height: 844 }, welcome: true });
+  const wp = await wc.newPage();
+  wp.on('pageerror', (e) => errors.push(e.message));
+  await wp.goto(base);
+  const sheet = wp.getByRole('dialog', { name: /פעם ראשונה בכוחות/ });
+  assert(await sheet.isVisible(), 'welcome: shown on the first visit');
+  assert((await sheet.locator('.welcome-steps li').count()) === 3, 'welcome: three steps');
+  await sheet.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  assert((await wp.locator('ul.attend li').count()) > 0, 'welcome: the sample squad loads from the sheet');
+  await wp.evaluate(() => {
+    const k = Object.keys(localStorage).filter((x) => x.startsWith('kochot:group'));
+    k.forEach((x) => localStorage.removeItem(x));
+    localStorage.removeItem('kochot:groups');
+  });
+  await wp.reload();
+  assert((await wp.getByRole('dialog', { name: /פעם ראשונה בכוחות/ }).count()) === 0, 'welcome: never again on this phone');
+  await wc.close();
+  const jc = await browser.newContext({ viewport: { width: 390, height: 844 }, welcome: true });
+  const jp = await jc.newPage();
+  await jp.goto(base + '#join=SOMETOKEN');
+  await jp.waitForTimeout(500);
+  assert((await jp.getByRole('dialog', { name: /פעם ראשונה בכוחות/ }).count()) === 0, 'welcome: not shown when arriving through an invite');
+  await jc.close();
 }
 
 console.log(`split 22 players in ${dt}ms`);

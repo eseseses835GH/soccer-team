@@ -2,10 +2,11 @@
 // kick-off whistle once (not on resume), horn on a goal (no speech at all), one full-time
 // whistle per match (time-up or the end tap, never both), and nothing when muted.
 import { chromium } from '@playwright/test';
+import { quietWelcome } from './no-welcome.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const browser = await chromium.launch({ executablePath: exe });
+const browser = quietWelcome(await chromium.launch({ executablePath: exe }));
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'he-IL' });
 await ctx.addInitScript(() => {
   // Every started oscillator, with its type, start and stop time on the audio clock.

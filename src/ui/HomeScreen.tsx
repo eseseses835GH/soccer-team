@@ -7,6 +7,7 @@ import { shouldOfferInstall } from '../state/install';
 import { CardBadges, Empty, Sheet } from './components';
 import { InstallCard, useInstall } from './InstallPrompt';
 import { LateSheet } from './LateSheet';
+import { Welcome, shouldWelcome } from './Welcome';
 import { splitTeams } from './split';
 import { useLiveControl } from '../sync/OrganizerSync';
 import { runnerLine } from './LiveControl';
@@ -33,6 +34,7 @@ export function HomeScreen() {
   const { state, dispatch } = useStore();
   const { go, notify } = useUi();
   const { viewer } = useLiveControl();
+  const [welcome, setWelcome] = useState(() => shouldWelcome(state.players.length));
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
   const [confirmResplit, setConfirmResplit] = useState(false);
@@ -77,6 +79,20 @@ export function HomeScreen() {
 
   if (state.players.length === 0) {
     return (
+      <>
+      {welcome && (
+        <Welcome
+          onStart={() => {
+            setWelcome(false);
+            go('players');
+          }}
+          onSample={() => {
+            setWelcome(false);
+            dispatch({ type: 'loadSample', now: now() });
+          }}
+          onClose={() => setWelcome(false)}
+        />
+      )}
       <Empty icon="👟" title="בואו נכיר את החבר׳ה">
         <p>מוסיפים כל אחד פעם אחת. אחר כך רק מסמנים מי הגיע, והקבוצות מתחלקות לבד.</p>
         <div className="stack narrow">
@@ -88,6 +104,7 @@ export function HomeScreen() {
           </button>
         </div>
       </Empty>
+      </>
     );
   }
 

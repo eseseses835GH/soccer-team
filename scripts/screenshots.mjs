@@ -1,6 +1,7 @@
 // Visual smoke test: drives the built app at a 390px mobile viewport and saves screenshots.
 // Usage: npm run build && npx vite preview --port 4173 & npm run screenshots -- [outDir]
 import { chromium } from '@playwright/test';
+import { quietWelcome } from './no-welcome.mjs';
 import { mkdirSync } from 'node:fs';
 import { ORG, playerContext, SB_URL } from './player-mock.mjs';
 import { groupState, liveServer, organizerRoutes, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
@@ -11,7 +12,7 @@ const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 mkdirSync(out, { recursive: true });
 
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const browser = await chromium.launch({ executablePath: exe });
+const browser = quietWelcome(await chromium.launch({ executablePath: exe }));
 const errors = [];
 
 for (const scheme of ['light', 'dark']) {

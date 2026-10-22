@@ -2936,3 +2936,12 @@ thead th {
 .leave-case {
   margin: 0 0 4px;
 }
+
+/* ---------- first visit ---------- */
+.welcome-steps {
+  margin: 4px 0 18px;
+  padding-inline-start: 22px;
+  display: grid;
+  gap: 10px;
+  line-height: 1.5;
+}
