@@ -110,6 +110,8 @@ export interface LiveData {
   teamSize: number;
   /** Everyone tonight (teams, subs, borrowed) with the name at the time. */
   players: { id: string; name: string }[];
+  /** v15: who played earlier tonight (in a finished match or the current one) and left since, with the name at the time. */
+  gone?: { id: string; name: string }[];
   teams: LiveTeam[];
   /** Present but not on a team. */
   subs: string[];
@@ -214,6 +216,10 @@ export function liveFromState({ result: r, match: m, players, settings, now }: L
         ...(h.sides && !sameSides(h.sides, teams, h.a, h.b, h.borrow) ? { sides: [[...h.sides[0]], [...h.sides[1]]] as [string[], string[]] } : {}),
       })),
     };
+    // Left during the evening: still named in the matches played (sides, scorers), no longer tonight.
+    const was = new Set([...m.history.flatMap((h) => [...(h.sides?.flat() ?? []), ...h.goals.map((g) => g.scorerId)]), ...m.goals.map((g) => g.scorerId)]);
+    const gone = players.filter((p) => was.has(p.id) && !tonight.has(p.id)).map((p) => ({ id: p.id, name: p.name }));
+    if (gone.length) out.gone = gone;
   }
   return out;
 }
@@ -248,11 +254,15 @@ export function sanitizeLive(raw: unknown): LiveData | null {
     return { bib: typeof o.bib === 'string' ? o.bib : `n${i + 1}`, ids, keeper: typeof o.keeper === 'string' && ids.includes(o.keeper) ? o.keeper : null };
   });
   const k = teams.length - 1;
-  const players = (Array.isArray(r.players) ? r.players : [])
-    .map(rec)
-    .filter((p): p is Record<string, unknown> => !!p && typeof p.id === 'string' && typeof p.name === 'string')
-    .map((p) => ({ id: p.id as string, name: p.name as string }));
+  const named = (v: unknown) =>
+    (Array.isArray(v) ? v : [])
+      .map(rec)
+      .filter((p): p is Record<string, unknown> => !!p && typeof p.id === 'string' && typeof p.name === 'string')
+      .map((p) => ({ id: p.id as string, name: p.name as string }));
+  const players = named(r.players);
   const out: LiveData = { v: 1, at: int(r.at) ?? 0, teamSize: int(r.teamSize, 1, 50) ?? 5, players, teams, subs: strs(r.subs), match: null };
+  const gone = named(r.gone);
+  if (gone.length) out.gone = gone;
   if (int(r.createdAt) !== null) out.createdAt = r.createdAt as number;
   const ru = rec(r.rules);
   if (ru) {

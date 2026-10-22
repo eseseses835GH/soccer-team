@@ -642,6 +642,36 @@ for (const scheme of ['light', 'dark']) {
     await rp.getByText('הניהול עבר לאלי').waitFor();
     await rshot('p11-run-lost');
     await rctx.close();
+
+    // v15: the runner marks arrivals and leaves (ליאור isn't here tonight).
+    const { ctx: lctx, page: lp, db: ldb } = await playerContext(browser, { scheme, me: 'p3', canRate: false, live: true });
+    lp.on('pageerror', (e) => errors.push(`${scheme} runner late: ${e.message}`));
+    ldb.data.teams[2].ids = ldb.data.teams[2].ids.filter((id) => id !== 'p12');
+    ldb.data.players = ldb.data.players.filter((p) => p.id !== 'p12');
+    const lshot = async (name, full = false) => {
+      await lp.waitForTimeout(250);
+      await lp.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: full });
+      const sw = await lp.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    await lp.goto(base);
+    await lp.waitForSelector('.live');
+    await lp.getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+    await lp.getByRole('dialog').getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+    await lp.waitForSelector('.clock-ctrl');
+    await lp.getByRole('button', { name: 'מישהו הגיע?' }).scrollIntoViewIfNeeded();
+    await lshot('p12-runner-links');
+    await lp.getByRole('button', { name: 'מישהו הגיע?' }).click();
+    await lshot('p12b-runner-late-pick');
+    await lp.getByRole('dialog').getByRole('button', { name: 'ליאור' }).click();
+    await lshot('p12c-runner-late-choose');
+    await lp.getByRole('dialog').getByRole('button', { name: /^נכנס עכשיו/ }).click();
+    await lp.getByText('ליאור השלים').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+    await lp.getByRole('button', { name: 'מישהו עזב?' }).click();
+    await lp.getByRole('dialog').getByRole('button', { name: 'יוסי' }).click();
+    await lp.getByRole('dialog').getByRole('button', { name: 'כן, הוא עזב' }).click();
+    await lshot('p12d-runner-leave-sub');
+    await lctx.close();
   }
 }
 await browser.close();

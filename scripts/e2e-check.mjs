@@ -1353,7 +1353,8 @@ if (SB_URL) {
   await rp.getByRole('dialog').getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
   await rp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('runner: no controls after taking control'));
   assert(db.runner === ME && db.rev === 5, `runner: take_control ${db.runner} ${db.rev}`);
-  for (const gone of ['סיום הערב', 'מישהו הגיע?', 'מישהו עזב?']) assert(!(await rp.getByRole('button', { name: gone }).count()), `runner: "${gone}" shown to a player`);
+  assert(!(await rp.getByRole('button', { name: 'סיום הערב' }).count()), 'runner: "סיום הערב" shown to a player');
+  for (const link of ['מישהו הגיע?', 'מישהו עזב?']) assert(await rp.getByRole('button', { name: link }).count(), `runner: "${link}" missing (v15)`);
   await rp.locator('.btn-goal').first().click();
   await rp.getByRole('dialog').getByRole('button', { name: 'גיל' }).click();
   await waitFor(() => db.sets.length === 1, `goal not published (${db.sets.length})`);
@@ -1389,6 +1390,46 @@ if (SB_URL) {
   assert((await stored()) === null, 'runner: local evening kept after losing control');
   console.log(`runner: ${db.sets.length} live writes, revs ${db.sets.map((x) => x.rev).join(',')}`);
   await rctx.close();
+}
+
+// 14b. A player runner marks arrivals and leaves (v15): roster only (no new players), the smallest
+// team, no rating-based suggestions; everything goes out in the live snapshot.
+if (SB_URL) {
+  const { ctx: lctx, page: lp, db } = await playerContext(browser, { me: 'p3', canRate: false });
+  lp.on('pageerror', (e) => errors.push(`runner late: ${e.message}`));
+  // ליאור (p12) isn't here tonight: yellow plays one short.
+  db.data.teams[2].ids = db.data.teams[2].ids.filter((id) => id !== 'p12');
+  db.data.players = db.data.players.filter((p) => p.id !== 'p12');
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 40 && !fn(); i++) await lp.waitForTimeout(100);
+    assert(fn(), `runner late: ${what}`);
+  };
+  await lp.goto(base);
+  await lp.waitForSelector('.live');
+  await lp.getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+  await lp.getByRole('dialog').getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
+  await lp.locator('.clock-ctrl').waitFor({ timeout: 5000 });
+  await lp.getByRole('button', { name: 'מישהו הגיע?' }).click();
+  const sheet = lp.getByRole('dialog');
+  await sheet.getByText('שחקן חדש? המארגן מוסיף אותו').waitFor({ timeout: 3000 }).catch(() => errors.push('runner late: no "new player" line'));
+  assert(!(await sheet.locator('input').count()), 'runner late: a new-player form for a player');
+  assert(await sheet.getByRole('button', { name: 'מתן' }).count(), 'runner late: the bench not offered');
+  await sheet.getByRole('button', { name: 'ליאור' }).click();
+  await sheet.getByRole('button', { name: /^נכנס עכשיו/ }).click();
+  await waitFor(() => db.data.teams[2].ids.includes('p12'), `arrival not published (${JSON.stringify(db.data.teams[2].ids)})`);
+  assert(db.data.players.some((p) => p.id === 'p12'), 'runner late: arrival missing from players');
+  await lp.getByRole('button', { name: 'מישהו עזב?' }).click();
+  await sheet.getByRole('button', { name: 'יוסי' }).click();
+  await sheet.getByRole('button', { name: 'כן, הוא עזב' }).click();
+  await sheet.getByText('להכניס מחליף?').waitFor({ timeout: 3000 }).catch(() => errors.push('runner late: no sub pick after a leave'));
+  assert(!(await sheet.getByText('הכי מתאים').count()) && !(await sheet.getByText('האיזון').count()), 'runner late: a rating-based suggestion');
+  await sheet.getByRole('button', { name: 'להשאיר ככה' }).click();
+  await waitFor(() => !db.data.teams[2].ids.includes('p10'), 'leave not published');
+  assert(db.data.gone?.some((p) => p.id === 'p10'), `runner late: who left not in the snapshot (${JSON.stringify(db.data.gone)})`);
+  assert(db.data.subs.join() === 'p13', `runner late: bench ${db.data.subs}`);
+  assert(!/"(attrs|levelVotes|cards|overall|weaknesses)":/.test(JSON.stringify(db.data)), 'runner late: ratings in the snapshot');
+  console.log(`runner late/left: ${db.sets.length} live writes`);
+  await lctx.close();
 }
 
 // 19. WhatsApp import (v14), logged out on a mocked Supabase: the iPhone .zip export → the names

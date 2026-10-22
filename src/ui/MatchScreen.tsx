@@ -78,8 +78,8 @@ function useWakeLock(on: boolean) {
 }
 
 /**
- * `runner`: a player running the match from his phone (sync/runner.ts) — no late/left, no
- * re-split, no end of the evening; "stop running" instead.
+ * `runner`: a player running the match from his phone (sync/runner.ts) — late/left without
+ * ratings (v15), no re-split, no dominance swap, no end of the evening; "stop running" instead.
  */
 export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {}) {
   const { state, dispatch } = useStore();
@@ -360,19 +360,15 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {})
             <Icon name="undo" size={18} /> ביטול גול אחרון
           </button>
         )}
-        {!runner && (
-          <>
-            <button type="button" className="text-btn" onClick={() => setArriving(true)}>
-              <Icon name="plus" size={18} /> מישהו הגיע?
-            </button>
-            <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
-              <Icon name="leave" size={18} /> מישהו עזב?
-            </button>
-          </>
-        )}
+        <button type="button" className="text-btn" onClick={() => setArriving(true)}>
+          <Icon name="plus" size={18} /> מישהו הגיע?
+        </button>
+        <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
+          <Icon name="leave" size={18} /> מישהו עזב?
+        </button>
       </div>
-      {arriving && <LateSheet onClose={() => setArriving(false)} />}
-      {leaving && <LeaveSheet onClose={() => setLeaving(false)} />}
+      {arriving && <LateSheet onClose={() => setArriving(false)} mode={runner ? 'runner' : undefined} />}
+      {leaving && <LeaveSheet onClose={() => setLeaving(false)} mode={runner ? 'runner' : undefined} />}
 
       <BorrowCard m={m} r={r} set={set} />
 

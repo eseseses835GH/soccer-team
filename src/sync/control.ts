@@ -13,7 +13,7 @@ export interface LiveImport {
   match: MatchState | null;
   /** Team bib ids as on the runner's phone (index-aligned with the teams). */
   bibs: string[];
-  /** Everyone tonight with the name at the time. */
+  /** Everyone tonight with the name at the time, and (v15) whoever played earlier and left. */
   players: { id: string; name: string }[];
 }
 
@@ -80,7 +80,7 @@ export function liveToState(live: LiveData, dfltMs: number | null = null): LiveI
     gkOrder: live.teams.map((t) => [...t.ids]),
     createdAt: live.createdAt ?? live.at,
   };
-  const out: LiveImport = { result, match: null, bibs: live.teams.map((t) => t.bib), players: live.players.map((p) => ({ ...p })) };
+  const out: LiveImport = { result, match: null, bibs: live.teams.map((t) => t.bib), players: [...live.players, ...(live.gone ?? []).filter((g) => !live.players.some((p) => p.id === g.id))].map((p) => ({ ...p })) };
   const lm = live.match;
   if (!lm) return out;
   const history = lm.played.map((h) => recordIn(h, live, live.at));

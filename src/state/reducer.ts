@@ -38,7 +38,7 @@ export type Action =
   /** Someone arrived late (late.ts): he goes in now or waits on the side; nobody reshuffled. */
   | { type: 'lateJoin'; player?: Player; id: string; choice: LateChoice; seed: number; now: number }
   /** Someone left early (leave.ts): out of the teams and today's attendance, nobody reshuffled. */
-  | { type: 'leave'; id: string; now: number }
+  | { type: 'leave'; id: string; now: number; subId?: string }
   /** A sub joins a team that is short (after someone left). */
   | { type: 'subIn'; subId: string; team: number }
   | { type: 'clearResult' }
@@ -256,7 +256,11 @@ function baseReducer(state: AppState, action: Action): AppState {
     }
     case 'leave': {
       if (!state.result) return state;
-      const l = leaveEarly(state.result, state.match, action.id, leaveCtx(state));
+      const ctx = leaveCtx(state);
+      // `subId`: the sub who comes in if his team would drop below 2 (a player runner picks him, no
+      // ratings on that phone). The other subs are hidden from the pick, so `bestSub` can only take him.
+      const subs = new Set(state.result.subIds.filter((x) => x !== action.subId));
+      const l = leaveEarly(state.result, state.match, action.id, action.subId ? { ...ctx, players: ctx.players.filter((p) => !subs.has(p.id)) } : ctx);
       if (!l || l.outcome === 'blocked') return state;
       // Attendance follows the teams, so the result isn't "changed since the split".
       return { ...state, presentIds: state.presentIds.filter((x) => x !== action.id), dayAt: action.now, result: l.result, match: l.match };

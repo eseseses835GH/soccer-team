@@ -225,3 +225,7 @@
 # v14: WhatsApp import and quick rating
 - **Built:** "ייבוא רשימה" takes a WhatsApp chat export (.txt/.zip, iPhone and Android formats), a share from WhatsApp to the installed app (Android), the phone's contacts (Android Chrome) and participant CSVs → a names checklist → a quick 1–10 rating of the new players. Phone numbers are never stored. See DECISIONS → "WhatsApp import and quick rating (v14)".
 - **Tested:** unit (`whatsapp.test.ts`, `quickRate.test.ts`, `sw.test.ts`), e2e block 19 (zip, login at the 5th, rating, share target through the service worker, contacts), screenshots 03i–03l.
+
+# v15: late and left for a player runner
+- **Built:** a player running the match also has "מישהו הגיע?" (roster or bench only, no new players, no rating-based suggestions) and "מישהו עזב?" (he picks a sub or the team plays short). The organizer's take-back keeps it all. See DECISIONS → "Late and left for a player runner (v15)".
+- **Tested:** unit (`src/sync/runnerLate.test.ts`, incl. the round trip), e2e block 14b, screenshots p12–p12d.

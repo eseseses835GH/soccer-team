@@ -5,18 +5,26 @@ import { inProgress, leaveEarly, suggestAfterLeave, type Leave, type LeaveSugges
 import { teamLook } from '../state/model';
 import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
+import { subsAfterLeave } from '../sync/runnerLate';
 import { useUi } from './App';
 import { Sheet } from './components';
 
 const names = (list: string[]) => (list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} ו${list[list.length - 1]}`);
 
-type Step = { kind: 'pick' } | { kind: 'confirm'; id: string; plan: Leave } | { kind: 'suggest'; s: LeaveSuggestion; team: number };
+type Step =
+  | { kind: 'pick' }
+  | { kind: 'confirm'; id: string; plan: Leave }
+  | { kind: 'suggest'; s: LeaveSuggestion; team: number }
+  /** Runner mode: the subs, none ranked. */
+  | { kind: 'pickSub'; team: number; subs: string[] };
 
 /**
  * "מישהו עזב?": pick who left → confirm (with what will happen) → an optional small fix
  * (a sub comes in, or a swap or two). The mirror of a late arrival: nobody is reshuffled.
+ * `mode: 'runner'` (a player running the match, no ratings on his phone): no suggestions, he picks
+ * the sub himself or the team plays short (DECISIONS → v15).
  */
-export function LeaveSheet({ onClose }: { onClose: () => void }) {
+export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'runner' }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
   const [step, setStep] = useState<Step>({ kind: 'pick' });
@@ -76,12 +84,20 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
     let what: string;
     if (plan.outcome === 'sub') what = 'הוא יוצא מהמחליפים.';
     else if (plan.outcome === 'blocked') what = `אי אפשר: ${tl?.in} יישאר שחקן אחד ואין מחליף. כדי להמשיך צריך חלוקה מחדש מהמסך הראשי.`;
-    else if (plan.outcome === 'subIn') what = `${nameOf(plan.subId!)} נכנס במקומו ${tl?.to}.`;
+    else if (plan.outcome === 'subIn') what = mode === 'runner' ? `${tl?.in} יישאר שחקן אחד. מי נכנס במקומו?` : `${nameOf(plan.subId!)} נכנס במקומו ${tl?.to}.`;
     else if (plan.outcome === 'toBench') what = `${tl?.in} נשארים ${n}, מעט מדי לקבוצה: ${names(plan.result.subIds.map(nameOf))} מחכים בחוץ כמחליפים.`;
     else what = `${tl?.in} נשארים ${n}${onPitchNow ? ' וממשיכים ככה במשחק הזה' : ''}.`;
-    const confirm = () => {
-      dispatch({ type: 'leave', id, now: Date.now() });
-      const s = suggestAfterLeave(plan, leaveCtx(state));
+    const confirm = (subId?: string) => {
+      dispatch({ type: 'leave', id, now: Date.now(), ...(subId ? { subId } : {}) });
+      if (mode === 'runner') {
+        if (subId) {
+          notify(`${name} עזב · ${nameOf(subId)} נכנס במקומו`);
+          return onClose();
+        }
+        const subs = subsAfterLeave(plan);
+        if (subs.length) return setStep({ kind: 'pickSub', team: t!, subs });
+      }
+      const s = mode === 'runner' ? null : suggestAfterLeave(plan, leaveCtx(state));
       if (s) return setStep({ kind: 'suggest', s, team: t! });
       notify(
         plan.outcome === 'toBench'
@@ -101,9 +117,22 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn btn-quiet btn-block" onClick={onClose}>
             סגירה
           </button>
+        ) : mode === 'runner' && plan.outcome === 'subIn' ? (
+          <div className="stack">
+            <div className="leave-chips center" aria-label="מי נכנס">
+              {r.subIds.map((sid) => (
+                <button key={sid} type="button" className="member chip" onClick={() => confirm(sid)}>
+                  {nameOf(sid)}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => setStep({ kind: 'pick' })}>
+              לא, מישהו אחר
+            </button>
+          </div>
         ) : (
           <div className="stack">
-            <button type="button" className="btn btn-primary btn-block" onClick={confirm}>
+            <button type="button" className="btn btn-primary btn-block" onClick={() => confirm()}>
               כן, הוא עזב
             </button>
             <button type="button" className="btn btn-quiet btn-block" onClick={() => setStep({ kind: 'pick' })}>
@@ -111,6 +140,38 @@ export function LeaveSheet({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         )}
+      </Sheet>
+    );
+  }
+
+  if (step.kind === 'pickSub') {
+    const tl = look(step.team);
+    return (
+      <Sheet title="להכניס מחליף?" onClose={onClose}>
+        <p className="lead">
+          {tl.in} נשארו {count(r, step.team)}.
+        </p>
+        <div className="stack">
+          <div className="leave-chips center" aria-label="מחליף">
+            {step.subs.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className="member chip"
+                onClick={() => {
+                  dispatch({ type: 'subIn', subId: id, team: step.team });
+                  notify(`${nameOf(id)} נכנס ${tl.to}`);
+                  onClose();
+                }}
+              >
+                {nameOf(id)}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn btn-quiet btn-block" onClick={onClose}>
+            להשאיר ככה
+          </button>
+        </div>
       </Sheet>
     );
   }

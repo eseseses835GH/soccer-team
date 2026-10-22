@@ -6,18 +6,21 @@ import { inProgress } from '../state/leave';
 import { newId, teamLook, type Player } from '../state/model';
 import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
+import { arrivalChoices, benchTarget } from '../sync/runnerLate';
 import { useVoterId } from '../sync/SyncProvider';
 import { useUi } from './App';
 import { CardBadges, LevelPicker, Sheet } from './components';
 import { usePlayerGate } from './useGate';
 
-type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean } | { kind: 'suggest'; s: SwapSuggestion; names: string[] };
+type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean; sub?: boolean } | { kind: 'suggest'; s: SwapSuggestion; names: string[] };
 
 /**
  * "הגיע מאוחר" / "מישהו הגיע?": pick who arrived → he goes in now (the suggested team, or
  * another with a tap) or waits on the side → if he completed the teams, an optional swap or two.
+ * `mode: 'runner'` (a player running the match, no ratings on his phone): roster or bench only, no
+ * new players, the smallest team and no swap suggestions (DECISIONS → v15).
  */
-export function LateSheet({ onClose, arrived }: { onClose: () => void; arrived?: Player }) {
+export function LateSheet({ onClose, arrived, mode }: { onClose: () => void; arrived?: Player; mode?: 'runner' }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
   const [step, setStep] = useState<Step>(arrived ? { kind: 'choose', player: arrived, isNew: false } : { kind: 'pick' });
@@ -26,7 +29,12 @@ export function LateSheet({ onClose, arrived }: { onClose: () => void; arrived?:
   const m = state.match;
   const look = (t: number) => teamLook(state.settings, t);
 
-  if (step.kind === 'pick') return <PickStep onClose={onClose} onPick={(player, isNew) => setStep({ kind: 'choose', player, isNew })} />;
+  if (step.kind === 'pick')
+    return mode === 'runner' ? (
+      <RunnerPick onClose={onClose} onPick={(player, sub) => setStep({ kind: 'choose', player, isNew: false, sub })} />
+    ) : (
+      <PickStep onClose={onClose} onPick={(player, isNew) => setStep({ kind: 'choose', player, isNew })} />
+    );
 
   if (step.kind === 'suggest') {
     const { s, names } = step;
@@ -64,13 +72,22 @@ export function LateSheet({ onClose, arrived }: { onClose: () => void; arrived?:
     );
   }
 
-  const { player, isNew } = step;
+  const { player, isNew, sub } = step;
   const live = inProgress(m);
   const context = m && live ? `משחק באמצע · ${look(m.onPitch[0]).name} נגד ${look(m.onPitch[1]).name}` : m?.history.length ? 'בין משחקים' : 'עוד לא התחיל משחק';
-  const target = nowTarget(r);
+  const target = sub ? benchTarget(r) : nowTarget(r);
   const others = Array.from({ length: r.numTeams }, (_, t) => t).filter((t) => t !== target);
 
   const choose = (choice: LateChoice) => {
+    if (sub) {
+      // From the bench: a sub coming in, as on the teams screen.
+      const t = choice.kind === 'now' ? (choice.team ?? target) : null;
+      if (t !== null) {
+        dispatch({ type: 'subIn', subId: player.id, team: t });
+        notify(`${player.name} נכנס ${look(t).to}`);
+      }
+      return onClose();
+    }
     const seed = randomSeed();
     const ctx = leaveCtx(isNew ? { ...state, players: [...state.players, player] } : state);
     const j = lateJoin(r, m, player.id, choice, ctx, seed);
@@ -81,7 +98,7 @@ export function LateSheet({ onClose, arrived }: { onClose: () => void; arrived?:
     else if (j.outcome === 'joined') notify(`${player.name} הצטרף ${tl!.to}`);
     else {
       notify(`${player.name} השלים את ${tl!.the}`);
-      const s = suggestAfterLate(j, ctx);
+      const s = mode === 'runner' ? null : suggestAfterLate(j, ctx);
       if (s) return setStep({ kind: 'suggest', s, names: j.result.playerIds });
     }
     onClose();
@@ -109,9 +126,11 @@ export function LateSheet({ onClose, arrived }: { onClose: () => void; arrived?:
             ))}
           </div>
         )}
-        <button type="button" className="btn btn-quiet btn-block" onClick={() => choose({ kind: 'wait' })}>
-          מחכה בצד
-        </button>
+        {!sub && (
+          <button type="button" className="btn btn-quiet btn-block" onClick={() => choose({ kind: 'wait' })}>
+            מחכה בצד
+          </button>
+        )}
       </div>
     </Sheet>
   );
@@ -160,6 +179,36 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
           המשך
         </button>
       </form>
+    </Sheet>
+  );
+}
+
+/** A player runner's pick: the roster (names only) or the bench; he can't add players. */
+function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, sub: boolean) => void }) {
+  const { state } = useStore();
+  if (!state.result) return null;
+  const { roster, bench } = arrivalChoices(state.players, state.result);
+  const list = (ps: Player[], sub: boolean) => (
+    <ul className="pick-list">
+      {ps.map((p) => (
+        <li key={p.id}>
+          <button type="button" onClick={() => onPick(p, sub)}>
+            <span className="name">{p.name}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <Sheet title="מי הגיע?" onClose={onClose}>
+      {roster.length > 0 && list(roster, false)}
+      {bench.length > 0 && (
+        <>
+          <span className="label">מחליפים</span>
+          {list(bench, true)}
+        </>
+      )}
+      <p className="hint small center">שחקן חדש? המארגן מוסיף אותו</p>
     </Sheet>
   );
 }
