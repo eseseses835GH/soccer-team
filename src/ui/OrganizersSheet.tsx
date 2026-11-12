@@ -342,7 +342,7 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
                           </span>
                           <Toggle checked={m.canRate} onChange={(v) => setCanRate(m, v)} label="יכול לדרג" />
                           <button type="button" className="icon-btn" aria-label={`הסרה של ${m.name}`} onClick={() => setConfirm(key)}>
-                            ✕
+                            <Icon name="close" size={18} />
                           </button>
                         </>
                       )}

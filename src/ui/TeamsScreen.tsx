@@ -237,7 +237,7 @@ export function TeamsScreen() {
           // With a queue, any short team (the one outside, or one that lost a player) borrows from the loser.
           const short = counts[t] < r.teamSize && k > 2;
           return (
-            <article key={t} className={`team ${t >= 2 ? 'waiting' : ''}`} style={{ '--team': look.color } as React.CSSProperties} aria-label={look.the}>
+            <article key={t} className={`team ${t >= 2 ? 'waiting' : ''}`} style={{ '--team': look.color, '--t': t } as React.CSSProperties} aria-label={look.the}>
               <header>
                 <h2>{look.name}</h2>
                 <span className="team-sub">

@@ -316,7 +316,7 @@ export function LiveView({
                 <div key={t} className="side" style={{ '--team': l.color } as React.CSSProperties}>
                   <h2>{l.name}</h2>
                   <div className="goals" aria-label={`${l.name}: ${m.score[side]}`}>
-                    {m.score[side]}
+                    <span key={m.score[side]}>{m.score[side]}</span>
                   </div>
                   <div className="keeper">{keeper ? `🧤 ${name(keeper)}` : ''}</div>
                   {scorers.length > 0 && <div className="keeper">⚽ {scorers.join(', ')}</div>}
@@ -344,7 +344,7 @@ export function LiveView({
           const waiting = m ? !onPitch.has(t) : t >= 2;
           const place = m ? (onPitch.has(t) ? 'על המגרש' : m.queue.indexOf(t) >= 0 ? `בתור #${m.queue.indexOf(t) + 1}` : '') : t < 2 ? 'פותחים' : `בתור #${t - 1}`;
           return (
-            <article key={t} className={`team ${waiting ? 'waiting' : ''}`} style={{ '--team': l.color } as React.CSSProperties} aria-label={l.the}>
+            <article key={t} className={`team ${waiting ? 'waiting' : ''}`} style={{ '--team': l.color, '--t': t } as React.CSSProperties} aria-label={l.the}>
               <header>
                 <h2>{l.name}</h2>
                 {(place || totals) && (

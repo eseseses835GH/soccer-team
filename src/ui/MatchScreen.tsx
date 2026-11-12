@@ -272,7 +272,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
         {left === null ? fmt(elapsed) : over ? `+${fmt(left)}` : fmt(left)}
       </div>
       <button type="button" className="length-chip" onClick={() => setLengthOpen(true)} aria-label={`אורך המשחק: ${lengthLabel}. שינוי`}>
-        ⏱ {limitMin === null ? lengthLabel : `${limitMin} דק׳`}
+        <Icon name="timer" size={16} /> {limitMin === null ? lengthLabel : `${limitMin} דק׳`}
         {limitMin !== null && added !== 0 && (
           <span className="len-added" dir="ltr">
             {addedText}
@@ -345,7 +345,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
             <div key={t} className="side" style={{ '--team': look.color } as React.CSSProperties}>
               <h2>{look.name}</h2>
               <div className="goals" aria-label={`${look.name}: ${side === 0 ? ga : gb}`}>
-                {side === 0 ? ga : gb}
+                <span key={side === 0 ? ga : gb}>{side === 0 ? ga : gb}</span>
               </div>
               <div className="keeper">🧤 {keeper(t)}</div>
               <button type="button" className="btn btn-goal" onClick={() => goal(t)}>
