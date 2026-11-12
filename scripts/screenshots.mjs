@@ -444,6 +444,12 @@ for (const scheme of ['light', 'dark']) {
     const calls = [];
     let roster = [];
     let members = [];
+    let mode = 'organizers';
+    let votes = [];
+    // v18: the effective "may rate" follows the mode unless switched (u1 on, u2 off).
+    const U = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+    const overrides = { [U(1)]: true, [U(2)]: false };
+    const withMode = () => members.map((m) => (m.role === 'player' ? { ...m, can_rate: overrides[m.user_id] ?? mode === 'everyone' } : m));
     await pg.routeWebSocket(/supabase\.co/, () => {}); // realtime: accepted, silent
     await pg.route(/supabase\.co/, async (route) => {
       const req = route.request();
@@ -451,6 +457,7 @@ for (const scheme of ['light', 'dark']) {
       const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
       calls.push(`${req.method()} ${u.pathname}`);
       if (u.pathname.endsWith('/rest/v1/groups')) {
+        if (req.method() === 'GET' && u.searchParams.get('select') === 'rating_mode') return json({ rating_mode: mode });
         if (req.method() === 'GET') return json({ id: u.searchParams.get('id').slice(3), name: 'שישי בשכונה', version: 1, data: { v: 1, players: roster, constraints: { together: [], apart: [] } } });
         return json([{ version: 2 }]);
       }
@@ -460,8 +467,12 @@ for (const scheme of ['light', 'dark']) {
       }
       const rpc = u.pathname.split('/rpc/')[1];
       if (rpc === 'group_organizers') return json([{ user_id: ME, display_name: 'אלי', joined_at: '2026-10-18T10:00:00Z', is_me: true }]);
-      if (rpc === 'group_members_list') return json(members);
-      if (rpc === 'group_votes') return json([]);
+      if (rpc === 'group_members_list') return json(withMode());
+      if (rpc === 'group_votes') return json(votes);
+      if (rpc === 'set_rating_mode') {
+        mode = req.postDataJSON().p_mode;
+        return json(null);
+      }
       if (rpc === 'live_get') return json([]);
       return json(null);
     });
@@ -475,9 +486,18 @@ for (const scheme of ['light', 'dark']) {
     const at = (n) => `2026-10-${n}T18:00:00Z`;
     members = [
       { user_id: ME, display_name: 'אלי', role: 'organizer', player_id: null, can_rate: false, joined_at: at(18), is_me: true },
-      { user_id: 'u1', display_name: 'Moshe Levi', role: 'player', player_id: roster[0].id, can_rate: true, joined_at: at(19), is_me: false },
-      { user_id: 'u2', display_name: 'דני', role: 'player', player_id: roster[3].id, can_rate: false, joined_at: at(20), is_me: false },
-      { user_id: 'u3', display_name: 'yossi.k', role: 'player', player_id: null, can_rate: false, joined_at: at(21), is_me: false },
+      { user_id: U(1), display_name: 'Moshe Levi', role: 'player', player_id: roster[0].id, can_rate: true, joined_at: at(19), is_me: false },
+      { user_id: U(2), display_name: 'דני', role: 'player', player_id: roster[3].id, can_rate: false, joined_at: at(20), is_me: false },
+      { user_id: U(3), display_name: 'yossi.k', role: 'player', player_id: null, can_rate: false, joined_at: at(21), is_me: false },
+      { user_id: U(4), display_name: 'Avi', role: 'player', player_id: roster[4].id, can_rate: false, joined_at: at(22), is_me: false },
+      { user_id: U(5), display_name: 'שירה', role: 'player', player_id: roster[5].id, can_rate: false, joined_at: at(22), is_me: false },
+    ];
+    // roster[1]: one rater (under MIN_RATERS); roster[2]: three raters → their average.
+    votes = [
+      { rater: U(1), player_id: roster[1].id, level: 7, updated_at: at(22) },
+      { rater: U(1), player_id: roster[2].id, level: 9, updated_at: at(22) },
+      { rater: U(5), player_id: roster[2].id, level: 8, updated_at: at(22) },
+      { rater: U(4), player_id: roster[2].id, level: 8, updated_at: at(22) },
     ];
     await pg.evaluate((me) => {
       const idx = JSON.parse(localStorage.getItem('kochot:groups'));
@@ -501,6 +521,34 @@ for (const scheme of ['light', 'dark']) {
     await pg.getByRole('button', { name: 'הסרה של דני' }).click();
     await pg.waitForTimeout(150);
     await pg.screenshot({ path: `${out}/${scheme}-17c-member-menu.png` });
+    // v18: "מי מדרג?" → everyone, with the progress line.
+    await pg.locator('.org-confirm').getByRole('button', { name: 'חזרה' }).click();
+    await pg.getByRole('radio', { name: 'כל החבר׳ה' }).click();
+    await pg.getByText(/^דירגו: \d+ מתוך \d+$/).waitFor();
+    await pg.locator('.rate-mode').scrollIntoViewIfNeeded();
+    await pg.waitForTimeout(200);
+    await pg.screenshot({ path: `${out}/${scheme}-17d-rating-mode.png` });
+    const progress = await pg.getByText(/^דירגו:/).textContent();
+    if (progress !== 'דירגו: 3 מתוך 5') errors.push(`${scheme}: rating progress "${progress}"`);
+    if (!(await pg.getByRole('switch', { name: 'יכול לדרג' }).nth(2).isChecked())) errors.push(`${scheme}: everyone mode should switch an unset player on`);
+    if (await pg.getByRole('switch', { name: 'יכול לדרג' }).nth(1).isChecked()) errors.push(`${scheme}: a player switched off stays off`);
+    await pg.keyboard.press('Escape');
+    // Edit sheet line before / after 3 raters.
+    for (const [i, name, want] of [
+      [1, '17e-edit-under-3', 'עוד 2 דירוגים עד ממוצע'],
+      [2, '17f-edit-average', 'ממוצע של 3 מדרגים: 8 · עוד לא דירגת'],
+    ]) {
+      await pg.goto(base + '#players');
+      await pg.getByText(roster[i].name, { exact: true }).first().click();
+      const line = pg.getByRole('dialog').locator('.votes-line');
+      await line.waitFor({ timeout: 5000 }).catch(() => {});
+      const got = (await line.count()) ? await line.textContent() : '';
+      if (got !== want) errors.push(`${scheme}: edit-sheet line "${got}" (wanted "${want}")`);
+      await line.scrollIntoViewIfNeeded().catch(() => {});
+      await pg.waitForTimeout(150);
+      await pg.screenshot({ path: `${out}/${scheme}-${name}.png` });
+      await pg.keyboard.press('Escape');
+    }
     const sw = await pg.evaluate(() => document.documentElement.scrollWidth);
     if (sw > 390) errors.push(`${scheme}: horizontal overflow on organizers: ${sw}px`);
     if (!calls.some((c) => c.endsWith('/rpc/group_members_list'))) errors.push(`${scheme}: members were never asked for`);

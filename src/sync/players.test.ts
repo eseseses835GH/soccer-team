@@ -62,8 +62,10 @@ describe('merging players\' votes into the level', () => {
     const out = applyPlayerVotes([plain, tuned, untouched], rows);
     expect(out[0].attrs).toEqual(applyCards(8, [])); // (6 + 9 + 8) / 3 = 7.67 → 8
     expect(out[0].levelVotes).toEqual({ [U1]: 6 }); // players' votes are not written into the doc
-    expect(out[1].attrs).toEqual({ ...defaultAttrs(5), stamina: 9, overall: 3 });
+    expect(out[1]).toBe(tuned); // one voter: under MIN_RATERS, the level stays
     expect(out[2]).toBe(untouched);
+    const tuned3 = { ...tuned, levelVotes: { [U1]: 4, [U3]: 2 } };
+    expect(applyPlayerVotes([tuned3], rows)[0].attrs).toEqual({ ...defaultAttrs(5), stamina: 9, overall: 3 }); // 3 voters: (4+3+2)/3
     const same = [{ ...plain, attrs: applyCards(8, []) }];
     expect(applyPlayerVotes(same, rows)).toBe(same);
   });

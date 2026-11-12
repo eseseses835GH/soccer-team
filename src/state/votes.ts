@@ -61,13 +61,25 @@ export function mergeVotes(base: LevelVotes | undefined, local: LevelVotes | und
 }
 
 /**
- * One-line summary under the level in the edit sheet ('' = nothing to show). `who` names the
- * voters: organizers only, or 'מדרגים' once players' votes count too (v10).
+ * A player's level switches to the average of everyone's votes only once this many distinct raters
+ * (organizers and players together) voted on him (v18). Until then it stays what the organizers set.
  */
-export function votesLine(votes: LevelVotes | undefined, me: string | null, who = 'מארגנים'): string {
+export const MIN_RATERS = 3;
+
+/**
+ * The level the votes give: with MIN_RATERS or more voters in `all` (organizers + players, one per
+ * login), their average; otherwise the organizers' own average (v9); null = leave the level as is.
+ */
+export function ratedLevel(all: LevelVotes | undefined, organizers: LevelVotes | undefined): number | null {
+  return Object.keys(all ?? {}).length >= MIN_RATERS ? averageLevel(all) : averageLevel(organizers);
+}
+
+/** One-line summary under the level in the edit sheet ('' = nothing to show). `votes` = everyone's (v18). */
+export function votesLine(votes: LevelVotes | undefined, me: string | null): string {
   const n = Object.keys(votes ?? {}).length;
   const mine = me ? votes?.[me] : undefined;
-  if (n >= 2) return `ממוצע של ${n} ${who}: ${averageLevel(votes)} · ${mine !== undefined ? `שלך: ${mine}` : 'עוד לא דירגת'}`;
-  if (n === 1 && mine === undefined && me) return 'עוד לא דירגת';
+  if (n >= MIN_RATERS) return `ממוצע של ${n} מדרגים: ${averageLevel(votes)} · ${mine !== undefined ? `שלך: ${mine}` : 'עוד לא דירגת'}`;
+  const left = MIN_RATERS - n;
+  if (n >= 1) return left === 1 ? 'עוד דירוג אחד עד ממוצע' : `עוד ${left} דירוגים עד ממוצע`;
   return '';
 }

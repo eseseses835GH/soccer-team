@@ -236,3 +236,7 @@
 # v17: my page
 - **Built:** logged in, an avatar (Google photo, else the first letter) at the end of the top bar opens "הדף שלי": who is logged in, my groups (role, who I am; organizers can pick themselves), my numbers per group + total, my last 3 evenings, and logging out (moved here from Settings, which now links "לדף שלי"). See DECISIONS → "My page (v17)".
 - **Tested:** unit (`src/state/me.test.ts`), e2e block "my page", screenshots me01–me03 on a mocked Supabase.
+
+# v18: group rating mode and a 3-rater minimum
+- **Built:** "מי מדרג?" (organizers only / everyone who joined), progress line, share text per mode; a level becomes the average only from 3 raters. See DECISIONS → "Group rating mode and a 3-rater minimum (v18)".
+- **Open:** migration `20261112120000_group_rating_mode.sql` not applied (Supabase project was paused).

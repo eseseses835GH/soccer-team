@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useGroups, useStore } from '../state/store';
 import { usePlayerVotes } from '../sync/OrganizerSync';
-import { playerMemberRows, type PlayerMemberRow } from '../sync/organizer';
-import { playersApi, type Member } from '../sync/players';
+import { playerMemberRows, playerShareText, ratingProgress, type PlayerMemberRow } from '../sync/organizer';
+import { playersApi, type Member, type RatingMode } from '../sync/players';
 import { creatorName, expiresIn, inviteUrl, shortDate, type Invite, type Organizer } from '../sync/organizers';
 import { SyncError, redirectUrl, remoteApi } from '../sync/supabase';
 import { useSync } from '../sync/SyncProvider';
 import { copyText, nativeShare } from '../share';
 import { useUi } from './App';
-import { Sheet, Toggle } from './components';
+import { Segmented, Sheet, Toggle } from './components';
 import { Icon } from './icons';
 import { limitText } from '../sync/gate';
 
@@ -31,6 +31,7 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
   const [invites, setInvites] = useState<Invite[]>([]);
   const [playerLink, setPlayerLink] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [mode, setMode] = useState<RatingMode>('organizers');
   const rows = playerMemberRows(members, useStore().state.players);
   const [confirm, setConfirm] = useState<string | null>(null);
   const votes = usePlayerVotes();
@@ -43,8 +44,15 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
       const c = await client();
       const api = remoteApi(c);
       const pApi = playersApi(c);
-      const [o, i, pl, m] = await Promise.all([api.listOrganizers(cur.id), api.listInvites(cur.id), pApi.playerInvite(cur.id), pApi.listMembers(cur.id)]);
+      const [o, i, pl, m, rm] = await Promise.all([
+        api.listOrganizers(cur.id),
+        api.listInvites(cur.id),
+        pApi.playerInvite(cur.id),
+        pApi.listMembers(cur.id),
+        pApi.ratingMode(cur.id),
+      ]);
       setOrganizers(o);
+      setMode(rm);
       setInvites(i);
       setPlayerLink(pl);
       setMembers(m);
@@ -68,7 +76,7 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
   }, [refresh]);
 
   const share = async (url: string, asPlayer = false) => {
-    const text = asPlayer ? `הצטרפו לקבוצה ״${cur.name}״ בכוחות` : `הצטרפו כמארגנים לקבוצה ״${cur.name}״ בכוחות`;
+    const text = asPlayer ? playerShareText(cur.name, mode) : `הצטרפו כמארגנים לקבוצה ״${cur.name}״ בכוחות`;
     if (await nativeShare({ title: cur.name, text, url })) return;
     notify((await copyText(url)) ? 'קישור ההזמנה הועתק' : 'ההעתקה נכשלה');
   };
@@ -114,6 +122,11 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
   const setCanRate = (m: PlayerMemberRow, can: boolean) => {
     setMembers((list) => list.map((x) => (x.userId === m.userId ? { ...x, canRate: can } : x)));
     void memberDo((api) => api.setCanRate(cur.id, m.userId, can));
+  };
+
+  const changeMode = (m: RatingMode) => {
+    setMode(m);
+    void memberDo((api) => api.setRatingMode(cur.id, m));
   };
 
   const revoke = async (token: string) => {
@@ -269,6 +282,19 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
             </button>
           )}
           <p className="hint small">שחקנים רואים את הכוחות, המשחק וההיסטוריה. לא את הדירוגים.</p>
+          <div className="rate-mode">
+            <span className="label">מי מדרג?</span>
+            <Segmented
+              label="מי מדרג?"
+              value={mode}
+              onChange={changeMode}
+              options={[
+                { value: 'organizers', label: 'רק המארגנים' },
+                { value: 'everyone', label: 'כל החבר׳ה' },
+              ]}
+            />
+          </div>
+          {mode === 'everyone' && rows.length > 0 && <p className="hint small">{ratingProgress(members, votes.rows)}</p>}
 
           {rows.length > 0 && (
             <>

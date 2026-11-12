@@ -38,14 +38,13 @@ describe('votes helpers', () => {
     expect(mergeVotes({ [A]: 5 }, { [A]: 6 }, { [A]: 5 })).toEqual({ [A]: 6 });
     expect(mergeVotes(undefined, undefined, undefined)).toBeUndefined();
   });
-  it('the line under the level', () => {
+  it('the line under the level (v18: average only from 3 raters)', () => {
     expect(votesLine(undefined, A)).toBe('');
-    expect(votesLine({ [A]: 7 }, A)).toBe('');
-    expect(votesLine({ [B]: 7 }, A)).toBe('עוד לא דירגת');
-    expect(votesLine({ [B]: 7 }, null)).toBe('');
-    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, A)).toBe('ממוצע של 3 מארגנים: 6 · שלך: 7');
-    expect(votesLine({ [B]: 6, [C]: 5 }, A)).toBe('ממוצע של 2 מארגנים: 6 · עוד לא דירגת');
-    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, A, 'מדרגים')).toBe('ממוצע של 3 מדרגים: 6 · שלך: 7');
+    expect(votesLine({ [A]: 7 }, A)).toBe('עוד 2 דירוגים עד ממוצע');
+    expect(votesLine({ [B]: 7 }, null)).toBe('עוד 2 דירוגים עד ממוצע');
+    expect(votesLine({ [B]: 6, [C]: 5 }, A)).toBe('עוד דירוג אחד עד ממוצע');
+    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, A)).toBe('ממוצע של 3 מדרגים: 6 · שלך: 7');
+    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, null)).toBe('ממוצע של 3 מדרגים: 6 · עוד לא דירגת');
   });
 });
 

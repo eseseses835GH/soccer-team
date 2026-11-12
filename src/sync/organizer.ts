@@ -2,7 +2,7 @@
 // votes into the roster.
 import { eveningId } from '../state/history';
 import type { AppState } from '../state/model';
-import { applyPlayerVotes, type Member, type VoteRow } from './players';
+import { applyPlayerVotes, type Member, type RatingMode, type VoteRow } from './players';
 
 /** Fold players' votes into the roster; the very same state when no level changes (so no sync loop). */
 export function withPlayerVotes(s: AppState, rows: VoteRow[]): AppState {
@@ -32,6 +32,17 @@ export function playerMemberRows(members: Member[], roster: { id: string; name: 
       canUnclaim: !!m.playerId,
       canRate: m.canRate,
     }));
+}
+
+/** Text shared with the player link (v18): in "everyone" mode it invites to rate. */
+export const playerShareText = (groupName: string, mode: RatingMode) =>
+  mode === 'everyone' ? 'הצטרפו לכוחות ודרגו את החברים. הדירוג אנונימי' : `הצטרפו לקבוצה ״${groupName}״ בכוחות`;
+
+/** "דירגו: 9 מתוך 14": player members with at least one vote that counts / player members who joined. */
+export function ratingProgress(members: Member[], rows: VoteRow[]): string {
+  const players = members.filter((m) => m.role === 'player');
+  const raters = new Set(rows.map((r) => r.rater.toLowerCase()));
+  return `דירגו: ${players.filter((m) => raters.has(m.userId.toLowerCase())).length} מתוך ${players.length}`;
 }
 
 /**

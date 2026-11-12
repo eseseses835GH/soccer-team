@@ -37,8 +37,10 @@ describe('quick rating round', () => {
     const p = rateStep({ ...fresh('a'), levelVotes: { [OTHER]: 4 } }, 8, false, [], ME, []);
     expect(p.levelVotes).toEqual({ [OTHER]: 4, [ME]: 8 });
     expect(p.attrs.overall).toBe(6);
-    // Players allowed to rate count too (v10).
-    expect(rateStep(fresh('b'), 9, false, [], ME, [{ playerId: 'b', rater: OTHER, level: 5 }]).attrs.overall).toBe(7);
+    // Players allowed to rate count too (v10), from MIN_RATERS voters (v18).
+    expect(rateStep(fresh('b'), 9, false, [], ME, [{ playerId: 'b', rater: OTHER, level: 5 }]).attrs.overall).toBe(9);
+    const P2 = '00000000-0000-4000-8000-0000000000c2';
+    expect(rateStep(fresh('b'), 9, false, [], ME, [{ playerId: 'b', rater: OTHER, level: 5 }, { playerId: 'b', rater: P2, level: 4 }]).attrs.overall).toBe(6);
   });
 });
 

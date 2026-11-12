@@ -338,11 +338,11 @@ function PlayerSheet({
   const voter = useVoterId();
   const playerVotes = usePlayerVotes().rows;
   const myVote = voter ? draft.levelVotes?.[voter] : undefined;
-  // In a synced group the organizer's tap is their vote; the level is the organizers' average.
+  // In a synced group the organizer's tap is their vote; the level follows levelFromVotes (v18).
   const setLevel = (v: number) => setDraft((d) => playerAtLevel(d, v, voter, playerVotes));
   // Players allowed to rate count too (v10); their votes aren't in the doc.
   const allVotes = mergePlayerVotes(draft.levelVotes, playerVotes, draft.id);
-  const line = votesLine(allVotes, voter, Object.keys(allVotes ?? {}).length > Object.keys(draft.levelVotes ?? {}).length ? 'מדרגים' : 'מארגנים');
+  const line = votesLine(allVotes, voter);
   // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
   const setProfile = (level: number, cards: CardId[]) => setDraft((d) => ({ ...d, cards, attrs: applyCards(level, cards) }));
 

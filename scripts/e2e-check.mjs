@@ -1182,7 +1182,8 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
     return JSON.parse(localStorage.getItem(`kochot:group:${idx.currentId}`)).players;
   }, ME);
   const target = roster.find((p) => p.attrs.overall !== 2);
-  votes = [{ rater: RATER, player_id: target.id, level: 2, updated_at: '2026-10-21T18:00:00Z' }];
+  // Three raters (MIN_RATERS, v18): the level becomes their average.
+  votes = [RATER, RATER.replace(/b$/, 'c'), RATER.replace(/b$/, 'd')].map((rater) => ({ rater, player_id: target.id, level: 2, updated_at: '2026-10-21T18:00:00Z' }));
   await pg.reload();
   await pg.waitForFunction(
     (id) => {
@@ -1194,7 +1195,7 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   ).catch(() => errors.push("org: a player's vote didn't set the level"));
   await pg.waitForTimeout(2500);
   assert(pushes.some((d) => d.data.players.find((p) => p.id === target.id)?.attrs.overall === 2), 'org: the voted level is pushed');
-  assert(!pushes.some((d) => JSON.stringify(d).includes(RATER)), "org: players' votes stay out of the doc");
+  assert(!pushes.some((d) => votes.some((v) => JSON.stringify(d).includes(v.rater))), "org: players' votes stay out of the doc");
   const pushesAfterVote = pushes.length;
   assert(lives.length === 0, `org: nothing to publish before teams (${lives.length})`);
 

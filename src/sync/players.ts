@@ -9,10 +9,22 @@ import type { Player } from '../state/model';
 import type { Position } from '../engine';
 import { sanitizePositions } from '../state/positions';
 import { applyCards } from '../state/cards';
-import { attrsAtLevel, averageLevel, sanitizeVotes, type LevelVotes } from '../state/votes';
+import { attrsAtLevel, ratedLevel, sanitizeVotes, type LevelVotes } from '../state/votes';
 import { fail } from './supabase';
 
 export type MemberRole = 'organizer' | 'player';
+
+/** Who rates in a group (v18): only players the organizer allowed, or every player who joined. */
+export type RatingMode = 'organizers' | 'everyone';
+export const parseRatingMode = (v: unknown): RatingMode => (v === 'everyone' ? 'everyone' : 'organizers');
+
+/**
+ * May this member rate (mirrors the server's private.can_rate_eff): players only; an organizer's
+ * explicit switch (true/false) wins, otherwise the group's mode decides. Claiming who you are is
+ * still needed to actually send votes.
+ */
+export const effectiveCanRate = (memberRole: MemberRole, override: boolean | null, mode: RatingMode) =>
+  memberRole === 'player' && (override ?? mode === 'everyone');
 
 /** A row of group_members_list(): organizers get everyone, a player only himself. */
 export interface Member {
@@ -21,6 +33,7 @@ export interface Member {
   role: MemberRole;
   /** Roster id he said is him (null = not claimed yet). */
   playerId: string | null;
+  /** Effective permission (the mode, or the organizer's switch for him). */
   canRate: boolean;
   joinedAt: string;
   isMe: boolean;
@@ -125,6 +138,14 @@ export function mergePlayerVotes(levelVotes: LevelVotes | undefined, rows: VoteR
 }
 
 /**
+ * The level one player's votes give (v18): everyone's average once MIN_RATERS logins voted on him,
+ * else the organizers' (doc) average; null = keep his level.
+ */
+export function levelFromVotes(levelVotes: LevelVotes | undefined, rows: VoteRow[], playerId: string): number | null {
+  return ratedLevel(mergePlayerVotes(levelVotes, rows, playerId), levelVotes);
+}
+
+/**
  * A level tap in the edit sheet (and the quick rating after an import): logged out / local, the
  * level itself; in a synced group the organizer's vote, and the level is the average with everyone's
  * votes. Attributes are rebuilt from level + cards.
@@ -132,19 +153,19 @@ export function mergePlayerVotes(levelVotes: LevelVotes | undefined, rows: VoteR
 export function playerAtLevel(p: Player, level: number, voter: string | null, rows: VoteRow[]): Player {
   if (!voter) return { ...p, attrs: applyCards(level, p.cards) };
   const levelVotes = { ...p.levelVotes, [voter]: level };
-  return { ...p, levelVotes, attrs: applyCards(averageLevel(mergePlayerVotes(levelVotes, rows, p.id)) ?? level, p.cards) };
+  return { ...p, levelVotes, attrs: applyCards(levelFromVotes(levelVotes, rows, p.id) ?? level, p.cards) };
 }
 
 /**
- * Organizer app: the roster with every voted player's level = average of organizers' and players'
- * votes (attributes rebuilt like a level change; hand-tuned sliders keep their tuning). Players'
+ * Organizer app: the roster with every voted player's level = levelFromVotes (everyone's average
+ * from MIN_RATERS voters, else the organizers') (attributes rebuilt like a level change; hand-tuned sliders keep their tuning). Players'
  * votes are NOT written into `levelVotes` (that stays organizers only); only the level moves.
  * Returns the same array when nothing changes.
  */
 export function applyPlayerVotes(players: Player[], rows: VoteRow[]): Player[] {
   let changed = false;
   const out = players.map((p) => {
-    const avg = averageLevel(mergePlayerVotes(p.levelVotes, rows, p.id));
+    const avg = levelFromVotes(p.levelVotes, rows, p.id);
     if (avg === null || avg === p.attrs.overall) return p;
     changed = true;
     return { ...p, attrs: attrsAtLevel(p.attrs, p.cards, avg) };
@@ -189,7 +210,16 @@ export function playersApi(sb: SupabaseClient) {
     async unclaimPlayer(groupId: string, userId: string): Promise<void> {
       await rpc('unclaim_player', { p_group_id: groupId, p_user_id: userId });
     },
-    /** Organizers: allow a player to rate, or not (taking it away deletes his votes). */
+    /** Organizers: the group's rating mode (v18). Any failure reads as the default, so the sheet never breaks on it. */
+    async ratingMode(groupId: string): Promise<RatingMode> {
+      const { data, error } = await sb.from('groups').select('rating_mode').eq('id', groupId).maybeSingle();
+      return error ? 'organizers' : parseRatingMode((data as { rating_mode?: unknown } | null)?.rating_mode);
+    },
+    /** Organizers: switch who rates. Players' votes are kept; only those who may rate now count. */
+    async setRatingMode(groupId: string, mode: RatingMode): Promise<void> {
+      await rpc('set_rating_mode', { p_group_id: groupId, p_mode: mode });
+    },
+    /** Organizers: switch one player on or off (overrides the mode for him; off deletes his votes). */
     async setCanRate(groupId: string, userId: string, can: boolean): Promise<void> {
       await rpc('set_can_rate', { p_group_id: groupId, p_user_id: userId, p_can: can });
     },

@@ -182,7 +182,7 @@ describe('players votes → levels', () => {
   it('sets the level to the average of organizers and permitted players', () => {
     const s = state([pl('p1', 5, { [U1]: 5 }), pl('p2', 6), pl('p3', 3)]);
     const out = withPlayerVotes(s, rows);
-    expect(out.players.map((p) => p.attrs.overall)).toEqual([7, 4, 3]); // (5+9+8)/3 = 7.33; p2 only a player's vote
+    expect(out.players.map((p) => p.attrs.overall)).toEqual([7, 6, 3]); // (5+9+8)/3 = 7.33; p2: one vote < MIN_RATERS, stays
     expect(out.players[0].levelVotes).toEqual({ [U1]: 5 }); // players' votes stay out of the doc
     expect(out.players[2]).toBe(s.players[2]);
   });
@@ -195,9 +195,9 @@ describe('players votes → levels', () => {
   });
 
   it('hand-tuned sliders keep their tuning', () => {
-    const tuned = { ...pl('p1', 5), attrs: { ...defaultAttrs(5), shooting: 9 } };
+    const tuned = { ...pl('p1', 5, { [U1]: 9 }), attrs: { ...defaultAttrs(5), shooting: 9 } };
     const out = withPlayerVotes(state([tuned]), rows).players[0];
-    expect(out.attrs.overall).toBe(9); // (9+8)/2 = 8.5 → 9
+    expect(out.attrs.overall).toBe(9); // (9+9+8)/3 = 8.67 → 9
     expect(out.attrs.shooting).toBe(9);
   });
 });
