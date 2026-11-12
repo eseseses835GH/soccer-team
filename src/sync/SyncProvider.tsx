@@ -4,7 +4,7 @@
 // phone changes it (realtime, with a slow poll as a fallback) and ~1.5 s after a local edit.
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { isUuid, newGroupState } from '../state/groups';
+import { isUuid, meKey, newGroupState } from '../state/groups';
 import { sanitize } from '../state/model';
 import { profileOf, type Profile } from '../state/me';
 import { localKV, useGroups, useStore } from '../state/store';
@@ -14,6 +14,7 @@ import { finishArrival, hasArrival } from './authUrl';
 import { afterLoginQueue, limitText, shouldAutoUpload } from './gate';
 import { JOIN_HASH, inviteUrl } from './organizers';
 import { OrganizerSync } from './OrganizerSync';
+import { adoptionPlan, selfClaimTargets } from './myGroups';
 import { isPlayerGroup, joinPlan, publicKey, runsOrganizerSync } from './playerGroup';
 import { SyncError, getClient, hasStoredAuth, redirectUrl, remoteApi, syncConfigured } from './supabase';
 
@@ -63,6 +64,8 @@ interface SyncApi {
   startJoin(token: string): void;
   /** Toasts for the UI ({n} changes on every new message). */
   message: { text: string; n: number } | null;
+  /** Bumped when the server put me in a group's roster (v21), so screens re-read who I am. */
+  selfClaims: number;
 }
 
 const SyncCtx = createContext<SyncApi | null>(null);
@@ -268,6 +271,95 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     };
   }, [current.id, organizerSync, session, schedule]);
 
+  // ---------- my groups on every phone, and me in my own groups (v21) ----------
+  const [selfClaims, setSelfClaims] = useState(0);
+  /** Groups where claim_self already ran in this page (once is enough). */
+  const triedSelf = useRef(new Set<string>());
+  const claimSelf = useCallback(async (api: ReturnType<typeof remoteApi>, gid: string) => {
+    if (triedSelf.current.has(gid)) return;
+    triedSelf.current.add(gid);
+    try {
+      const playerId = await api.claimSelf(gid);
+      if (!playerId) return;
+      // "הדף שלי" reads who I am in an organizer group from this cache until it asks the server again.
+      const user = sessionRef.current?.user.id ?? '';
+      const prev = localKV.get(meKey(gid)) as { user?: string; taken?: string[] } | null;
+      localKV.set(meKey(gid), { user, playerId, taken: prev?.user === user ? (prev.taken ?? []) : [] });
+      setSelfClaims((n) => n + 1);
+    } catch (e) {
+      if (errCode(e) === 'offline') triedSelf.current.delete(gid); // try again when back online
+    }
+  }, []);
+
+  const checking = useRef(false);
+  const lastCheck = useRef(0);
+  const checkGroups = useCallback(
+    async (force = false) => {
+      const c = clientRef.current;
+      if (!c || !sessionRef.current || checking.current) return;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      if (!force && Date.now() - lastCheck.current < 20_000) return;
+      checking.current = true;
+      lastCheck.current = Date.now();
+      try {
+        const api = remoteApi(c);
+        const mine = await api.myGroups();
+        const before = groupsRef.current.latest().gid;
+        // Me in the roster first, so a group fetched below already has me.
+        for (const gid of selfClaimTargets(mine, triedSelf.current)) await claimSelf(api, gid);
+        const g = groupsRef.current;
+        const { theme, accent } = g.latest().app.settings;
+        for (const { kind, group } of adoptionPlan(g.latestIndex().groups, mine)) {
+          if (kind === 'player') {
+            // As after opening the player link: PlayerGroupProvider fills it when it's opened.
+            saveMeta(localKV, group.id, EMPTY_META);
+            g.adopt({ id: group.id, name: group.name, synced: true, createdAt: Date.now(), role: 'player' }, newGroupState({ theme, accent }), false);
+          } else if (kind === 'upgrade') {
+            // As PlayerGroupProvider does when it sees me.role 'organizer': an ordinary synced group from now on.
+            g.setGroupState(group.id, () => newGroupState({ theme, accent }));
+            saveMeta(localKV, group.id, EMPTY_META);
+            localKV.remove(publicKey(group.id));
+            g.setMeta(group.id, { role: undefined });
+          } else {
+            // As after opening an organizer link: the server's copy, nothing local.
+            const row = await api.fetchGroup(group.id).catch(() => null);
+            if (!row || g.latestIndex().groups.some((x) => x.id === group.id)) continue;
+            const doc = sanitizeDoc(row.data);
+            saveMeta(localKV, group.id, { base: doc, baseVersion: row.version, baseName: row.name });
+            g.adopt({ id: group.id, name: row.name, synced: true, createdAt: Date.now(), role: undefined }, sanitize(applyDoc(newGroupState({ theme, accent }), doc)), false);
+          }
+        }
+        // The open group may have just got me in its roster: pull it.
+        if (runsOrganizerSync(groupsRef.current.latestIndex().groups.find((x) => x.id === before))) schedule(0);
+      } catch {
+        /* old server (no my_groups yet), offline…: next time */
+      } finally {
+        checking.current = false;
+      }
+    },
+    [claimSelf, schedule],
+  );
+
+  // After login, when back on screen or online, and slowly while visible. Logged out: nothing.
+  const checkedUser = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session) return;
+    if (checkedUser.current !== session.user.id) {
+      checkedUser.current = session.user.id;
+      triedSelf.current.clear();
+    }
+    void checkGroups(true);
+    const again = () => document.visibilityState === 'visible' && void checkGroups();
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('online', again);
+    const poll = window.setInterval(again, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('online', again);
+      window.clearInterval(poll);
+    };
+  }, [session, checkGroups]);
+
   // ---------- join / upload / invite / leave ----------
   const afterLogin = useRef<LoginReason | null>(null);
   /** What the login was for (add the 5th player, open a new group…): done once logged in. */
@@ -285,6 +377,8 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         const known = g.latestIndex().groups.find((x) => x.id === id);
         const { theme, accent } = g.latest().app.settings;
         const plan = joinPlan(known, role);
+        // v21: whoever opens a link is in the roster right away (before the group's copy is read).
+        await claimSelf(api, id);
         if (plan === 'player-new' || plan === 'player-open') {
           // Read-only: PlayerGroupProvider fills it from the public copy. A group this phone had as
           // an organizer starts empty (its ratings aren't his to keep).
@@ -335,7 +429,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         joining.current = null;
       }
     },
-    [ensureClient, say],
+    [ensureClient, say, claimSelf],
   );
 
   // `silent`: the automatic upload after login (v13) says nothing unless a server cap refused it.
@@ -367,13 +461,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           }
           saveMeta(localKV, gid, { ...EMPTY_META, baseName: existing.name });
         }
+        await claimSelf(api, gid); // v21: I'm in my own group's roster (the next sync pulls him)
         g.setMeta(gid, { synced: true, upload: undefined });
         if (!silent) say('הקבוצה מסונכרנת. עכשיו אפשר להזמין מארגנים');
       } finally {
         uploading.current.delete(gid);
       }
     },
-    [ensureClient, say, sayOnce],
+    [ensureClient, say, sayOnce, claimSelf],
   );
   uploadRef.current = upload;
 
@@ -403,6 +498,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       status: current.synced ? status : 'local',
       loginReason,
       message,
+      selfClaims,
       openLogin(reason = 'account', then) {
         thenQueue.set(then ?? null);
         afterLogin.current = reason;
@@ -504,7 +600,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           .catch(() => say('אין חיבור לאינטרנט'));
       },
     }),
-    [session, current.synced, status, loginReason, message, ensureClient, schedule, upload, doJoin, say, thenQueue],
+    [session, current.synced, status, loginReason, message, selfClaims, ensureClient, schedule, upload, doJoin, say, thenQueue],
   );
 
   return (

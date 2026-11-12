@@ -126,7 +126,7 @@ export function PlayerGroupProvider({ children }: { children: ReactNode }) {
       off = true;
       unsub.forEach((f) => f());
     };
-  }, [active, gid, sync.userId, sync.client, tick]);
+  }, [active, gid, sync.userId, sync.client, tick, sync.selfClaims]);
 
   const claim = useCallback(
     async (playerId: string) => {

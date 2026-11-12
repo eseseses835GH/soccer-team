@@ -6,6 +6,7 @@ import type { SyncDoc } from './doc';
 import type { RemoteApi, RemoteGroup } from './engine';
 import { parseInvites, parseOrganizers, type Invite, type Organizer } from './organizers';
 import type { MemberRole } from './players';
+import { parseMyGroups, type MyGroup } from './myGroups';
 
 const URL_ = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
 const KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() ?? '';
@@ -101,6 +102,10 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
   listOrganizers(groupId: string): Promise<Organizer[]>;
   listInvites(groupId: string): Promise<Invite[]>;
   revokeInvite(token: string): Promise<void>;
+  /** Every group this login belongs to (v21). */
+  myGroups(): Promise<MyGroup[]>;
+  /** Put me in the roster as myself (v21, any member). My player id, or null (no name to use). */
+  claimSelf(groupId: string): Promise<string | null>;
 } {
   return {
     async fetchGroup(id) {
@@ -157,6 +162,16 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
     async revokeInvite(token) {
       const { error } = await sb.rpc('revoke_invite', { p_token: token });
       if (error) fail(error);
+    },
+    async myGroups() {
+      const { data, error } = await sb.rpc('my_groups');
+      if (error) fail(error);
+      return parseMyGroups(data);
+    },
+    async claimSelf(groupId) {
+      const { data, error } = await sb.rpc('claim_self', { p_group_id: groupId });
+      if (error) fail(error);
+      return typeof data === 'string' && data ? data : null;
     },
   };
 }

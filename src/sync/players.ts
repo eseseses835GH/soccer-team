@@ -144,6 +144,19 @@ export function playersApi(sb: SupabaseClient) {
         throw e;
       }
     },
+    /** "השם שלי בקבוצה" (v21): rename the roster player I claimed. 'name' = another player has that name. */
+    async renameMyPlayer(groupId: string, name: string): Promise<void> {
+      try {
+        await rpc('rename_my_player', { p_group_id: groupId, p_name: name });
+      } catch (e) {
+        if (e instanceof SyncError && e.code === 'taken' && /name_taken/.test(e.message)) throw new SyncError(e.message, 'name');
+        throw e;
+      }
+    },
+    /** "אני ברשימה בשם אחר" (v21): move my claim there. True when my automatic entry was removed. */
+    async switchMyPlayer(groupId: string, playerId: string): Promise<boolean> {
+      return (await rpc('switch_my_player', { p_group_id: groupId, p_player_id: playerId })) === true;
+    },
     /** Organizers: undo a wrong claim. */
     async unclaimPlayer(groupId: string, userId: string): Promise<void> {
       await rpc('unclaim_player', { p_group_id: groupId, p_user_id: userId });

@@ -1784,7 +1784,7 @@ if (SB_URL) {
   await mp.getByRole('heading', { name: 'גיל כהן' }).waitFor();
   const text = async () => (await mp.locator('.me').innerText()).replace(/\s+/g, ' ');
   let t = await text();
-  assert(/כדורגל בשכונה שחקן · אני: גיל/.test(t) && /שישי בבוקר מארגן/.test(t) && /מחובר עם Google/.test(t), `me: groups/roles (${t.slice(0, 200)})`);
+  assert(/כדורגל בשכונה שחקן אני: גיל/.test(t) && /שישי בבוקר מארגן/.test(t) && /מחובר עם Google/.test(t), `me: groups/roles (${t.slice(0, 200)})`);
   const row = (name) => mp.locator('.me-table tbody tr', { hasText: name }).innerText().then((x) => x.replace(/\s+/g, ' ').trim());
   assert((await row('כדורגל בשכונה')) === 'כדורגל בשכונה 1 3 2 2', `me: player group stats ${await row('כדורגל בשכונה')}`);
   assert(!(await mp.locator('.me-table tbody tr', { hasText: 'שישי בבוקר' }).count()), 'me: no stats before claiming in the organizer group');
@@ -1796,7 +1796,7 @@ if (SB_URL) {
   await sheet.waitFor({ state: 'detached' });
   assert(db.orgMe === 'o1', 'me: organizer claim sent');
   t = await text();
-  assert(/שישי בבוקר מארגן · אני: גיל/.test(t), 'me: organizer group shows the claim');
+  assert(/שישי בבוקר מארגן אני: גיל/.test(t), 'me: organizer group shows the claim');
   assert((await row('שישי בבוקר')) === 'שישי בבוקר 2 6 3 (50%) 4' && (await row('סה״כ')) === 'סה״כ 3 9 5 (56%) 6', `me: org + total stats ${await row('שישי בבוקר')} / ${await row('סה״כ')}`);
   const recent = await mp.locator('.me .ev-list').last().locator('li').allInnerTexts();
   assert(recent.length === 3 && /שישי בבוקר/.test(recent[0]) && /כדורגל בשכונה/.test(recent[1]), `me: recent evenings ${JSON.stringify(recent)}`);
@@ -2015,6 +2015,139 @@ if (SB_URL) {
   await op.getByText('ערבים קודמים').first().waitFor({ timeout: 3000 }).catch(() => {});
   console.log("player evening: in the organizer's history after a sync");
   await octx.close();
+}
+
+// 24. The same login on a second phone, and an organizer is "me" in his group (v21). A fresh phone
+// logs in → its organizer group (with him already in the roster) and its player group appear, the
+// open group stays; a group created while logged in has him in the roster and "הדף שלי" doesn't ask
+// "עוד לא בחרת מי אתה"; an existing synced group without his claim gets him on the next open.
+if (SB_URL) {
+  const ORG_G = 'aaaaaaaa-1111-4222-8333-444444444444';
+  const PL_G = 'bbbbbbbb-1111-4222-8333-444444444444';
+  const attrs = { overall: 7, stamina: 7, passing: 7, dribbling: 7, shooting: 7, defense: 7, teamwork: 7, leadership: 7 };
+  const s = cloudServer();
+  s.selfName = 'test';
+  s.groups.set(ORG_G, { name: 'כדורגל בני עי״ש', data: { v: 1, players: [{ id: 'a1', name: 'אבי', attrs, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 3 });
+  s.mine = [
+    { group_id: ORG_G, name: 'כדורגל בני עי״ש', role: 'organizer', player_id: null },
+    { group_id: PL_G, name: 'שישי בשכונה', role: 'player', player_id: null },
+  ];
+  const fctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cloudRoutes(fctx, s);
+  const fp = await fctx.newPage();
+  fp.on('pageerror', (e) => errors.push(`second phone: ${e.message}`));
+  await fp.goto(base + '#settings');
+  const before = await fp.evaluate(() => JSON.parse(localStorage.getItem('kochot:groups')).currentId);
+  await fp.getByRole('button', { name: 'התחברות', exact: true }).click();
+  await loginInSheet(fp);
+  const idx = () => fp.evaluate(() => JSON.parse(localStorage.getItem('kochot:groups')));
+  for (let i = 0; i < 50 && (await idx()).groups.length < 3; i++) await fp.waitForTimeout(100);
+  const ix = await idx();
+  const og = ix.groups.find((x) => x.id === ORG_G);
+  const pg2 = ix.groups.find((x) => x.id === PL_G);
+  assert(og?.synced && !og.role && og.name === 'כדורגל בני עי״ש', `second phone: organizer group ${JSON.stringify(og)}`);
+  assert(pg2?.synced && pg2.role === 'player' && pg2.name === 'שישי בשכונה', `second phone: player group ${JSON.stringify(pg2)}`);
+  assert(ix.currentId === before && ix.groups.length === 3, `second phone: stays on the open group (${ix.groups.length} groups)`);
+  const ogRoster = await fp.evaluate((g) => JSON.parse(localStorage.getItem(`kochot:group:${g}`)).players.map((p) => p.name), ORG_G);
+  assert(JSON.stringify(ogRoster) === '["אבי","test"]', `second phone: organizer group's roster with me ${JSON.stringify(ogRoster)}`);
+  assert(s.calls.filter((c) => c.rpc === 'claim_self' && c.body.p_group_id === ORG_G).length === 1, 'second phone: claim_self once');
+  await fp.goto(base);
+  await fp.getByRole('button', { name: /החלפת קבוצה/ }).click();
+  assert((await fp.locator('.sheet').getByText('כדורגל בני עי״ש').count()) > 0 && (await fp.locator('.sheet').getByText('שישי בשכונה').count()) > 0, 'second phone: both groups in the switcher');
+  await fp.keyboard.press('Escape');
+  // Coming back to the screen again adds nothing twice.
+  await fp.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await fp.waitForTimeout(300);
+  assert((await idx()).groups.length === 3, 'second phone: no duplicates');
+  await fctx.close();
+
+  // A group created while logged in: I'm in its roster, and "הדף שלי" knows it's me.
+  const s2 = cloudServer();
+  s2.selfName = 'test';
+  const nctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cloudRoutes(nctx, s2);
+  const np = await nctx.newPage();
+  np.on('pageerror', (e) => errors.push(`self in new group: ${e.message}`));
+  await np.goto(base + '#settings');
+  await np.getByRole('button', { name: 'התחברות', exact: true }).click();
+  await loginInSheet(np);
+  await np.goto(base);
+  await np.getByRole('button', { name: /החלפת קבוצה/ }).click();
+  await np.getByRole('button', { name: /קבוצה חדשה/ }).click();
+  await np.getByLabel('שם הקבוצה').fill('בבסיס');
+  await np.getByRole('button', { name: 'יצירה' }).click();
+  const mine = () => np.evaluate(() => {
+    const ix = JSON.parse(localStorage.getItem('kochot:groups'));
+    return JSON.parse(localStorage.getItem(`kochot:group:${ix.currentId}`)).players.map((p) => p.name);
+  });
+  for (let i = 0; i < 50 && !(await mine()).includes('test'); i++) await np.waitForTimeout(100);
+  assert(JSON.stringify(await mine()) === '["test"]', `self in new group: roster ${JSON.stringify(await mine())}`);
+  const [gid2] = [...s2.groups.keys()];
+  assert(s2.claims.get(gid2) && JSON.stringify(s2.groups.get(gid2).data.players.map((p) => p.name)) === '["test"]', 'self in new group: claimed on the server');
+  await np.goto(base + '#me');
+  await np.locator('.me-groups').waitFor({ timeout: 5000 });
+  await np.waitForTimeout(300);
+  const meText = (await np.locator('.me').innerText()).replace(/\s+/g, ' ');
+  assert(/בבסיס מארגן אני: test/.test(meText), `self in new group: my page (${meText.slice(0, 160)})`);
+  assert(!(await np.getByText('עוד לא בחרת מי אתה').count()), 'self in new group: not asked who I am');
+  await nctx.close();
+
+  // An existing synced group (the user's own, from before v21) gets me on the next open.
+  const s3 = cloudServer();
+  s3.selfName = 'אלי';
+  const xctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cloudRoutes(xctx, s3);
+  const xp = await xctx.newPage();
+  xp.on('pageerror', (e) => errors.push(`self in old group: ${e.message}`));
+  await xp.goto(base);
+  await signInOrganizer(xp);
+  const { gid: gid3 } = await groupState(xp);
+  s3.groups.set(gid3, { name: 'שישי בשכונה', data: { v: 1, players: [{ id: 'a1', name: 'אבי', attrs, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 2 });
+  s3.mine = [{ group_id: gid3, name: 'שישי בשכונה', role: 'organizer', player_id: null }];
+  await xp.reload();
+  await xp.goto(base + '#players');
+  await xp.locator('.roster li', { hasText: 'אלי' }).waitFor({ timeout: 10000 }).catch(() => errors.push('self in old group: not in the roster after opening'));
+  assert((await xp.locator('.roster li').count()) === 2 && s3.groups.get(gid3).data.players.length === 2, 'self in old group: him and אבי, nothing lost');
+  await xctx.close();
+
+  // A player link: straight into the group under his login's name, no "מי אתה?". He renames
+  // himself, then says he's the "יוסי" the organizer typed: the automatic entry goes away.
+  const PL2 = 'cccccccc-1111-4222-8333-444444444444';
+  const s4 = cloudServer();
+  s4.selfName = 'test';
+  s4.groups.set(PL2, { name: 'חמישי', data: { v: 1, players: [{ id: 'y1', name: 'יוסי', attrs, canGK: false, cards: [] }, { id: 'd1', name: 'test', attrs, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 1 });
+  s4.othersClaimed = { [PL2]: 'd1' }; // another "test" already claimed that one → "test 2"
+  s4.invites = { PTOK: { gid: PL2, role: 'player' } };
+  const jctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cloudRoutes(jctx, s4);
+  const jp = await jctx.newPage();
+  jp.on('pageerror', (e) => errors.push(`link join: ${e.message}`));
+  await jp.goto(base + '#settings');
+  await jp.getByRole('button', { name: 'התחברות', exact: true }).click();
+  await loginInSheet(jp);
+  await jp.goto(base + '#join=PTOK');
+  await jp.reload();
+  await jp.getByText('אין ערב עכשיו').waitFor({ timeout: 8000 }).catch(() => errors.push('link join: not straight on the group home'));
+  assert(!(await jp.getByRole('heading', { name: 'מי אתה?' }).count()), 'link join: asked "מי אתה?"');
+  const roster4 = () => s4.groups.get(PL2).data.players.map((p) => p.name).join(',');
+  assert(roster4() === 'יוסי,test,test 2' && s4.claims.get(PL2) === s4.auto.get(PL2), `link join: in the roster as "test 2" (${roster4()})`);
+  await jp.goto(base + '#me');
+  await jp.getByRole('button', { name: 'השם שלי בקבוצה: test 2' }).click();
+  const nameSheet = jp.getByRole('dialog', { name: 'השם שלי בקבוצה' });
+  await nameSheet.getByLabel('השם שלי').fill('טסט');
+  await nameSheet.getByRole('button', { name: 'שמירה' }).click();
+  await nameSheet.waitFor({ state: 'detached', timeout: 5000 }).catch(() => errors.push('link join: rename sheet stays'));
+  assert(roster4() === 'יוסי,test,טסט', `link join: renamed on the server (${roster4()})`);
+  await jp.getByRole('button', { name: 'השם שלי בקבוצה: טסט' }).waitFor({ timeout: 3000 }).catch(() => errors.push('link join: new name not shown'));
+  await jp.getByRole('button', { name: 'השם שלי בקבוצה: טסט' }).click();
+  await nameSheet.getByRole('button', { name: 'אני ברשימה בשם אחר' }).click();
+  assert(!(await nameSheet.getByRole('button', { name: 'test', exact: true }).count()), 'link join: a claimed name is not offered');
+  await nameSheet.getByRole('button', { name: 'יוסי' }).click();
+  await nameSheet.waitFor({ state: 'detached', timeout: 5000 }).catch(() => errors.push('link join: switch sheet stays'));
+  assert(roster4() === 'יוסי,test' && s4.claims.get(PL2) === 'y1', `link join: switched, the automatic entry removed (${roster4()})`);
+  await jp.getByRole('button', { name: 'השם שלי בקבוצה: יוסי' }).waitFor({ timeout: 3000 }).catch(() => errors.push('link join: "אני: יוסי" not shown'));
+  await jctx.close();
+  console.log('v21: second phone gets its groups; a new group has me; an old group gets me; a link puts me straight in; rename; switch');
 }
 
 console.log(`split 22 players in ${dt}ms`);

@@ -7,7 +7,7 @@ import { addStats, EMPTY_STATS, initialOf, myPct, myStats, recentEvenings, type 
 import { bibLook } from '../state/model';
 import { localKV, useGroups, useStore } from '../state/store';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
-import { isPlayerGroup, loadPublic } from '../sync/playerGroup';
+import { cleanName, isPlayerGroup, loadPublic, MAX_PLAYER_NAME, publicKey } from '../sync/playerGroup';
 import { playersApi } from '../sync/players';
 import { SyncError } from '../sync/supabase';
 import { useSync } from '../sync/SyncProvider';
@@ -61,6 +61,9 @@ export function MeScreen() {
   const { go, notify } = useUi();
   const [orgMe, setOrgMe] = useState<Record<string, OrgMe | null>>({});
   const [claimFor, setClaimFor] = useState<Row | null>(null);
+  const [nameFor, setNameFor] = useState<Row | null>(null);
+  /** Re-read the caches after a rename / switch here. */
+  const [tick, setTick] = useState(0);
   const user = sync.userId ?? '';
   const synced = groups.index.groups.filter((g) => g.synced);
 
@@ -83,7 +86,7 @@ export function MeScreen() {
     return () => {
       off = true;
     };
-  }, [user, orgIds, sync.client]);
+  }, [user, orgIds, sync.client, sync.selfClaims]);
 
   const rows = useMemo<Row[]>(
     () =>
@@ -99,7 +102,7 @@ export function MeScreen() {
         const o = orgMe[meta.id] ?? loadOrgMe(meta.id, user);
         return { meta, player, history: app.history, roster, playerId: o ? o.playerId : undefined, taken: o?.taken ?? [] };
       }),
-    [groups.index, groups.current.id, state, pg.pub, orgMe, user],
+    [groups.index, groups.current.id, state, pg.pub, orgMe, user, tick], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const profile = sync.profile;
@@ -144,13 +147,17 @@ export function MeScreen() {
                       <span className="name">{r.meta.name}</span>
                       <small className="muted">
                         {r.player ? 'שחקן' : 'מארגן'}
-                        {me && ` · אני: ${me}`}
                       </small>
                     </span>
                     <span className="ev-chev" aria-hidden="true">
                       <Icon name="back" size={18} />
                     </span>
                   </button>
+                  {me && (
+                    <button type="button" className="text-btn me-claim" aria-label={`השם שלי בקבוצה: ${me}`} onClick={() => setNameFor(r)}>
+                      אני: {me}
+                    </button>
+                  )}
                   {!me && r.playerId !== undefined && r.roster.length > 0 && (
                     <button type="button" className="text-btn me-claim" onClick={() => (r.player ? open(r.meta.id, 'claim') : setClaimFor(r))}>
                       עוד לא בחרת מי אתה
@@ -222,6 +229,47 @@ export function MeScreen() {
         </button>
       </div>
 
+      {nameFor && (
+        <Sheet title="השם שלי בקבוצה" onClose={() => setNameFor(null)}>
+          <MyName
+            row={nameFor}
+            notify={notify}
+            onDone={(change) => {
+              const gid = nameFor.meta.id;
+              const old = nameFor.playerId!;
+              const pid = change.kind === 'switch' ? change.playerId : old;
+              // This phone's copies follow at once; the next sync / fetch brings the server's.
+              groups.setGroupState(gid, (st) => ({
+                ...st,
+                players: st.players
+                  .filter((p) => !(change.kind === 'switch' && change.removed && p.id === old))
+                  .map((p) => (change.kind === 'rename' && p.id === old ? { ...p, name: change.name } : p)),
+              }));
+              if (nameFor.player) {
+                const pub = loadPublic(localKV, gid);
+                if (pub)
+                  localKV.set(publicKey(gid), {
+                    ...pub,
+                    players: pub.players
+                      .filter((p) => !(change.kind === 'switch' && change.removed && p.id === old))
+                      .map((p) => (change.kind === 'rename' && p.id === old ? { ...p, name: change.name } : p)),
+                    claimed: [...pub.claimed.filter((x) => x !== old), pid],
+                    me: { ...pub.me, playerId: pid },
+                  });
+                if (gid === groups.current.id) pg.refresh();
+              } else {
+                const v: OrgMe = { user, playerId: pid, taken: nameFor.taken };
+                localKV.set(meKey(gid), v);
+                setOrgMe((x) => ({ ...x, [gid]: v }));
+                if (gid === groups.current.id) sync.syncNow();
+              }
+              setTick((t) => t + 1);
+              setNameFor(null);
+            }}
+          />
+        </Sheet>
+      )}
+
       {claimFor && (
         <Sheet title="מי אתה?" onClose={() => setClaimFor(null)}>
           <OrgClaim
@@ -282,6 +330,72 @@ function OrgClaim({ row, onDone, notify }: { row: Row; onDone: (playerId: string
           {p.name}
         </button>
       ))}
+    </div>
+  );
+}
+
+type NameChange = { kind: 'rename'; name: string } | { kind: 'switch'; playerId: string; removed: boolean };
+
+/** "השם שלי בקבוצה" (v21): rename my roster player, or say I'm another (unclaimed) name in the list. */
+function MyName({ row, onDone, notify }: { row: Row; onDone: (c: NameChange) => void; notify: (m: string) => void }) {
+  const sync = useSync();
+  const current = row.roster.find((p) => p.id === row.playerId)?.name ?? '';
+  const [name, setName] = useState(current);
+  const [others, setOthers] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const taken = new Set(row.taken);
+  const free = row.roster.filter((p) => p.id !== row.playerId && !taken.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  const run = async (f: (api: ReturnType<typeof playersApi>) => Promise<NameChange>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      onDone(await f(playersApi(await sync.client())));
+    } catch (e) {
+      const code = e instanceof SyncError ? e.code : 'other';
+      notify(code === 'name' ? 'השם כבר ברשימה' : code === 'taken' ? 'השם הזה כבר תפוס' : code === 'offline' ? 'אין חיבור לאינטרנט' : 'משהו השתבש, נסו שוב');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = cleanName(name);
+    if (!n || n === current) return;
+    void run(async (api) => {
+      await api.renameMyPlayer(row.meta.id, n);
+      return { kind: 'rename', name: n };
+    });
+  };
+  return (
+    <div className="stack">
+      <form className="stack" onSubmit={save}>
+        <input className="input input-big" aria-label="השם שלי" maxLength={MAX_PLAYER_NAME} value={name} onChange={(e) => setName(e.target.value)} />
+        <button type="submit" className="btn btn-primary btn-block" disabled={busy || !cleanName(name) || cleanName(name) === current}>
+          שמירה
+        </button>
+      </form>
+      {free.length > 0 &&
+        (others ? (
+          <div className="claim-grid">
+            {free.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="member chip"
+                disabled={busy}
+                onClick={() =>
+                  void run(async (api) => ({ kind: 'switch', playerId: p.id, removed: await api.switchMyPlayer(row.meta.id, p.id) }))
+                }
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button type="button" className="text-btn" onClick={() => setOthers(true)}>
+            אני ברשימה בשם אחר
+          </button>
+        ))}
     </div>
   );
 }

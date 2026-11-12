@@ -47,8 +47,8 @@ export interface GroupsApi {
   /** Forget a group on this phone (the last one can't be removed). */
   remove(id: string): void;
   setMeta(id: string, patch: Partial<Omit<GroupMeta, 'id'>>): void;
-  /** Add a group that came from the cloud (or update it) and switch to it. */
-  adopt(meta: GroupMeta, app: AppState): void;
+  /** Add a group that came from the cloud (or update it) and switch to it (`switchTo: false`: stay where you are). */
+  adopt(meta: GroupMeta, app: AppState, switchTo?: boolean): void;
   /** Replace a group's state from outside the reducer (sync). Works for groups that aren't open too. */
   setGroupState(id: string, update: (s: AppState) => AppState): void;
   /** Latest state of the open group, for async code. */
@@ -144,10 +144,16 @@ export function StoreProvider({ children, kv = localKV }: { children: ReactNode;
       setMeta(id, patch) {
         commitIndex(updateGroup(indexRef.current, id, patch));
       },
-      adopt(meta, app) {
+      adopt(meta, app, switchTo = true) {
         saveOpen();
         saveGroupState(kv, meta.id, app);
-        commitIndex({ ...addGroup(indexRef.current, meta), currentId: meta.id });
+        const added = addGroup(indexRef.current, meta);
+        if (!switchTo) {
+          commitIndex(added);
+          if (rootRef.current.gid === meta.id) open(meta.id, app);
+          return;
+        }
+        commitIndex({ ...added, currentId: meta.id });
         open(meta.id, app);
       },
       setGroupState(id, update) {
