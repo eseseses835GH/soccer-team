@@ -12,6 +12,7 @@ import { loadJSON, saveJSON } from '../state/storage';
 import { useUi } from './App';
 import { Empty, PositionBadges, Sheet } from './components';
 import { MatchScreen } from './MatchScreen';
+import { NewEvening } from './PlayerEvening';
 import type { PublicPlayer } from '../sync/players';
 
 const laterKey = (gid: string) => `kochot:claim-later:${gid}`;
@@ -25,6 +26,8 @@ export function PlayerHome() {
   useEffect(() => setLater(loadJSON<boolean>(laterKey(current.id)) === true), [current.id]);
   const now = useNow(1000);
   const runner = useRunner();
+  /** v20: making teams for a new evening. */
+  const [starting, setStarting] = useState(false);
 
   if (pg.load === 'signedOut') {
     return (
@@ -59,14 +62,21 @@ export function PlayerHome() {
       const err = await runner.release();
       if (err) notify(err === 'offline' ? 'אין חיבור לאינטרנט' : 'משהו השתבש, נסו שוב');
     };
+    const end = async () => {
+      const res = await runner.end();
+      if (res.error) return notify(res.error === 'offline' ? 'אין חיבור לאינטרנט' : res.error === 'conflict' ? 'מישהו אחר מנהל את הערב' : 'משהו השתבש, נסו שוב');
+      if (res.record) go('evening', res.record.id);
+    };
     return (
       <LocalStore value={{ state: runner.app, dispatch: runner.dispatch }}>
-        <MatchScreen runner={{ onRelease: () => void release() }} />
+        <MatchScreen runner={{ onRelease: () => void release(), onEnd: end }} />
       </LocalStore>
     );
   }
 
   const live = liveNow(pg.live, now);
+  if (starting && !live) return <NewEvening gid={current.id} onClose={() => setStarting(false)} />;
+
   const card = rateCard(pg.pub, pg.votes);
   return (
     <section className="player-home" aria-label="הערב">
@@ -84,7 +94,13 @@ export function PlayerHome() {
       {live ? (
         <LiveView data={live} roster={pg.pub.players} me={pg.pub.me.playerId} now={now} control={<TakeControl />} />
       ) : (
-        <Empty icon="🌙" title="אין ערב עכשיו" />
+        <Empty icon="🌙" title="אין ערב עכשיו">
+          <div className="stack narrow">
+            <button type="button" className="btn btn-primary btn-block" onClick={() => setStarting(true)}>
+              ערב חדש
+            </button>
+          </div>
+        </Empty>
       )}
     </section>
   );
@@ -251,7 +267,22 @@ export function ClaimView({ onLater, onDone }: { onLater?: () => void; onDone?: 
 }
 
 /** Tonight, as the organizer's phone publishes it. */
-export function LiveView({ data, roster, me, now, control }: { data: LiveData; roster: PublicPlayer[]; me: string | null; now: number; control?: ReactNode }) {
+export function LiveView({
+  data,
+  roster,
+  me,
+  now,
+  control,
+  totals,
+}: {
+  data: LiveData;
+  roster: PublicPlayer[];
+  me: string | null;
+  now: number;
+  control?: ReactNode;
+  /** v20: one strength per team (teams just made, before the evening starts). */
+  totals?: number[];
+}) {
   const name = (id: string) => liveName(data, roster, id);
   const badges = (id: string) => {
     const p = roster.find((x) => x.id === id);
@@ -316,7 +347,11 @@ export function LiveView({ data, roster, me, now, control }: { data: LiveData; r
             <article key={t} className={`team ${waiting ? 'waiting' : ''}`} style={{ '--team': l.color } as React.CSSProperties} aria-label={l.the}>
               <header>
                 <h2>{l.name}</h2>
-                {place && <span className="team-sub">{place}</span>}
+                {(place || totals) && (
+                  <span className="team-sub">
+                    {[place, totals?.[t] !== undefined ? `כוח ${totals[t]}` : ''].filter(Boolean).join(' · ')}
+                  </span>
+                )}
               </header>
               <ol>
                 {team.ids.map((id) => (

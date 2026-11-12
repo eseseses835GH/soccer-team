@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { addGoal, score, startClock, startSession } from '../match/match';
+import { addGoal, endMatch, score, startClock, startSession } from '../match/match';
 import { DEFAULT_SETTINGS, defaultAttrs, INITIAL_STATE, type AppState, type GameResult } from '../state/model';
 import type { KV } from '../state/groups';
 import { liveFromState, type LiveData, type LiveRow } from './live';
+import { eveningId, type EveningRecord } from '../state/history';
 import { createRunner, loadRunner, runnerApp, runnerKey, type RunnerApi } from './runner';
 import { SyncError } from './supabase';
 
@@ -30,14 +31,31 @@ function memKV(): KV & { data: Map<string, unknown> } {
   return { data, get: (k) => (data.has(k) ? JSON.parse(JSON.stringify(data.get(k))) : null), set: (k, v) => (data.set(k, v), true), remove: (k) => void data.delete(k) };
 }
 
-function setup(o: { kv?: ReturnType<typeof memKV>; online?: () => boolean } = {}) {
+function setup(o: { kv?: ReturnType<typeof memKV>; online?: () => boolean; ended?: boolean; base?: AppState } = {}) {
   const kv = o.kv ?? memKV();
   let server = row();
+  /** v20: an evening is open on the server (a player may only start one when none is). */
+  let open = !o.ended;
+  if (o.ended) server = { ...server, runner: null, runnerName: '' };
+  const ended: (EveningRecord | null)[] = [];
   const api = {
-    get: vi.fn(async () => server),
-    set: vi.fn(async (_g: string, data: LiveData, rev: number) => {
+    get: vi.fn(async () => (open ? server : null)),
+    set: vi.fn(async (_g: string, data: LiveData, rev?: number) => {
+      if (rev === undefined && !open) {
+        open = true;
+        server = { ...server, data, runner: ME, runnerName: 'אני', rev: server.rev + 1 };
+        return server.rev;
+      }
       if (server.runner !== ME || rev !== server.rev) throw new SyncError('x', 'conflict');
       server = { ...server, data, rev: server.rev + 1 };
+      return server.rev;
+    }),
+    end: vi.fn(async (_g: string, record: EveningRecord | null, rev: number) => {
+      if (!open) throw new SyncError('x', 'invalid');
+      if (server.runner !== ME || rev !== server.rev) throw new SyncError('x', 'conflict');
+      ended.push(record);
+      open = false;
+      server = { ...server, runner: null, runnerName: '', rev: server.rev + 1 };
       return server.rev;
     }),
     takeControl: vi.fn(async () => (server = { ...server, runner: ME, runnerName: 'אני', rev: server.rev + 1 })),
@@ -48,13 +66,14 @@ function setup(o: { kv?: ReturnType<typeof memKV>; online?: () => boolean } = {}
   } satisfies RunnerApi;
   const changes: (AppState | null)[] = [];
   const lost: string[] = [];
-  const r = createRunner({ gid: GID, me: ME, kv, api, base: () => base, onChange: (a) => changes.push(a), onLost: (n) => lost.push(n), delay: 0, isOnline: o.online });
+  const r = createRunner({ gid: GID, me: ME, kv, api, base: () => o.base ?? base, onChange: (a) => changes.push(a), onLost: (n) => lost.push(n), delay: 0, isOnline: o.online });
   return {
     r,
     api,
     kv,
     changes,
     lost,
+    ended,
     server: () => server,
     setServer: (s: Partial<LiveRow>) => (server = { ...server, ...s }),
   };
@@ -215,3 +234,63 @@ describe('runner', () => {
     expect(t.r.state()).not.toBeNull();
   });
 });
+
+describe('a player starts and ends an evening (v20)', () => {
+  const fresh = (): AppState => ({ ...base, settings: { ...base.settings, ...settings, goalSound: 'off', theme: 'dark' }, presentIds: names, result: result(), match: null });
+
+  it('teams made on his phone go live with the first write (no rev), then on with the rev', async () => {
+    const t = setup({ ended: true });
+    t.r.seen(t.server()); // the old row (nobody runs it) must not stop the new evening
+    t.r.startNew(fresh());
+    expect(t.r.state()?.match).toEqual(startSession(3));
+    t.r.seen(null);
+    await tick();
+    expect(t.r.state()).not.toBeNull();
+    expect(t.api.set.mock.calls[0][2]).toBeUndefined();
+    expect(t.server().runner).toBe(ME);
+    const first = t.server().rev;
+    expect(t.r.rev()).toBe(first);
+    t.r.dispatch({ type: 'setMatch', match: addGoal(startClock(startSession(3), T0), 0, T0 + 1000), now: T0 });
+    await tick();
+    expect(t.api.set.mock.calls[1][2]).toBe(first);
+  });
+
+  it('an evening already open: his first write is refused and he goes back to watching', async () => {
+    const t = setup();
+    t.r.startNew(fresh());
+    await tick();
+    await tick();
+    expect(t.r.state()).toBeNull();
+    expect(t.lost).toEqual(['דני']);
+  });
+
+  it('ending saves the evening merged with the same one in the history, and stops', async () => {
+    const t = setup({ ended: true });
+    t.r.startNew(fresh());
+    await tick();
+    let m = startClock(startSession(3), T0);
+    m = addGoal(m, 0, T0 + 1000);
+    t.r.dispatch({ type: 'setMatch', match: endMatch(m, 1, T0 + 60_000), now: T0 });
+    await tick();
+    const res = await t.r.end();
+    expect(res.error).toBeNull();
+    expect(t.ended).toHaveLength(1);
+    expect(t.ended[0]?.id).toBe(eveningId(result()));
+    expect(t.ended[0]?.matches.length).toBeGreaterThan(0);
+    expect(JSON.stringify(t.ended[0])).not.toMatch(/attrs|overall|levelVotes/);
+    expect(t.r.state()).toBeNull();
+    expect(t.kv.get(runnerKey(GID))).toBeNull();
+  });
+
+  it('a stored new evening that never reached the server resumes and is sent without a rev', async () => {
+    const kv = memKV();
+    kv.set(runnerKey(GID), { user: ME, rev: null, app: { players: base.players, settings, result: result(), match: startSession(3) } });
+    expect(loadRunner(kv, GID, ME)?.rev).toBeNull();
+    const t = setup({ kv, ended: true });
+    await tick();
+    expect(t.api.set).toHaveBeenCalledTimes(1);
+    expect(t.api.set.mock.calls[0][2]).toBeUndefined();
+    expect(t.server().runner).toBe(ME);
+  });
+});
+

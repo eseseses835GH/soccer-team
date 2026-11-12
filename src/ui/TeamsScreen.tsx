@@ -13,6 +13,7 @@ import { Icon } from './icons';
 import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
 import { rerollTeams, splitTeams } from './split';
+import { teamTotals } from '../state/splitCore';
 
 type Sel = { kind: 'team'; i: number } | { kind: 'sub'; id: string } | null;
 
@@ -126,6 +127,8 @@ export function TeamsScreen() {
   const animKey = `${r.createdAt}-${r.shown.length}`;
   const nameOf = (id: string) => byId.get(id)?.name ?? '?';
   const rotate = state.settings.gkMode === 'rotate';
+  // v20: one number per team, the same one a player sees when he makes teams.
+  const totals = teamTotals(r.playerIds, r.assignment, k, state.players, state.settings.weights);
 
   const tapMember = (i: number) => {
     if (sel?.kind === 'sub') {
@@ -240,6 +243,7 @@ export function TeamsScreen() {
                 <span className="team-sub">
                   {t < 2 ? 'פותחים' : `בתור #${t - 1}`}
                   {short && ` · משלימים ${r.teamSize - counts[t]}`}
+                  {` · כוח ${totals[t]}`}
                 </span>
                 {showPositions && <PositionLine members={order.map((id) => byId.get(id)!).filter(Boolean)} />}
               </header>

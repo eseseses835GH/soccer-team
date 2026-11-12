@@ -5,7 +5,8 @@
 // the evening ended) drops it. No React here, so it is unit-tested.
 import { startSession } from '../match/match';
 import type { KV } from '../state/groups';
-import { defaultMatchMs, sanitizePlayer, type AppState, type Player } from '../state/model';
+import { addEvening, buildEvening, eveningId, type EveningRecord } from '../state/history';
+import { defaultMatchMs, sanitizePlayer, teamBibs, type AppState, type Player } from '../state/model';
 import { reducer, type Action } from '../state/reducer';
 import { liveToState, settingsFromLive } from './control';
 import { iAmRunner, liveFromState, someoneElseRuns, type LiveData, type LiveRow } from './live';
@@ -18,13 +19,17 @@ export const runnerKey = (gid: string) => `kochot:runner:${gid}`;
 /** What this phone keeps while it runs the evening. */
 interface Stored {
   user: string;
-  rev: number;
+  /** null = an evening this phone started (v20) that hasn't reached the server yet. */
+  rev: number | null;
   app: Pick<AppState, 'players' | 'settings' | 'result' | 'match'>;
 }
 
 export interface RunnerApi {
   get(gid: string): Promise<LiveRow | null>;
-  set(gid: string, live: LiveData, rev: number): Promise<number>;
+  /** rev undefined = the first write of an evening this phone started (v20). */
+  set(gid: string, live: LiveData, rev?: number): Promise<number>;
+  /** v20: end the evening as its runner; the record goes into the group's history. */
+  end(gid: string, record: EveningRecord | null, rev: number): Promise<number>;
   takeControl(gid: string): Promise<LiveRow | null>;
   releaseControl(gid: string): Promise<number | null>;
 }
@@ -52,11 +57,18 @@ export interface Runner {
   take(): Promise<SyncError['code'] | null>;
   /** Stop running it (sends what waits first). Resolves to an error code, or null. */
   release(): Promise<SyncError['code'] | null>;
+  /** v20: run a new evening from teams made on this phone (it goes live with the first write). */
+  startNew(app: AppState): void;
+  /**
+   * v20: end the evening (sends what waits first). The record (null = no match played) is merged
+   * with the same evening in the group's history and saved on the server.
+   */
+  end(): Promise<{ error: SyncError['code'] | null; record: EveningRecord | null }>;
   /** A live row seen (fetch or realtime; null = nothing live or not loaded yet). */
   seen(row: LiveRow | null): void;
   /** Back online: send what waits. */
   flush(): Promise<void>;
-  rev(): number;
+  rev(): number | null;
   dispose(): void;
 }
 
@@ -84,14 +96,14 @@ export function runnerApp(base: AppState, live: LiveData): AppState {
 
 export function loadRunner(kv: KV, gid: string, me: string): Stored | null {
   const s = kv.get(runnerKey(gid)) as Stored | null;
-  if (!s || typeof s !== 'object' || s.user !== me || typeof s.rev !== 'number' || !s.app?.result || !s.app.match || !s.app.settings) return null;
+  if (!s || typeof s !== 'object' || s.user !== me || (typeof s.rev !== 'number' && s.rev !== null) || !s.app?.result || !s.app.match || !s.app.settings) return null;
   return s;
 }
 
 export function createRunner(o: RunnerOptions): Runner {
   const now = o.now ?? Date.now;
   let app: AppState | null = null;
-  let rev = 0;
+  let rev: number | null = 0;
   /** Rows up to this rev are from before this phone stopped running it: never resume from them. */
   let ignoreUpTo = -1;
   let pub: LivePublisher | null = null;
@@ -112,7 +124,7 @@ export function createRunner(o: RunnerOptions): Runner {
       now,
       async send(gid, live) {
         if (!live) return; // a player never ends the evening
-        const r = await o.api.set(gid, live, rev);
+        const r = await o.api.set(gid, live, rev ?? undefined);
         if (app) {
           rev = r;
           persist();
@@ -121,7 +133,7 @@ export function createRunner(o: RunnerOptions): Runner {
       onConflict: () => void recheck(),
     });
 
-  function start(next: AppState, r: number, serverHas: LiveData | null) {
+  function start(next: AppState, r: number | null, serverHas: LiveData | null) {
     pub?.dispose();
     app = next;
     rev = r;
@@ -133,7 +145,7 @@ export function createRunner(o: RunnerOptions): Runner {
   }
 
   function stop(name: string | null) {
-    ignoreUpTo = Math.max(ignoreUpTo, rev);
+    ignoreUpTo = Math.max(ignoreUpTo, rev ?? -1);
     pub?.dispose();
     pub = null;
     app = null;
@@ -203,11 +215,34 @@ export function createRunner(o: RunnerOptions): Runner {
       try {
         await pub?.flush();
         const r = await o.api.releaseControl(o.gid);
-        ignoreUpTo = Math.max(ignoreUpTo, r ?? rev);
+        ignoreUpTo = Math.max(ignoreUpTo, r ?? rev ?? -1);
         stop(null);
         return null;
       } catch (e) {
         return code(e);
+      }
+    },
+    startNew(next) {
+      start({ ...next, match: next.match ?? (next.result ? startSession(next.result.numTeams) : null) }, null, null);
+    },
+    async end() {
+      if (!app?.result || !app.match) return { error: null, record: null };
+      try {
+        await pub?.flush();
+        if (rev === null) return { error: 'offline', record: null }; // it never went live yet
+        const t = now();
+        const built = buildEvening({ match: app.match, result: app.result, players: app.players, bibs: teamBibs(app.settings, app.result.numTeams), now: t });
+        // The same evening may already be in the history (ended once, then played on): send it merged.
+        const record = built ? (addEvening(o.base().history, built).find((h) => h.id === eveningId(app!.result!)) ?? built) : null;
+        const r = await o.api.end(o.gid, record, rev);
+        ignoreUpTo = Math.max(ignoreUpTo, r);
+        stop(null);
+        return { error: null, record };
+      } catch (e) {
+        const c = code(e);
+        if (c === 'invalid') stop(null); // ended meanwhile
+        else if (c === 'conflict') void recheck();
+        return { error: c, record: null };
       }
     },
     seen(row) {
@@ -217,6 +252,7 @@ export function createRunner(o: RunnerOptions): Runner {
         if (row && iAmRunner(row, o.me) && row.rev > ignoreUpTo && liveNow(row, now())) start(runnerApp(o.base(), row.data), row.rev, row.data);
         return;
       }
+      if (rev === null) return; // a new evening not written yet: what's on the server is from before
       if (!row) return void recheck(); // not loaded yet, or ended: ask
       if (row.rev < rev) return; // older than what this phone wrote
       if (someoneElseRuns(row, o.me)) return stop(row.runnerName);

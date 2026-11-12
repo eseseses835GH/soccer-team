@@ -16,6 +16,13 @@ export function joinOnServer(s, gid, id, name) {
   g.version++;
 }
 
+/** What end_evening does on the server (v20): the evening a player ran goes into the group's history. */
+export function endEveningOnServer(s, gid, record) {
+  const g = s.groups.get(gid);
+  g.data = { ...g.data, history: [record, ...(g.data.history ?? []).filter((h) => h.id !== record.id)].slice(0, 150) };
+  g.version++;
+}
+
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 
 function session(me = CLOUD_ME) {

@@ -12,9 +12,9 @@ import { splitTeams } from './split';
 import { useLiveControl } from '../sync/OrganizerSync';
 import { runnerLine } from './LiveControl';
 
-const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
+export const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
 
-function planSentence(n: number, plan: FormatPlan | null, size: number): string {
+export function planSentence(n: number, plan: FormatPlan | null, size: number): string {
   if (!plan) return n === 0 ? 'סמנו מי הגיע' : `צריך לפחות 4 שחקנים (יש ${n})`;
   const [a, b, ...rest] = plan.sizes;
   if (plan.reduced) return `אין מספיק ל-${size} בקבוצה, אז ${a} נגד ${b}`;

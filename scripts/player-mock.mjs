@@ -1,6 +1,7 @@
 // A logged-in player on a mocked Supabase (no real network, no real users): used by the
 // screenshots and the e2e check. The phone has one player group; every RPC is answered from `db`.
 import { readFileSync } from 'node:fs';
+import { handleSplit } from '../supabase/functions/split-teams/core.js';
 
 const env = (() => {
   try {
@@ -20,6 +21,16 @@ const NAMES = ['אבי', 'בני', 'גיל', 'דני', 'הדר', 'ורד', 'זי
 const POS = [['att'], [], ['mid', 'att'], ['def'], ['mid'], ['att'], ['def', 'mid'], [], ['def'], ['att'], [], ['mid'], ['def']];
 const GK = new Set([1, 4, 8]);
 export const ROSTER = NAMES.map((name, i) => ({ id: `p${i + 1}`, name }));
+/** v20: the organizers' levels, which only the server (split-teams) sees. */
+export const LEVELS = [9, 3, 7, 6, 8, 2, 6, 4, 7, 5, 6, 3, 8];
+const attrsAt = (lv) => Object.fromEntries(['overall', 'stamina', 'passing', 'dribbling', 'shooting', 'defense', 'teamwork', 'leadership'].map((k) => [k, lv]));
+/** The group's doc on the server (groups.data): levels and all. Never sent to the player's phone. */
+export const SERVER_DOC = {
+  v: 1,
+  players: ROSTER.map((p, i) => ({ ...p, attrs: attrsAt(LEVELS[i]), canGK: GK.has(i), cards: [], ...(POS[i].length ? { positions: POS[i] } : {}) })),
+  constraints: { together: [], apart: [] },
+  settings: { hasBibs: true, bibs: ['red', 'blue', 'yellow', 'green'], gkMode: 'rotate', matchMinutes: 7 },
+};
 /** The public roster (positions and "good in goal" are public since public_positions). */
 const PUBLIC_ROSTER = ROSTER.map((p, i) => ({ ...p, ...(POS[i].length ? { positions: POS[i] } : {}), ...(GK.has(i) ? { canGK: true } : {}) }));
 
@@ -156,6 +167,10 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     orgMe,
     roster: roster ?? PUBLIC_ROSTER,
     joined: [],
+    // v20: what split-teams answered ({ req, status, body }), evenings ended by end_evening, the history.
+    splits: [],
+    ended: [],
+    history: history(now),
   };
   const liveRow = () => ({
     data: db.data,
@@ -246,7 +261,7 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
         groupId: GID,
         name: 'כדורגל בשכונה',
         players: db.roster,
-        history: history(now),
+        history: db.history,
         claimed: db.claimed,
         me: { role: 'player', playerId: db.me, canRate: db.canRate },
         updatedAt: new Date(now).toISOString(),
@@ -260,11 +275,42 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
       db.rev++;
       return json(route, [liveRow()]);
     }
+    // v20: teams for a player come from the edge function; the real handler (bundled core.js) runs
+    // here on the server's doc with levels; only its reply reaches the phone.
+    if (path.endsWith('/functions/v1/split-teams')) {
+      const auth = route.request().headers()['authorization'] ?? '';
+      const res = await handleSplit(args, {
+        userId: async () => (/^Bearer \S+/.test(auth) ? ME : null),
+        role: async (g) => (g === GID ? 'player' : null),
+        group: async () => ({ data: SERVER_DOC, rating_mode: 'organizers' }),
+        members: async () => [],
+        votes: async () => [],
+      });
+      db.splits.push({ req: args, status: res.status, body: res.body });
+      return json(route, res.body, res.status);
+    }
     if (path.endsWith('/rpc/live_set')) {
+      // v20: a player opens an evening (no rev) when none is open.
+      if (db.runner !== ME && !db.live && args.p_rev === undefined && args.p_data) {
+        db.runner = ME;
+        db.runnerName = 'גיל';
+        db.live = true;
+      }
       if (db.runner !== ME || (args.p_rev !== undefined && args.p_rev !== db.rev)) return json(route, { code: '40001', message: 'someone else runs it' }, 409);
       db.data = args.p_data;
       db.rev++;
       db.sets.push({ rev: args.p_rev, data: args.p_data });
+      return json(route, db.rev);
+    }
+    if (path.endsWith('/rpc/end_evening')) {
+      if (!db.live) return json(route, { code: 'P0002', message: 'no live evening' }, 404);
+      if (db.runner !== ME || (args.p_rev !== undefined && args.p_rev !== db.rev)) return json(route, { code: '40001', message: 'someone else runs it' }, 409);
+      db.ended.push(args.p_record);
+      if (args.p_record) db.history = [args.p_record, ...db.history.filter((h) => h.id !== args.p_record.id)];
+      db.live = false;
+      db.runner = null;
+      db.runnerName = '';
+      db.rev++;
       return json(route, db.rev);
     }
     if (path.endsWith('/rpc/release_control')) {

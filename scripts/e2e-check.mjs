@@ -4,9 +4,9 @@ import { quietWelcome } from './no-welcome.mjs';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { GID, ME, ORG, ORG_GID, playerContext, SB_URL } from './player-mock.mjs';
+import { GID, LEVELS, ME, ORG, ORG_GID, playerContext, SB_URL } from './player-mock.mjs';
 import { liveServer, organizerRoutes, ORG_ME, groupState, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
-import { cloudRoutes, cloudServer, joinOnServer, loginInSheet } from './cloud-mock.mjs';
+import { cloudRoutes, cloudServer, endEveningOnServer, joinOnServer, loginInSheet } from './cloud-mock.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -1568,7 +1568,8 @@ if (SB_URL) {
   await rp.getByRole('dialog').getByRole('button', { name: 'לנהל מהטלפון שלי' }).click();
   await rp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('runner: no controls after taking control'));
   assert(db.runner === ME && db.rev === 5, `runner: take_control ${db.runner} ${db.rev}`);
-  assert(!(await rp.getByRole('button', { name: 'סיום הערב' }).count()), 'runner: "סיום הערב" shown to a player');
+  // v20: a player runner ends the evening too (it goes into the group's history on the server).
+  assert(await rp.getByRole('button', { name: 'סיום הערב' }).count(), 'runner: no "סיום הערב" for a player runner (v20)');
   for (const link of ['מישהו הגיע?', 'מישהו עזב?']) assert(await rp.getByRole('button', { name: link }).count(), `runner: "${link}" missing (v15)`);
   await rp.locator('.btn-goal').first().click();
   await rp.getByRole('dialog').getByRole('button', { name: 'גיל' }).click();
@@ -1908,6 +1909,112 @@ if (SB_URL) {
   assert(ddb.me === 'p4' && ddb.joined.length === 0, `self-join: picked the existing name (${ddb.me})`);
   await dctx.close();
   console.log('self-join: empty roster → form → joined → organizer sees him; edit + concurrent join keep all; duplicate → pick');
+}
+
+// 23. A player starts an evening (v20), on a mocked Supabase whose split-teams answer comes from the
+// real bundled handler (core.js) on a doc with levels: nothing live → "ערב חדש" → who's here + size →
+// teams from the server with one total per team, and no level anywhere on his phone → re-roll →
+// start (first write without a rev makes him the runner) → a goal, end of match → "סיום הערב" →
+// end_evening with the record → its summary. The organizer's phone then has it in its history.
+if (SB_URL) {
+  const { ctx: nctx, page: np, db } = await playerContext(browser, { me: 'p3', canRate: false, live: false });
+  np.on('pageerror', (e) => errors.push(`player evening: ${e.message}`));
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 50 && !fn(); i++) await np.waitForTimeout(100);
+    assert(fn(), `player evening: ${what}`);
+  };
+  await np.goto(base);
+  await np.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  await np.getByRole('button', { name: 'ערב חדש' }).click();
+  await np.getByRole('button', { name: 'כולם' }).click();
+  for (const n of ['כפיר', 'ליאור', 'מתן']) await np.locator('.attend label', { hasText: n }).click();
+  await np.getByRole('radio', { name: '5' }).click();
+  assert((await np.locator('.plan').textContent()).includes('5 נגד 5'), `player evening: plan ${await np.locator('.plan').textContent()}`);
+  await np.getByRole('button', { name: 'עושים כוחות' }).click();
+  await np.locator('.team-grid .team').first().waitFor({ timeout: 5000 }).catch(() => errors.push('player evening: no teams'));
+  assert(db.splits.length === 1 && db.splits[0].status === 200, `player evening: split ${JSON.stringify(db.splits.map((x) => x.status))}`);
+  assert(db.splits[0].req.present.length === 10 && db.splits[0].req.teamSize === 5, `player evening: request ${JSON.stringify(db.splits[0].req)}`);
+  const reply = db.splits[0].body;
+  assert(!/attrs|overall|levelVotes|cards|weights|"name"/.test(JSON.stringify(reply)), 'player evening: the reply carries ratings or player data');
+  const subs = await np.locator('.team .team-sub').allTextContents();
+  assert(subs.length === 2 && subs.every((t, i) => t.includes(`כוח ${reply.totals[i]}`)), `player evening: totals ${JSON.stringify(subs)} vs ${reply.totals}`);
+  // The totals are the levels the server knows (every attribute = level in the mock doc).
+  const sum = (t) => reply.playerIds.reduce((a, id, i) => a + (reply.assignment[i] === t ? LEVELS[Number(id.slice(1)) - 1] : 0), 0);
+  assert(reply.totals[0] === sum(0) && reply.totals[1] === sum(1), `player evening: totals ${reply.totals} ≠ ${sum(0)},${sum(1)}`);
+  // No number next to any player, no level on the page or in the phone's storage.
+  const members = await np.locator('.member').allTextContents();
+  assert(members.length === 10 && members.every((t) => !/\d/.test(t)), `player evening: a number next to a player ${JSON.stringify(members)}`);
+  assert(!(await np.getByText(/רמה|דירוג/).count()), 'player evening: level/rating words on the teams screen');
+  // Every player object stored on the phone has the default attributes (5), and no votes.
+  const storedLevels = () =>
+    np.evaluate(() => {
+      const seen = new Set();
+      const walk = (v) => {
+        if (!v || typeof v !== 'object') return;
+        if (Array.isArray(v)) return v.forEach(walk);
+        if (v.levelVotes) seen.add('votes');
+        if (v.attrs && typeof v.attrs === 'object') Object.values(v.attrs).forEach((x) => seen.add(x));
+        Object.values(v).forEach(walk);
+      };
+      for (const k of Object.keys(localStorage)) if (k.startsWith('kochot:')) try { walk(JSON.parse(localStorage.getItem(k))); } catch {}
+      return [...seen];
+    });
+  const levels1 = await storedLevels();
+  assert(levels1.length === 1 && levels1[0] === 5, `player evening: levels stored on the phone (${levels1})`);
+  // Re-roll: same seed, the split already shown.
+  await np.getByRole('button', { name: 'הגרלה מחדש' }).click();
+  await waitFor(() => db.splits.length === 2, 're-roll did not ask the server');
+  assert(db.splits[1].req.seed === reply.seed && db.splits[1].req.shown?.length === 1, `player evening: re-roll request ${JSON.stringify(db.splits[1].req)}`);
+  await np.waitForTimeout(300);
+  const reply2 = db.splits[1].body;
+  const subs2 = await np.locator('.team .team-sub').allTextContents();
+  assert(subs2.every((t, i) => t.includes(`כוח ${reply2.totals[i]}`)), `player evening: totals after re-roll ${JSON.stringify(subs2)}`);
+  // Start: he runs it.
+  await np.getByRole('button', { name: 'התחלת משחק' }).click();
+  await np.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('player evening: no match controls'));
+  await waitFor(() => db.sets.length >= 1, 'the evening was not published');
+  assert(db.sets[0].rev === undefined && db.runner === ME, `player evening: first write rev ${db.sets[0]?.rev}, runner ${db.runner}`);
+  assert(db.data.teams.length === 2 && db.data.teams.every((t) => t.bib && t.ids.length === 5), `player evening: published teams ${JSON.stringify(db.data.teams)}`);
+  assert(db.data.teams[0].bib === 'red' && db.data.rules?.matchMs === 7 * 60e3, `player evening: the group's rules ${JSON.stringify(db.data.rules)} ${db.data.teams[0].bib}`);
+  assert(!/"(attrs|levelVotes|cards|overall|weaknesses)":/.test(JSON.stringify(db.data)), 'player evening: ratings in the snapshot');
+  const levels2 = await storedLevels();
+  assert(levels2.length === 1 && levels2[0] === 5, `player evening: levels stored while running (${levels2})`);
+  await np.getByRole('button', { name: /התחלה/ }).click();
+  await np.getByRole('button', { name: '+ גול' }).first().click();
+  await np.locator('.sheet .pick-list button').first().click();
+  await np.getByRole('button', { name: 'סיום משחק' }).click();
+  await np.getByRole('button', { name: 'סיום הערב' }).click();
+  await np.getByRole('dialog').getByRole('button', { name: 'סיום הערב' }).click();
+  await waitFor(() => db.ended.length === 1, 'end_evening not called');
+  const rec = db.ended[0];
+  assert(rec?.id?.startsWith('ev-') && rec.matches.length === 1 && rec.matches[0].goals.length === 1 && rec.teams.length === 2, `player evening: record ${JSON.stringify(rec)?.slice(0, 200)}`);
+  assert(!/attrs|overall|levelVotes/.test(JSON.stringify(rec)), 'player evening: ratings in the record');
+  await np.waitForURL(/#evening\//, { timeout: 5000 }).catch(() => errors.push(`player evening: no summary after ending (${np.url()})`));
+  assert((await np.evaluate((k) => localStorage.getItem(k), `kochot:runner:${GID}`)) === null, 'player evening: local evening kept after ending');
+  console.log(`player evening: ${db.splits.length} splits (totals ${reply.totals.join(' מול ')}), ${db.sets.length} live writes, ended with ${rec.matches.length} match`);
+  await nctx.close();
+
+  // The organizer's phone: the evening the player ran is in the group's history after a sync.
+  const cloud3 = cloudServer();
+  const octx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cloudRoutes(octx, cloud3);
+  const op = await octx.newPage();
+  op.on('pageerror', (e) => errors.push(`player evening org: ${e.message}`));
+  await op.goto(base);
+  await signInOrganizer(op);
+  const { gid } = await groupState(op);
+  cloud3.groups.set(gid, { name: 'שישי בשכונה', data: { v: 1, players: [{ id: 'p1', name: 'אבי', attrs: { overall: 9, stamina: 9, passing: 9, dribbling: 9, shooting: 9, defense: 9, teamwork: 9, leadership: 9 }, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 1 });
+  await op.reload();
+  await op.waitForTimeout(800);
+  endEveningOnServer(cloud3, gid, rec);
+  await op.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const hist = async () => op.evaluate((g) => (JSON.parse(localStorage.getItem(`kochot:group:${g}`) ?? '{}').history ?? []).map((h) => h.id), gid);
+  for (let i = 0; i < 50 && !(await hist()).includes(rec.id); i++) await op.waitForTimeout(100);
+  assert((await hist()).includes(rec.id), `player evening: the organizer's history misses it (${await hist()})`);
+  await op.goto(base + '#history');
+  await op.getByText('ערבים קודמים').first().waitFor({ timeout: 3000 }).catch(() => {});
+  console.log("player evening: in the organizer's history after a sync");
+  await octx.close();
 }
 
 console.log(`split 22 players in ${dt}ms`);

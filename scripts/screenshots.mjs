@@ -753,6 +753,31 @@ for (const scheme of ['light', 'dark']) {
     await lp.getByRole('dialog').getByRole('button', { name: 'כן, הוא עזב' }).click();
     await lshot('p12d-runner-leave-sub');
     await lctx.close();
+
+    // v20: a player starts an evening: nothing live → who's here → teams from the server with totals.
+    const { ctx: nctx, page: np } = await playerContext(browser, { scheme, me: 'p3', canRate: false, live: false });
+    np.on('pageerror', (e) => errors.push(`${scheme} new evening: ${e.message}`));
+    const nshot = async (name, full = false) => {
+      await np.waitForTimeout(250);
+      await np.screenshot({ path: `${out}/${scheme}-${name}.png`, fullPage: full });
+      const sw = await np.evaluate(() => document.documentElement.scrollWidth);
+      if (sw > 390) errors.push(`${scheme}: horizontal overflow on ${name}: ${sw}px`);
+    };
+    await np.goto(base);
+    await np.getByRole('button', { name: 'ערב חדש' }).waitFor();
+    await nshot('p13-no-evening');
+    await np.getByRole('button', { name: 'ערב חדש' }).click();
+    await np.getByRole('button', { name: 'כולם' }).click();
+    await np.locator('.attend label', { hasText: 'מתן' }).click();
+    await np.getByRole('radio', { name: '4' }).click();
+    await nshot('p13b-who-came');
+    await np.getByRole('button', { name: 'עושים כוחות' }).click();
+    await np.locator('.team-grid .team').first().waitFor();
+    await nshot('p13c-teams-totals', true);
+    await np.getByRole('button', { name: 'התחלת משחק' }).click();
+    await np.waitForSelector('.clock-ctrl');
+    await nshot('p13d-running');
+    await nctx.close();
   }
 
   // My page (v17): the avatar in the top bar (Google photo, then the letter), "הדף שלי" with a

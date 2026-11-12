@@ -79,9 +79,10 @@ function useWakeLock(on: boolean) {
 
 /**
  * `runner`: a player running the match from his phone (sync/runner.ts) — late/left without
- * ratings (v15), no re-split, no dominance swap, no end of the evening; "stop running" instead.
+ * ratings (v15), no re-split, no dominance swap; "stop running", and (v20) ending the evening
+ * through the server (`onEnd`), which saves it to the group's history.
  */
-export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {}) {
+export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd(): Promise<void> } } = {}) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
   const m = state.match;
@@ -454,15 +455,14 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {})
       )}
 
       <div className="row-links">
-        {runner ? (
+        {runner && (
           <button type="button" className="text-btn" onClick={runner.onRelease}>
             להפסיק לנהל
           </button>
-        ) : (
-          <button type="button" className="text-btn danger" onClick={() => setConfirmEnd(true)}>
-            סיום הערב
-          </button>
         )}
+        <button type="button" className="text-btn danger" onClick={() => setConfirmEnd(true)}>
+          סיום הערב
+        </button>
       </div>
 
       {scorerFor !== null && (
@@ -530,14 +530,17 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void } } = {})
 
       {confirmEnd && (
         <Sheet title="לסיים את הערב?" onClose={() => setConfirmEnd(false)}>
-          <p className="lead">{hasEveningData(m, Date.now()) ? 'הסיכום נשמר בערבים הקודמים. הקבוצות נשארות.' : 'עוד לא נגמר אף משחק, אז אין מה לשמור. הקבוצות נשארות.'}</p>
+          <p className="lead">
+            {hasEveningData(m, Date.now()) ? 'הסיכום נשמר בערבים הקודמים.' : 'עוד לא נגמר אף משחק, אז אין מה לשמור.'}
+            {runner ? '' : ' הקבוצות נשארות.'}
+          </p>
           <div className="stack">
             <button
               type="button"
               className="btn btn-danger btn-block"
               onClick={() => {
                 setConfirmEnd(false);
-                void endEvening();
+                void (runner ? runner.onEnd() : endEvening());
               }}
             >
               סיום הערב

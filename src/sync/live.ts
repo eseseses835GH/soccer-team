@@ -8,7 +8,7 @@
 // next runner to rebuild the evening locally (control.ts). No ratings, ever: liveFromState() only
 // copies ids, names, match-running settings and the match.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { teamMembers } from '../state/history';
+import { teamMembers, type EveningRecord } from '../state/history';
 import { defaultMatchMs, teamBibs, type GameResult, type Settings } from '../state/model';
 import { inDrawExtraTime, keeperIndex, matchLength, score, type MatchState, type Pens } from '../match/match';
 import { fail } from './supabase';
@@ -395,6 +395,18 @@ export function liveApi(sb: SupabaseClient) {
       const { data, error } = await sb.rpc('take_control', { p_group_id: groupId });
       if (error) fail(error);
       return parseLiveRow(data);
+    },
+    /**
+     * v20: the runner (a player too) ends the evening; `record` (the app's EveningRecord, null = no
+     * match played) goes into the group's history on the server. Returns the new rev. Not the
+     * runner / stale rev → 'conflict'; already ended → 'invalid'.
+     */
+    async endEvening(groupId: string, record: EveningRecord | null, rev?: number | null): Promise<number> {
+      const args: Record<string, unknown> = { p_group_id: groupId, p_record: record };
+      if (rev !== undefined && rev !== null) args.p_rev = rev;
+      const { data, error } = await sb.rpc('end_evening', args);
+      if (error) fail(error);
+      return typeof data === 'number' ? data : Number(data) || 0;
     },
     /** Stop running it (nobody runs it after; no-op when you weren't the runner). Returns the rev. */
     async releaseControl(groupId: string): Promise<number | null> {

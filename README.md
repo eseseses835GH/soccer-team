@@ -78,6 +78,8 @@ Requires Node 18+ (developed on Node 22).
 Login and sync use the Supabase project in `.env` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`). Google sign-in runs on our own page with `VITE_GOOGLE_CLIENT_ID` (public; without it, Google goes through Supabase's redirect).
 Remove those variables, and the app is local-only and hides login. The database schema and RLS are in
 `supabase/migrations/`.
+A player's teams are made by the Edge Function `supabase/functions/split-teams/` (`index.ts` + `core.js`, the app's
+balancing code bundled by `node scripts/build-edge.mjs`; a unit test fails when `core.js` is stale).
 
 Browser checks against `npm run preview` (Playwright; set `CHROMIUM_PATH` if needed):
 ```bash

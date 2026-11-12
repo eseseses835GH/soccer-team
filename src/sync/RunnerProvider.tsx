@@ -1,6 +1,7 @@
 // A player running the match from his phone: React side of sync/runner.ts.
 // DECISIONS → "Match runner handoff — player side (v12)".
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { addEvening, type EveningRecord } from '../state/history';
 import type { AppState } from '../state/model';
 import type { Action } from '../state/reducer';
 import { localKV, useGroups } from '../state/store';
@@ -16,12 +17,17 @@ interface RunnerCtx {
   dispatch(action: Action): void;
   take(): Promise<SyncError['code'] | null>;
   release(): Promise<SyncError['code'] | null>;
+  /** v20: run a new evening (teams from the split-teams function) from this phone. */
+  startNew(app: AppState): void;
+  /** v20: end the evening; its record goes into the group's history (null = nothing played). */
+  end(): Promise<{ error: SyncError['code'] | null; record: EveningRecord | null }>;
   /** The last time control went to someone else (for the toast). */
   lost: { name: string; at: number } | null;
 }
 
 const none = async () => 'other' as const;
-const Ctx = createContext<RunnerCtx>({ app: null, dispatch: () => {}, take: none, release: none, lost: null });
+const noEnd = async () => ({ error: 'other' as const, record: null });
+const Ctx = createContext<RunnerCtx>({ app: null, dispatch: () => {}, take: none, release: none, startNew: () => {}, end: noEnd, lost: null });
 
 export function RunnerProvider({ children }: { children: ReactNode }) {
   const groups = useGroups();
@@ -49,6 +55,7 @@ export function RunnerProvider({ children }: { children: ReactNode }) {
         set: async (g, live, rev) => (await lapi()).set(g, live, rev),
         takeControl: async (g) => (await lapi()).takeControl(g),
         releaseControl: async (g) => (await lapi()).releaseControl(g),
+        end: async (g, record, rev) => (await lapi()).endEvening(g, record, rev),
       },
       base: () => groupsRef.current.latest().app,
       onChange: setApp,
@@ -86,8 +93,17 @@ export function RunnerProvider({ children }: { children: ReactNode }) {
   );
   const take = useCallback(() => runner.current?.take() ?? none(), []);
   const release = useCallback(() => runner.current?.release() ?? none(), []);
+  const startNew = useCallback((a: AppState) => runner.current?.startNew(a), []);
+  const end = useCallback(async () => {
+    const res = await (runner.current?.end() ?? noEnd());
+    // Show it at once in the history (the public copy brings the server's version right after).
+    const rec = res.record;
+    if (!res.error && rec) groupsRef.current.setGroupState(gid, (s) => ({ ...s, history: addEvening(s.history, rec) }));
+    if (!res.error) pg.refresh();
+    return res;
+  }, [gid, pg]);
 
-  const value = useMemo(() => ({ app, dispatch, take, release, lost }), [app, dispatch, take, release, lost]);
+  const value = useMemo(() => ({ app, dispatch, take, release, startNew, end, lost }), [app, dispatch, take, release, startNew, end, lost]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
