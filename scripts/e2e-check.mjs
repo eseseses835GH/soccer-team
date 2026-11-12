@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { GID, ME, ORG, ORG_GID, playerContext, SB_URL } from './player-mock.mjs';
 import { liveServer, organizerRoutes, ORG_ME, groupState, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
-import { cloudRoutes, cloudServer, loginInSheet } from './cloud-mock.mjs';
+import { cloudRoutes, cloudServer, joinOnServer, loginInSheet } from './cloud-mock.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -1844,8 +1844,70 @@ if (SB_URL) {
   assert((await ip.locator('.sheet').getByRole('button', { name: /הזמנת חברים/ }).count()) === 1, 'invite: one button in the group menu');
   assert((await ip.locator('.sheet').getByRole('button', { name: /הזמנת מארגן|סנכרון בין טלפונים/ }).count()) === 0, 'invite: old buttons gone');
   await ip.evaluate(() => window.dispatchEvent(new Event('kochot:update-ready')));
-  assert(await ip.locator('.update-bar').getByRole('button', { name: 'רענון' }).isVisible(), 'update: a reload bar when a new version is ready');
+  await ip.locator('.update-bar').getByRole('button', { name: 'רענון' }).waitFor({ timeout: 3000 }).catch(() => errors.push('update: a reload bar when a new version is ready'));
   await ic.close();
+}
+
+// 22. "אני לא ברשימה" (v19): an organizer's group with nobody in it; a player opens the link → the
+// join form right away, prefilled with his Google name → he's in the roster and claimed → the
+// organizer's phone shows him after a sync; an organizer edit (with another join landing right
+// before the push) keeps everyone. A name already in the list → "השם כבר ברשימה" → "זה אני".
+if (SB_URL) {
+  const cloud2 = cloudServer();
+  const octx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cloudRoutes(octx, cloud2);
+  const op = await octx.newPage();
+  op.on('pageerror', (e) => errors.push(`self-join org: ${e.message}`));
+  await op.goto(base);
+  await signInOrganizer(op);
+  const { gid } = await groupState(op);
+  cloud2.groups.set(gid, { name: 'שישי בשכונה', data: { v: 1, players: [], constraints: { together: [], apart: [] } }, version: 1 });
+  await op.reload();
+  await op.waitForTimeout(800);
+
+  const { ctx: jctx, page: jp, db } = await playerContext(browser, { roster: [], live: false, google: true, onJoin: (id, name) => joinOnServer(cloud2, gid, id, name) });
+  jp.on('pageerror', (e) => errors.push(`self-join: ${e.message}`));
+  await jp.goto(base);
+  const nameField = jp.getByLabel('השם שלך');
+  await nameField.waitFor({ timeout: 10000 }).catch(() => errors.push('self-join: empty roster shows no join form'));
+  assert((await nameField.inputValue()) === 'גיל כהן', `self-join: name prefilled (${await nameField.inputValue()})`);
+  assert(!(await jp.locator('.claim-grid').count()), 'self-join: no empty grid');
+  await jp.getByRole('button', { name: 'הצטרפות' }).click();
+  await jp.getByText('אין ערב עכשיו').waitFor({ timeout: 5000 }).catch(() => errors.push('self-join: not home after joining'));
+  assert(db.joined.length === 1 && db.joined[0].name === 'גיל כהן' && db.me === db.joined[0].id, `self-join: joined ${JSON.stringify(db.joined)}`);
+  await jp.reload();
+  await jp.getByText('אין ערב עכשיו').waitFor({ timeout: 5000 }).catch(() => errors.push('self-join: claim screen again after reload'));
+  await jctx.close();
+
+  // The organizer's phone comes back to the screen → pulls → he's in the list.
+  await op.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await op.goto(base + '#players');
+  await op.locator('.roster li', { hasText: 'גיל כהן' }).waitFor({ timeout: 5000 }).catch(() => errors.push("self-join: the organizer doesn't see him"));
+  // Organizer adds a player; another player joins on the server right before that push lands.
+  cloud2.beforePush = () => joinOnServer(cloud2, gid, 'n9', 'רון');
+  await op.getByPlaceholder('איך קוראים לו?').fill('אבי');
+  await op.getByRole('button', { name: /^הוספה$/ }).click();
+  const names = () => (cloud2.groups.get(gid).data.players ?? []).map((p) => p.name).sort().join(',');
+  for (let i = 0; i < 50 && names() !== ['אבי', 'גיל כהן', 'רון'].sort().join(','); i++) await op.waitForTimeout(100);
+  assert(names() === ['אבי', 'גיל כהן', 'רון'].sort().join(','), `self-join: server roster after the organizer's edit: ${names()}`);
+  assert(cloud2.beforePush === null, 'self-join: the join did not land before the push');
+  await op.locator('.roster li', { hasText: 'רון' }).waitFor({ timeout: 5000 }).catch(() => errors.push('self-join: the organizer misses the second joiner'));
+  assert((await op.locator('.roster li').count()) === 3, `self-join: organizer roster ${await op.locator('.roster li').count()}`);
+  await octx.close();
+
+  // A name that's already in the list: say so, offer to pick it.
+  const { ctx: dctx, page: dp, db: ddb } = await playerContext(browser, { live: false });
+  dp.on('pageerror', (e) => errors.push(`self-join dup: ${e.message}`));
+  await dp.goto(base);
+  await dp.getByRole('button', { name: 'אני לא ברשימה' }).click();
+  await dp.getByLabel('השם שלך').fill(' דנ י ');
+  assert(await dp.getByText('השם כבר ברשימה').isVisible(), 'self-join: duplicate name not flagged');
+  assert(await dp.getByRole('button', { name: 'הצטרפות' }).isDisabled(), 'self-join: duplicate can be submitted');
+  await dp.getByRole('button', { name: 'זה אני' }).click();
+  await dp.getByText('אין ערב עכשיו').waitFor({ timeout: 5000 }).catch(() => errors.push('self-join: "זה אני" did not claim'));
+  assert(ddb.me === 'p4' && ddb.joined.length === 0, `self-join: picked the existing name (${ddb.me})`);
+  await dctx.close();
+  console.log('self-join: empty roster → form → joined → organizer sees him; edit + concurrent join keep all; duplicate → pick');
 }
 
 console.log(`split 22 players in ${dt}ms`);

@@ -3,9 +3,17 @@
 // real users: Playwright answers every request. Used by the e2e check and the screenshots.
 export const CLOUD_ME = '00000000-0000-4000-8000-0000000000dd';
 
-/** The server's state: groups by id ({ name, data, version }), every RPC call, logins. */
+/** The server's state: groups by id ({ name, data, version }), every RPC call, logins. `beforePush` runs once before the next group push. */
 export function cloudServer() {
-  return { groups: new Map(), calls: [], logins: 0 };
+  return { groups: new Map(), calls: [], logins: 0, beforePush: null };
+}
+
+/** What join_as_new_player does to a group on the server (v19): append a default-level player, bump the version. */
+export function joinOnServer(s, gid, id, name) {
+  const g = s.groups.get(gid);
+  const attrs = Object.fromEntries(['overall', 'stamina', 'passing', 'dribbling', 'shooting', 'defense', 'teamwork', 'leadership'].map((k) => [k, 5]));
+  g.data = { ...g.data, players: [...(g.data.players ?? []), { id, name, attrs, canGK: false, cards: [] }] };
+  g.version++;
 }
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -39,6 +47,10 @@ export async function cloudRoutes(ctxOrPage, s) {
       const id = (u.searchParams.get('id') ?? '').slice(3);
       const g = s.groups.get(id);
       if (req.method() === 'GET') return json(g ? { id, name: g.name, data: g.data, version: g.version } : null);
+      // v19: another write (a player joining) can land right before this push.
+      const hook = s.beforePush;
+      s.beforePush = null;
+      hook?.();
       const want = Number((u.searchParams.get('version') ?? '').slice(3));
       if (!g || g.version !== want) return json([]);
       const patch = req.postDataJSON();

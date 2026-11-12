@@ -134,7 +134,12 @@ export function orgHistory(now) {
   ];
 }
 
-export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true, google = false, avatar = TEST_AVATAR, org = false, orgMe = null } = {}) {
+/**
+ * v19: `roster` replaces the public roster (e.g. [] = a group nobody is in yet); join_as_new_player
+ * appends to it (same name ignoring case/spaces → 23505 name_taken) and calls `onJoin(id, name)`,
+ * so a test can put the same player on an organizer's mocked server.
+ */
+export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true, google = false, avatar = TEST_AVATAR, org = false, orgMe = null, roster = null, onJoin = null } = {}) {
   const now = Date.now();
   const db = {
     me,
@@ -149,6 +154,8 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     data: liveData(now),
     sets: [],
     orgMe,
+    roster: roster ?? PUBLIC_ROSTER,
+    joined: [],
   };
   const liveRow = () => ({
     data: db.data,
@@ -238,7 +245,7 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
       return json(route, {
         groupId: GID,
         name: 'כדורגל בשכונה',
-        players: PUBLIC_ROSTER,
+        players: db.roster,
         history: history(now),
         claimed: db.claimed,
         me: { role: 'player', playerId: db.me, canRate: db.canRate },
@@ -269,6 +276,19 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
       return json(route, db.rev);
     }
     if (path.endsWith('/rpc/my_votes')) return json(route, db.votes);
+    if (path.endsWith('/rpc/join_as_new_player')) {
+      const name = String(args.p_name ?? '').replace(/\s+/g, ' ').trim();
+      const key = (n) => n.replace(/\s/g, '').toLowerCase();
+      if (db.me && db.roster.some((p) => p.id === db.me)) return json(route, { code: '23505', message: 'already claimed' }, 409);
+      if (db.roster.some((p) => key(p.name) === key(name))) return json(route, { code: '23505', message: 'name_taken' }, 409);
+      const id = `n${db.roster.length + 1}`;
+      db.roster = [...db.roster, { id, name }];
+      db.me = id;
+      db.claimed.push(id);
+      db.joined.push({ id, name });
+      onJoin?.(id, name);
+      return json(route, id);
+    }
     if (path.endsWith('/rpc/claim_player')) {
       if (db.claimed.includes(args.p_player_id)) return json(route, { code: '23505', message: 'taken' }, 409);
       db.me = args.p_player_id;

@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { bibLook, verb, type TeamLook } from '../state/model';
 import { LocalStore, useGroups, useStore } from '../state/store';
 import { liveClockMs, someoneElseRuns, type LiveData } from '../sync/live';
-import { claimChoices, clockText, liveName, liveNow, rateCard } from '../sync/playerGroup';
+import { claimChoices, cleanName, clockText, liveName, liveNow, MAX_PLAYER_NAME, rateCard, sameName } from '../sync/playerGroup';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
 import { useRunner } from '../sync/RunnerProvider';
 import { useSync } from '../sync/SyncProvider';
@@ -40,7 +40,9 @@ export function PlayerHome() {
   if (pg.load === 'denied') return <Empty icon="🚪" title="כבר לא בקבוצה" />;
   if (!pg.pub) return <Empty icon="⏳" title={pg.load === 'offline' ? 'אין חיבור' : pg.load === 'error' ? 'משהו השתבש' : 'טוען…'} />;
 
-  if (!pg.pub.me.playerId && !later && pg.pub.players.length > 0) {
+  // A claim of someone the organizer deleted counts as none (v19). An empty roster shows the join form.
+  const mine = !!pg.pub.me.playerId && pg.pub.players.some((p) => p.id === pg.pub!.me.playerId);
+  if (!mine && !later) {
     return (
       <ClaimView
         onLater={() => {
@@ -140,19 +142,40 @@ function useNow(ms: number) {
   return now;
 }
 
-/** "Who are you?": one tap on your name. Used on first entry and before rating. */
+/**
+ * "Who are you?": one tap on your name. Used on first entry and before rating. Not in the list (or
+ * the list is still empty): "אני לא ברשימה" adds you to the roster under your name (v19).
+ */
 export function ClaimView({ onLater, onDone }: { onLater?: () => void; onDone?: () => void }) {
   const pg = usePlayerGroup();
+  const sync = useSync();
   const { notify } = useUi();
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState(() => cleanName(sync.profile?.name ?? '').slice(0, MAX_PLAYER_NAME));
   if (!pg.pub) return null;
+  const choices = claimChoices(pg.pub);
+  const form = adding || choices.length === 0;
+  const dup = sameName(choices, name);
+  const fail = (err: string) =>
+    notify(err === 'taken' ? 'השם הזה כבר תפוס' : err === 'name' ? 'השם כבר ברשימה' : err === 'limit' ? 'עד 200 שחקנים בקבוצה' : err === 'offline' ? 'אין חיבור לאינטרנט' : 'משהו השתבש, נסו שוב');
   const pick = async (id: string) => {
     if (busy) return;
     setBusy(true);
     const err = await pg.claim(id);
     setBusy(false);
     if (!err) return onDone?.();
-    notify(err === 'taken' ? 'השם הזה כבר תפוס' : err === 'offline' ? 'אין חיבור לאינטרנט' : 'משהו השתבש, נסו שוב');
+    fail(err);
+  };
+  const join = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const n = cleanName(name);
+    if (busy || !n || dup) return;
+    setBusy(true);
+    const err = await pg.joinNew(n);
+    setBusy(false);
+    if (!err) return onDone?.();
+    fail(err);
   };
   return (
     <section className="claim" aria-label="מי אתה?">
@@ -161,15 +184,62 @@ export function ClaimView({ onLater, onDone }: { onLater?: () => void; onDone?: 
           מי אתה?
         </h1>
       )}
-      <div className="claim-grid">
-        {claimChoices(pg.pub).map((p) => (
-          <button key={p.id} type="button" className="member chip" disabled={p.taken || busy} onClick={() => void pick(p.id)}>
-            {p.name}
+      {form ? (
+        <form className="stack" onSubmit={(e) => void join(e)}>
+          <input
+            className="input input-big"
+            aria-label="השם שלך"
+            placeholder="השם שלך"
+            maxLength={MAX_PLAYER_NAME}
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          {dup && (
+            <p className="hint center">
+              השם כבר ברשימה
+              {!dup.taken && (
+                <>
+                  {' · '}
+                  <button type="button" className="text-btn" disabled={busy} onClick={() => void pick(dup.id)}>
+                    זה אני
+                  </button>
+                </>
+              )}
+            </p>
+          )}
+          <button type="submit" className="btn btn-primary btn-block" disabled={busy || !cleanName(name) || !!dup}>
+            הצטרפות
           </button>
-        ))}
-      </div>
-      <p className="hint small center">השם שלך תפוס? בקשו מהמארגן לשחרר</p>
-      {onLater && (
+          {choices.length > 0 && (
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => setAdding(false)}>
+              חזרה לרשימה
+            </button>
+          )}
+        </form>
+      ) : (
+        <>
+          <div className="claim-grid">
+            {choices.map((p) => (
+              <button key={p.id} type="button" className="member chip" disabled={p.taken || busy} onClick={() => void pick(p.id)}>
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <p className="hint small center">השם שלך תפוס? בקשו מהמארגן לשחרר</p>
+          <div className="row-links">
+            <button type="button" className="text-btn" onClick={() => setAdding(true)}>
+              אני לא ברשימה
+            </button>
+            {onLater && (
+              <button type="button" className="text-btn" onClick={onLater}>
+                אחר כך
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {onLater && form && (
         <div className="row-links">
           <button type="button" className="text-btn" onClick={onLater}>
             אחר כך

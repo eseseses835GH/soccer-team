@@ -96,3 +96,26 @@ export function clockText(ms: number): string {
   const s = Math.floor(Math.abs(ms) / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** "אני לא ברשימה" (v19): the longest roster name the app keeps (sanitizePlayer cuts at 24). */
+export const MAX_PLAYER_NAME = 24;
+
+/** A name as the server stores it: trimmed, inner spaces collapsed. */
+export const cleanName = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/** The roster player with the same name, ignoring case and spaces (as join_as_new_player checks). */
+export function sameName<T extends { name: string }>(players: T[], name: string): T | undefined {
+  const key = (s: string) => s.replace(/\s/g, '').toLocaleLowerCase();
+  const k = key(name);
+  return k ? players.find((p) => key(p.name) === k) : undefined;
+}
+
+/** The public copy after I joined as a new roster player (until the next fetch brings the real one). */
+export function withJoined(pub: PublicGroup, id: string, name: string): PublicGroup {
+  return {
+    ...pub,
+    players: pub.players.some((p) => p.id === id) ? pub.players : [...pub.players, { id, name }],
+    claimed: pub.claimed.includes(id) ? pub.claimed : [...pub.claimed, id],
+    me: { ...pub.me, playerId: id },
+  };
+}

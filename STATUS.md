@@ -240,3 +240,8 @@
 # v18: group rating mode and a 3-rater minimum
 - **Built:** "מי מדרג?" (organizers only / everyone who joined), progress line, share text per mode; a level becomes the average only from 3 raters. See DECISIONS → "Group rating mode and a 3-rater minimum (v18)".
 - Migration `20261112120000_group_rating_mode.sql` applied 2026-11-12 and verified (see DECISIONS v18).
+
+# v19: players build the roster ("אני לא ברשימה")
+- **Built:** "מי אתה?" has "אני לא ברשימה" (name prefilled from the login, duplicate → "השם כבר ברשימה · זה אני"); an empty roster shows the field directly. The server adds the player and claims him in one call; organizer phones keep him through the existing conditional push + three-way merge. An empty group starts in rating mode "everyone". See DECISIONS → "Players build the roster (v19)".
+- **Tested:** unit (`src/sync/selfJoin.test.ts`), e2e block 22 on mocked Supabase.
+- **Not applied yet:** migration `20261112140000_join_as_new_player.sql` (until it is, "הצטרפות" fails with "משהו השתבש").

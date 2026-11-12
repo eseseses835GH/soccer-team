@@ -10,7 +10,7 @@ import type { Position } from '../engine';
 import { sanitizePositions } from '../state/positions';
 import { applyCards } from '../state/cards';
 import { attrsAtLevel, ratedLevel, sanitizeVotes, type LevelVotes } from '../state/votes';
-import { fail } from './supabase';
+import { SyncError, fail } from './supabase';
 
 export type MemberRole = 'organizer' | 'player';
 
@@ -205,6 +205,21 @@ export function playersApi(sb: SupabaseClient) {
     /** "This is me". SyncError 'taken' if someone else has him (or you already claimed another). */
     async claimPlayer(groupId: string, playerId: string): Promise<void> {
       await rpc('claim_player', { p_group_id: groupId, p_player_id: playerId });
+    },
+    /**
+     * "אני לא ברשימה" (v19): add myself to the roster and claim him, in one call. Returns the new id.
+     * Errors: 'name' (the name is already in the roster), 'taken' (I already claimed someone),
+     * 'limit' (200 players), 'invalid' (bad name), 'denied' (not a player member).
+     */
+    async joinAsNew(groupId: string, name: string): Promise<string> {
+      try {
+        const id = await rpc('join_as_new_player', { p_group_id: groupId, p_name: name });
+        if (typeof id !== 'string' || !id) throw new SyncError('no id', 'other');
+        return id;
+      } catch (e) {
+        if (e instanceof SyncError && e.code === 'taken' && /name_taken/.test(e.message)) throw new SyncError(e.message, 'name');
+        throw e;
+      }
     },
     /** Organizers: undo a wrong claim. */
     async unclaimPlayer(groupId: string, userId: string): Promise<void> {

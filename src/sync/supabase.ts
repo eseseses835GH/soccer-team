@@ -71,8 +71,9 @@ export class SyncError extends Error {
      * taken = that roster player is already claimed by someone else (or you already claimed one).
      * conflict = live_set lost: someone else runs the evening, or the row moved on (stale rev).
      * limit = one of the server's caps (54000; the message names it, see sync/gate.ts limitText).
+     * name = join_as_new_player: that name is already in the roster (v19).
      */
-    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'taken' | 'conflict' | 'limit' | 'other',
+    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'taken' | 'conflict' | 'limit' | 'name' | 'other',
   ) {
     super(message);
   }

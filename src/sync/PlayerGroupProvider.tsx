@@ -6,7 +6,7 @@ import { newGroupState } from '../state/groups';
 import { localKV, useGroups } from '../state/store';
 import { EMPTY_META, saveMeta } from './engine';
 import { liveApi, type LiveRow } from './live';
-import { isPlayerGroup, loadPublic, publicKey, publicToState } from './playerGroup';
+import { isPlayerGroup, loadPublic, publicKey, publicToState, withJoined } from './playerGroup';
 import { playersApi, type PublicGroup } from './players';
 import { SyncError } from './supabase';
 import { useSync } from './SyncProvider';
@@ -23,6 +23,8 @@ interface PlayerGroupApi {
   load: PlayerLoad;
   /** "This is me". Resolves to an error code, or null when it worked. */
   claim(playerId: string): Promise<SyncError['code'] | null>;
+  /** "אני לא ברשימה": add me to the roster under `name` and claim him. Error code, or null when it worked. */
+  joinNew(name: string): Promise<SyncError['code'] | null>;
   /** One vote (null takes it back). Resolves false when it didn't reach the server. */
   vote(playerId: string, level: number | null): Promise<boolean>;
   refresh(): void;
@@ -40,6 +42,8 @@ export function PlayerGroupProvider({ children }: { children: ReactNode }) {
   const active = isPlayerGroup(groups.current);
 
   const [pub, setPub] = useState<PublicGroup | null>(() => (active ? loadPublic(localKV, gid) : null));
+  const pubRef = useRef(pub);
+  pubRef.current = pub;
   const [live, setLive] = useState<LiveRow | null>(null);
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [load, setLoad] = useState<PlayerLoad>('loading');
@@ -139,6 +143,27 @@ export function PlayerGroupProvider({ children }: { children: ReactNode }) {
     [gid, sync],
   );
 
+  const joinNew = useCallback(
+    async (name: string) => {
+      try {
+        const id = await playersApi(await sync.client()).joinAsNew(gid, name);
+        const cur = pubRef.current;
+        if (cur) {
+          const next = withJoined(cur, id, name);
+          localKV.set(publicKey(gid), next);
+          groupsRef.current.setGroupState(gid, (s) => publicToState(s, next));
+          setPub(next);
+        }
+        setTick((t) => t + 1);
+        return null;
+      } catch (e) {
+        if (code(e) === 'taken' || code(e) === 'name') setTick((t) => t + 1);
+        return code(e);
+      }
+    },
+    [gid, sync],
+  );
+
   const vote = useCallback(
     async (playerId: string, level: number | null) => {
       const before = votes;
@@ -160,8 +185,8 @@ export function PlayerGroupProvider({ children }: { children: ReactNode }) {
   );
 
   const api = useMemo<PlayerGroupApi>(
-    () => ({ active, pub, live, votes, load: sync.email === false ? 'signedOut' : load, claim, vote, refresh: () => setTick((t) => t + 1) }),
-    [active, pub, live, votes, load, sync.email, claim, vote],
+    () => ({ active, pub, live, votes, load: sync.email === false ? 'signedOut' : load, claim, joinNew, vote, refresh: () => setTick((t) => t + 1) }),
+    [active, pub, live, votes, load, sync.email, claim, joinNew, vote],
   );
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }
