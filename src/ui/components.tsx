@@ -3,6 +3,7 @@ import { ATTR_KEYS, type Attributes, type Position } from '../engine';
 import { ATTR_LABELS, scoreLabel } from '../i18n';
 import { STRENGTHS, WEAKNESSES, cardById, type Card, type CardId } from '../state/cards';
 import { ALL_POSITIONS, positionEmojis, togglePosition } from '../state/positions';
+import { Icon } from './icons';
 
 /** Labelled slider with a visible value. */
 export function RatingSlider({
@@ -257,7 +258,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         <div className="sheet-head">
           <h2 id={titleId}>{title}</h2>
           <button type="button" className="icon-btn" aria-label="סגירה" onClick={onClose}>
-            ✕
+            <Icon name="close" size={20} />
           </button>
         </div>
         {children}
@@ -266,7 +267,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-export function Empty({ icon, title, children }: { icon: string; title: string; children?: ReactNode }) {
+export function Empty({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="empty">
       <div className="empty-icon" aria-hidden="true">

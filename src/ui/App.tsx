@@ -14,6 +14,7 @@ import { HelpScreen } from './HelpScreen';
 import { HomeScreen } from './HomeScreen';
 import { useRecordUse } from './InstallPrompt';
 import { Icon } from './icons';
+import { BallMark } from './art';
 import { MatchScreen } from './MatchScreen';
 import { Avatar, MeScreen } from './MeScreen';
 import { PlayersScreen } from './PlayersScreen';
@@ -237,7 +238,7 @@ export function App() {
           <>
             <button type="button" className="brand group-btn" aria-label={`קבוצה: ${groups.current.name}. החלפת קבוצה`} onClick={() => setGroupsOpen(true)}>
               <span className="brand-mark" aria-hidden="true">
-                ⚽
+                <BallMark size={26} />
               </span>
               <span className="brand-text">
                 <span className="brand-name">כוחות</span>
@@ -245,7 +246,7 @@ export function App() {
                   <span className="group-name-text">{groups.current.name}</span>
                   {groups.current.synced && <SyncDot status={sync.status} />}
                   <span className="chev" aria-hidden="true">
-                    ▾
+                    <Icon name="chevDown" size={14} />
                   </span>
                 </span>
               </span>
@@ -285,7 +286,7 @@ export function App() {
           </>
         )}
       </header>
-      <main className={`screen screen-${safeRoute}`}>
+      <main key={safeRoute} className={`screen screen-${safeRoute}`}>
         {safeRoute === 'home' && (isPlayer ? <PlayerHome /> : <HomeScreen />)}
         {safeRoute === 'teams' && (viewing ? <ViewerScreen /> : <TeamsScreen />)}
         {safeRoute === 'match' && (viewing ? <ViewerScreen /> : <MatchScreen />)}

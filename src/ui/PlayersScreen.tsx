@@ -88,6 +88,8 @@ export function PlayersScreen() {
   // A chat shared from WhatsApp to the installed app lands here (public/sw.js → #players?import=shared).
   const [importing, setImporting] = useState<false | 'open' | 'shared'>(() => (location.hash.includes(SHARED_HASH) ? 'shared' : false));
   const [deleting, setDeleting] = useState<Player[] | null>(null);
+  // Motion only: the row just added slides in.
+  const [fresh, setFresh] = useState<string | null>(null);
   // Select mode: tap rows to pick several players, then delete them in one go.
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -141,6 +143,7 @@ export function PlayersScreen() {
     // Logged out past the free limit: log in first, then he's added (v13).
     gate([player], () => {
       dispatch({ type: 'addPlayer', player, present: true });
+      setFresh(player.id);
       notify(`${n} נוסף ומסומן שהגיע`);
       setName('');
       setProfile(5, []);
@@ -192,7 +195,7 @@ export function PlayersScreen() {
           }}
         />
         <MoreAboutPlayer attrs={{ ...attrs, overall: level }} cards={cards} onCards={(c) => setProfile(level, c)} onAttrs={setAttrs} />
-        <button type="submit" className="btn btn-primary btn-block">
+        <button type="submit" className={`btn btn-primary btn-block ${state.players.length === 0 ? 'btn-invite' : ''}`}>
           <Icon name="plus" size={20} /> הוספה
         </button>
       </form>
@@ -222,7 +225,7 @@ export function PlayersScreen() {
         <p className="swipe-tip">
           <span>טיפ: החליקו שחקן ימינה כדי למחוק, או ״בחירה״ כדי למחוק כמה בבת אחת.</span>
           <button type="button" className="icon-btn" aria-label="סגירת הטיפ" onClick={hideTip}>
-            ✕
+            <Icon name="close" size={18} />
           </button>
         </p>
       )}
@@ -244,7 +247,7 @@ export function PlayersScreen() {
                 actionLabel={`מחיקת ${p.name}`}
                 disabled={selecting}
                 nudge={nudge && i === 0}
-                className={on ? 'selected' : undefined}
+                className={[on && 'selected', p.id === fresh && 'is-new'].filter(Boolean).join(' ') || undefined}
                 onDelete={() => {
                   hideTip();
                   setDeleting([p]);

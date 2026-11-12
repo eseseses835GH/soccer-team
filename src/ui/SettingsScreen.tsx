@@ -228,7 +228,7 @@ export function SettingsScreen({ focus }: { focus?: string }) {
                     {nameOf(x)} ו{nameOf(y)} <span className="muted">· {RULE_LABEL[k]}</span>
                   </span>
                   <button type="button" className="icon-btn" aria-label={`הסרת הכלל: ${nameOf(x)} ו${nameOf(y)}`} onClick={() => dispatch({ type: 'removeConstraint', kind: k, index: i })}>
-                    ✕
+                    <Icon name="close" size={18} />
                   </button>
                 </li>
               ))}

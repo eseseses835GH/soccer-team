@@ -11,6 +11,7 @@ import { Welcome, shouldWelcome } from './Welcome';
 import { splitTeams } from './split';
 import { useLiveControl } from '../sync/OrganizerSync';
 import { runnerLine } from './LiveControl';
+import { KickArt } from './art';
 
 export const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
 
@@ -93,10 +94,10 @@ export function HomeScreen() {
           onClose={() => setWelcome(false)}
         />
       )}
-      <Empty icon="👟" title="בואו נכיר את החבר׳ה">
+      <Empty icon={<KickArt />} title="בואו נכיר את החבר׳ה">
         <p>מוסיפים כל אחד פעם אחת. אחר כך רק מסמנים מי הגיע, והקבוצות מתחלקות לבד.</p>
         <div className="stack narrow">
-          <button type="button" className="btn btn-primary btn-block" onClick={() => go('players')}>
+          <button type="button" className="btn btn-primary btn-block btn-invite" onClick={() => go('players')}>
             הוספת שחקנים
           </button>
           <button type="button" className="btn btn-quiet btn-block" onClick={() => dispatch({ type: 'loadSample', now: now() })}>
