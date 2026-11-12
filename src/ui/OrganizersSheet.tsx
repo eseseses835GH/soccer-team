@@ -32,7 +32,12 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
   const [playerLink, setPlayerLink] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [mode, setMode] = useState<RatingMode>('organizers');
-  const rows = playerMemberRows(members, useStore().state.players);
+  const roster = useStore().state.players;
+  const rows = playerMemberRows(members, roster);
+  const playsAs = (userId: string) => {
+    const pid = members.find((m) => m.userId === userId)?.playerId;
+    return (pid && roster.find((p) => p.id === pid)?.name) || null;
+  };
   const [confirm, setConfirm] = useState<string | null>(null);
   const votes = usePlayerVotes();
   const [busy, setBusy] = useState(false);
@@ -182,14 +187,20 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
                     <bdi>{o.name}</bdi>
                     {o.isMe && <span className="org-me"> (את/ה)</span>}
                   </strong>
-                  {o.joinedAt && <small>הצטרפ/ה ב־{shortDate(o.joinedAt)}</small>}
+                  {playsAs(o.userId) ? (
+                    <small>
+                      משחק/ת בשם <bdi>{playsAs(o.userId)}</bdi>
+                    </small>
+                  ) : (
+                    o.joinedAt && <small>הצטרפ/ה ב־{shortDate(o.joinedAt)}</small>
+                  )}
                 </span>
               </li>
             ))}
           </ul>
           <p className="hint small">כל המארגנים רואים ועורכים את כל הקבוצה, כולל הדירוגים.</p>
 
-          <h3 className="sheet-sub">קישורי הזמנה פעילים</h3>
+          <h3 className="sheet-sub">קישורים למארגנים</h3>
           {invites.length === 0 ? (
             <p className="hint">אין קישורים פעילים.</p>
           ) : (
