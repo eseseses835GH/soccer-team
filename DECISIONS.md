@@ -867,3 +867,7 @@ Only "שלחנו מייל. פותחים אותו ולוחצים על הקישו�
 - **Drawn icons instead of glyphs:** ✕ close buttons, the ▾ group chevron and the ⏱ on the match-length chip are now SVG icons. The emoji that carry meaning (player cards, 🧤 keeper, positions) stay: they're the app's vocabulary and appear in the help legend.
 - **Team and match cards:** the bib colour is a straight strip along the top (it used to be a top border that curved with the corners), and the cards have a hairline plus a soft shadow instead of a flat outline.
 - **Reduced motion:** the global rule already switches off every CSS animation and transition, which covers all of the above.
+
+## v22: the invite login screen names the group
+- `public.invite_group_name(token)`: anyone with a live invite token (anon too) reads that group's name, nothing else. Security definer in `public` on purpose: anon has no usage on schema `private`. Tokens are 32 random chars, so only whoever got the link sees the name.
+- The player share text always names the group; copying (no native share) copies the text with the link.

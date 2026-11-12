@@ -43,7 +43,23 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
   const useGis = !!GOOGLE_CLIENT_ID && secureForGis() && !iosHomeScreen();
   const [gis, setGis] = useState<'loading' | 'ready' | 'failed'>(useGis ? 'loading' : 'failed');
   const gisBox = useRef<HTMLDivElement>(null);
+  const [groupName, setGroupName] = useState<string | null>(null);
   const onCredential = useRef<(credential: string | undefined, nonce: string) => void>(() => {});
+
+  // An invite: show which group it is for (v22; the name only, for whoever holds the link).
+  const client = sync.client;
+  useEffect(() => {
+    const token = reason === 'join' ? pendingJoin() : null;
+    if (!token) return;
+    let live = true;
+    client()
+      .then((c) => c.rpc('invite_group_name', { p_token: token }))
+      .then(({ data }) => live && typeof data === 'string' && data && setGroupName(data))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [reason, client]);
 
   useEffect(() => {
     let live = true;
@@ -183,7 +199,15 @@ export function AccountSheet({ reason, onClose }: { reason: LoginReason; onClose
 
   return (
     <Sheet title="התחברות" onClose={onClose}>
-      <p className="lead">{LEADS[reason]}</p>
+      <p className="lead">
+        {groupName ? (
+          <>
+            קיבלתם הזמנה לקבוצה ״<bdi>{groupName}</bdi>״. כדי להצטרף צריך להתחבר (פעם אחת בטלפון הזה).
+          </>
+        ) : (
+          LEADS[reason]
+        )}
+      </p>
       <div className="stack">
         {gMode === 'gis' ? (
           <div ref={gisBox} className="gis-btn" aria-busy={busy} />

@@ -1362,6 +1362,7 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
       });
     }
     const GID = '22222222-3333-4444-8555-666666666666';
+    if (u.pathname.endsWith('/rpc/invite_group_name')) return json(req.postDataJSON()?.p_token === 'TOKEN123' ? 'מוזמנים' : null);
     if (u.pathname.endsWith('/rpc/join_group')) {
       joined = req.postDataJSON();
       return json([{ group_id: GID, name: 'מוזמנים', role: 'organizer' }]);
@@ -1377,6 +1378,7 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   assert(gisLoads.length === 0, `gis: Google's script isn't loaded before the login sheet (${gisLoads})`);
   await pg.goto(base + '#join=TOKEN123');
   await pg.reload();
+  await pg.waitForFunction(() => document.querySelector('.sheet .lead')?.textContent.includes('״מוזמנים״'), null, { timeout: 10000 }).catch(() => errors.push('invite: the login sheet names the group'));
   await pg.getByRole('button', { name: 'Google (stub)' }).click({ timeout: 10000 });
   await pg.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 10000 }).catch(() => errors.push('gis: the login sheet stays open after Google'));
   const gis = await pg.evaluate(() => window.__gis);
