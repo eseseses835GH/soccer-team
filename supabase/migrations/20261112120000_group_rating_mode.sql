@@ -199,7 +199,7 @@ begin
   end if;
   select * into me from public.group_members m where m.group_id = p_group_id and m.user_id = uid;
   select g.rating_mode into mode from public.groups g where g.id = p_group_id;
-  if not found or me.user_id is null or not private.can_rate_eff(me.role, me.can_rate, mode) or me.player_id is null then
+  if me.user_id is null or not private.can_rate_eff(me.role, me.can_rate, mode) or me.player_id is null then
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if jsonb_typeof(p_votes) is distinct from 'object' or (select count(*) from jsonb_object_keys(p_votes)) > 200 then
