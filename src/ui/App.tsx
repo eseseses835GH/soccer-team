@@ -145,6 +145,8 @@ export function App() {
       setParam(h.param);
     };
     window.addEventListener('popstate', onPop);
+    // The address may have changed between the first render and now.
+    if (parseHash().route) onPop();
     if (!location.hash.includes(SHARED_HASH)) dropShared();
     // An organizer invite was opened: join (after logging in if needed).
     if (location.hash.startsWith(JOIN_HASH)) {
