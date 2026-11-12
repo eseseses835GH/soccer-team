@@ -2104,9 +2104,11 @@ if (SB_URL) {
   const { gid: gid3 } = await groupState(xp);
   s3.groups.set(gid3, { name: 'שישי בשכונה', data: { v: 1, players: [{ id: 'a1', name: 'אבי', attrs, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 2 });
   s3.mine = [{ group_id: gid3, name: 'שישי בשכונה', role: 'organizer', player_id: null }];
-  await xp.reload();
+  // Open the app on the players screen (a hash change right after a reload can land before the app
+  // listens for it, and the screen would stay home).
   await xp.goto(base + '#players');
-  await xp.locator('.roster li', { hasText: 'אלי' }).waitFor({ timeout: 10000 }).catch(() => errors.push('self in old group: not in the roster after opening'));
+  await xp.reload();
+  await xp.locator('.roster li', { hasText: 'אלי' }).waitFor({ timeout: 5000 }).catch(() => errors.push('self in old group: not in the roster after opening'));
   assert((await xp.locator('.roster li').count()) === 2 && s3.groups.get(gid3).data.players.length === 2, 'self in old group: him and אבי, nothing lost');
   await xctx.close();
 
