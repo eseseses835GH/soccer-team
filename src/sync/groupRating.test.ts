@@ -71,7 +71,7 @@ describe('who may rate', () => {
 describe('organizer sheet', () => {
   it('share text per mode', () => {
     expect(playerShareText('שישי', 'organizers')).toBe('הצטרפו לקבוצה ״שישי״ בכוחות');
-    expect(playerShareText('שישי', 'everyone')).toBe('הצטרפו לכוחות ודרגו את החברים. הדירוג אנונימי');
+    expect(playerShareText('שישי', 'everyone')).toBe('הצטרפו לקבוצה ״שישי״ בכוחות ודרגו את החברים. הדירוג אנונימי');
   });
   it('progress: players with a vote / players who joined', () => {
     const members = parseMembers([

@@ -36,7 +36,7 @@ export function playerMemberRows(members: Member[], roster: { id: string; name: 
 
 /** Text shared with the player link (v18): in "everyone" mode it invites to rate. */
 export const playerShareText = (groupName: string, mode: RatingMode) =>
-  mode === 'everyone' ? 'הצטרפו לכוחות ודרגו את החברים. הדירוג אנונימי' : `הצטרפו לקבוצה ״${groupName}״ בכוחות`;
+  mode === 'everyone' ? `הצטרפו לקבוצה ״${groupName}״ בכוחות ודרגו את החברים. הדירוג אנונימי` : `הצטרפו לקבוצה ״${groupName}״ בכוחות`;
 
 /** "דירגו: 9 מתוך 14": player members with at least one vote that counts / player members who joined. */
 export function ratingProgress(members: Member[], rows: VoteRow[]): string {

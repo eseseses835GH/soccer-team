@@ -83,7 +83,7 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
   const share = async (url: string, asPlayer = false) => {
     const text = asPlayer ? playerShareText(cur.name, mode) : `הצטרפו כמארגנים לקבוצה ״${cur.name}״ בכוחות`;
     if (await nativeShare({ title: cur.name, text, url })) return;
-    notify((await copyText(url)) ? 'קישור ההזמנה הועתק' : 'ההעתקה נכשלה');
+    notify((await copyText(`${text}\n${url}`)) ? 'קישור ההזמנה הועתק' : 'ההעתקה נכשלה');
   };
 
   const newLink = async () => {
