@@ -31,7 +31,7 @@ export const STATUS_TEXT: Record<SyncStatus, string> = {
 };
 
 /** players / group: a logged-out phone hit the free limits (sync/gate.ts). */
-export type LoginReason = 'join' | 'upload' | 'account' | 'players' | 'group';
+export type LoginReason = 'join' | 'upload' | 'account' | 'players' | 'group' | 'invite';
 
 interface SyncApi {
   configured: boolean;
@@ -387,7 +387,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     if (pending) void doJoin(pending);
-    if (afterLogin.current === 'upload') void upload();
+    if (afterLogin.current === 'upload' || afterLogin.current === 'invite') void upload();
     afterLogin.current = null;
     setLoginReason(null);
     thenQueue.run();

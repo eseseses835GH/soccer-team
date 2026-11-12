@@ -92,6 +92,13 @@ export function App() {
   const [route, setRoute] = useState<Route>(() => initialRoute(!!state.result, !!state.match));
   const [param, setParam] = useState(() => parseHash().param);
   const [toast, setToast] = useState<string | null>(null);
+  // A new version is ready (main.tsx): one quiet bar with a reload button.
+  const [updateReady, setUpdateReady] = useState(false);
+  useEffect(() => {
+    const on = () => setUpdateReady(true);
+    window.addEventListener('kochot:update-ready', on);
+    return () => window.removeEventListener('kochot:update-ready', on);
+  }, []);
   const [incoming, setIncoming] = useState<Backup | null>(null);
   const timer = useRef<number>(undefined);
   useRecordUse(state.players.length > 0);
@@ -308,6 +315,14 @@ export function App() {
       )}
       {groupsOpen && <GroupsSheet onClose={() => setGroupsOpen(false)} />}
       {sync.loginReason && <AccountSheet reason={sync.loginReason} onClose={sync.closeLogin} />}
+      {updateReady && (
+        <div className="update-bar" role="status">
+          <span>יש גרסה חדשה</span>
+          <button type="button" className="text-btn" onClick={() => location.reload()}>
+            רענון
+          </button>
+        </div>
+      )}
       <Toast message={toast} />
     </UiCtx.Provider>
   );

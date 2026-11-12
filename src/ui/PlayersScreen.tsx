@@ -16,6 +16,7 @@ import { AttrSliders, CardBadges, CardPicker, LevelPicker, PositionBadges, Posit
 import { DeletePlayerSheet } from './DeletePlayerSheet';
 import { ImportSheet } from './ImportSheet';
 import { Icon } from './icons';
+import { InviteFriends } from './InviteFriends';
 import { SwipeRow, closeSwipeRows } from './SwipeRow';
 import { usePlayerGate } from './useGate';
 
@@ -212,6 +213,7 @@ export function PlayersScreen() {
             <button type="button" className="text-btn" onClick={() => setImporting('open')}>
               <Icon name="upload" size={18} /> ייבוא רשימה
             </button>
+            <InviteFriends />
           </div>
         )}
       </div>

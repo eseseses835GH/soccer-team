@@ -30,7 +30,21 @@ createRoot(document.getElementById('root')!).render(
 
 // Offline support at the pitch + "add to home screen" (also keeps iOS from evicting local data).
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  // A new version took over while this page runs old code (iOS keeps an installed app in memory):
+  // offer a reload instead of silently showing the old screens. Never reload by itself (a match may run).
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) window.dispatchEvent(new Event('kochot:update-ready'));
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker
+      .register('./sw.js')
+      .then((reg) => {
+        // Look for a new version whenever the app comes back to the screen.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') void reg.update().catch(() => {});
+        });
+      })
+      .catch(() => {});
   });
 }

@@ -1826,6 +1826,28 @@ if (SB_URL) {
   console.log('my page: avatar, groups, organizer claim, stats, recent evening, logout');
 }
 
+// 21. "הזמנת חברים" on the players screen: logged out it asks to log in (with its own reason);
+// the group menu has the same single button. A new version shows one "רענון" bar.
+{
+  const ic = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ip = await ic.newPage();
+  ip.on('pageerror', (e) => errors.push(e.message));
+  await ip.goto(base);
+  await ip.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await ip.getByRole('button', { name: 'השחקנים' }).click();
+  await ip.getByRole('button', { name: /הזמנת חברים/ }).click();
+  assert(await ip.getByText('כדי לשלוח קישור לחברים צריך להתחבר').isVisible(), 'invite: logged out asks to log in');
+  await ip.keyboard.press('Escape');
+  await ip.waitForTimeout(300);
+  await ip.goto(base + '#home');
+  await ip.getByRole('button', { name: /החלפת קבוצה/ }).click();
+  assert((await ip.locator('.sheet').getByRole('button', { name: /הזמנת חברים/ }).count()) === 1, 'invite: one button in the group menu');
+  assert((await ip.locator('.sheet').getByRole('button', { name: /הזמנת מארגן|סנכרון בין טלפונים/ }).count()) === 0, 'invite: old buttons gone');
+  await ip.evaluate(() => window.dispatchEvent(new Event('kochot:update-ready')));
+  assert(await ip.locator('.update-bar').getByRole('button', { name: 'רענון' }).isVisible(), 'update: a reload bar when a new version is ready');
+  await ic.close();
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {

@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { MAX_GROUP_NAME } from '../state/groups';
 import { useGroups } from '../state/store';
 import { STATUS_TEXT, useSync } from '../sync/SyncProvider';
-import { copyText, nativeShare } from '../share';
 import { useUi } from './App';
 import { Sheet } from './components';
 import { Icon } from './icons';
+import { InviteFriends } from './InviteFriends';
 import { OrganizersSheet } from './OrganizersSheet';
 import { isPlayerGroup } from '../sync/playerGroup';
 import { gateNewGroup } from '../sync/gate';
@@ -51,16 +51,6 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
     if (taken(name, cur.id)) return notify('כבר יש קבוצה בשם הזה');
     groups.rename(cur.id, name);
     setMode('list');
-  };
-
-  const invite = async () => {
-    setBusy(true);
-    const url = await sync.inviteLink();
-    setBusy(false);
-    if (!url) return;
-    const text = `הצטרפו כמארגנים לקבוצה ״${cur.name}״ בכוחות`;
-    if (await nativeShare({ title: cur.name, text, url })) return;
-    notify((await copyText(url)) ? 'קישור ההזמנה הועתק' : 'ההעתקה נכשלה');
   };
 
   const remove = async () => {
@@ -166,28 +156,12 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
 
       <h3 className="sheet-sub">״{cur.name}״</h3>
       <div className="stack">
-        {sync.configured &&
-          !player &&
-          (cur.synced ? (
-            <>
-              <button type="button" className="btn btn-quiet btn-block" disabled={busy} onClick={invite}>
-                <Icon name="link" size={20} /> הזמנת מארגן
-              </button>
-              {sync.email && (
-                <button type="button" className="btn btn-quiet btn-block" onClick={() => setMode('organizers')}>
-                  <Icon name="users" size={20} /> מארגנים והזמנות
-                </button>
-              )}
-              <p className="hint small">מי שמקבל את הקישור ומתחבר יראה ויערוך את כל הקבוצה, כולל הדירוגים. הקישור תקף לשבועיים.</p>
-            </>
-          ) : (
-            <>
-              <button type="button" className="btn btn-quiet btn-block" disabled={busy} onClick={() => void sync.uploadCurrent()}>
-                <Icon name="upload" size={20} /> סנכרון בין טלפונים
-              </button>
-              <p className="hint small">שומר את הקבוצה בחשבון, כדי שעוד מארגנים יוכלו לערוך אותה מהטלפון שלהם. דורש התחברות.</p>
-            </>
-          ))}
+        {sync.configured && !player && (
+          <>
+            <InviteFriends className="btn btn-primary btn-block" />
+            <p className="hint small">קישור לשחקנים (רואים את הערב והסטטיסטיקות, בלי דירוגים) או למארגן נוסף.</p>
+          </>
+        )}
         <div className={player ? 'stack' : 'row-2'}>
           {!player && (
             <button
