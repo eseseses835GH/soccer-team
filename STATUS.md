@@ -239,4 +239,4 @@
 
 # v18: group rating mode and a 3-rater minimum
 - **Built:** "מי מדרג?" (organizers only / everyone who joined), progress line, share text per mode; a level becomes the average only from 3 raters. See DECISIONS → "Group rating mode and a 3-rater minimum (v18)".
-- **Open:** migration `20261112120000_group_rating_mode.sql` not applied (Supabase project was paused).
+- Migration `20261112120000_group_rating_mode.sql` applied 2026-11-12 and verified (see DECISIONS v18).
