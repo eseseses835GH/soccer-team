@@ -74,12 +74,14 @@ export function ratedLevel(all: LevelVotes | undefined, organizers: LevelVotes |
   return Object.keys(all ?? {}).length >= MIN_RATERS ? averageLevel(all) : averageLevel(organizers);
 }
 
-/** One-line summary under the level in the edit sheet ('' = nothing to show). `votes` = everyone's (v18). */
-export function votesLine(votes: LevelVotes | undefined, me: string | null): string {
+/**
+ * One-line summary under "הדירוג שלך" in a synced group's edit sheet. `votes` = everyone's (v18),
+ * `level` = the player's level now. The organizer's own vote is the picker itself.
+ */
+export function votesLine(votes: LevelVotes | undefined, level: number): string {
   const n = Object.keys(votes ?? {}).length;
-  const mine = me ? votes?.[me] : undefined;
-  if (n >= MIN_RATERS) return `ממוצע של ${n} מדרגים: ${averageLevel(votes)} · ${mine !== undefined ? `שלך: ${mine}` : 'עוד לא דירגת'}`;
+  if (n >= MIN_RATERS) return `רמה כרגע: ${averageLevel(votes)} (ממוצע של ${n} מדרגים)`;
   const left = MIN_RATERS - n;
-  if (n >= 1) return left === 1 ? 'עוד דירוג אחד עד ממוצע' : `עוד ${left} דירוגים עד ממוצע`;
-  return '';
+  if (n === 0) return `רמה כרגע: ${level}`;
+  return `רמה כרגע: ${level} · ${left === 1 ? 'עוד דירוג אחד עד ממוצע' : `עוד ${left} דירוגים עד ממוצע`}`;
 }

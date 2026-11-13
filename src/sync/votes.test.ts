@@ -39,12 +39,10 @@ describe('votes helpers', () => {
     expect(mergeVotes(undefined, undefined, undefined)).toBeUndefined();
   });
   it('the line under the level (v18: average only from 3 raters)', () => {
-    expect(votesLine(undefined, A)).toBe('');
-    expect(votesLine({ [A]: 7 }, A)).toBe('עוד 2 דירוגים עד ממוצע');
-    expect(votesLine({ [B]: 7 }, null)).toBe('עוד 2 דירוגים עד ממוצע');
-    expect(votesLine({ [B]: 6, [C]: 5 }, A)).toBe('עוד דירוג אחד עד ממוצע');
-    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, A)).toBe('ממוצע של 3 מדרגים: 6 · שלך: 7');
-    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, null)).toBe('ממוצע של 3 מדרגים: 6 · עוד לא דירגת');
+    expect(votesLine(undefined, 6)).toBe('רמה כרגע: 6');
+    expect(votesLine({ [A]: 7 }, 7)).toBe('רמה כרגע: 7 · עוד 2 דירוגים עד ממוצע');
+    expect(votesLine({ [B]: 6, [C]: 5 }, 6)).toBe('רמה כרגע: 6 · עוד דירוג אחד עד ממוצע');
+    expect(votesLine({ [A]: 7, [B]: 6, [C]: 4 }, 5)).toBe('רמה כרגע: 6 (ממוצע של 3 מדרגים)');
   });
 });
 

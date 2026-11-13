@@ -347,7 +347,7 @@ function PlayerSheet({
   const setLevel = (v: number) => setDraft((d) => playerAtLevel(d, v, voter, playerVotes));
   // Players allowed to rate count too (v10); their votes aren't in the doc.
   const allVotes = mergePlayerVotes(draft.levelVotes, playerVotes, draft.id);
-  const line = votesLine(allVotes, voter);
+  const line = voter ? votesLine(allVotes, draft.attrs.overall) : '';
   // Level/cards rebuild the attributes; the detailed sliders fine-tune after that.
   const setProfile = (level: number, cards: CardId[]) => setDraft((d) => ({ ...d, cards, attrs: applyCards(level, cards) }));
 
@@ -378,9 +378,10 @@ function PlayerSheet({
           }}
         />
         {error && <p className="field-error">{error}</p>}
-        <span className="label">רמה</span>
-        <LevelPicker value={myVote ?? draft.attrs.overall} onChange={setLevel} />
+        <span className="label">{voter ? 'הדירוג שלך' : 'רמה'}</span>
+        <LevelPicker value={voter ? myVote ?? 0 : draft.attrs.overall} onChange={setLevel} label={voter ? 'הדירוג שלך' : 'רמה'} />
         {line && <p className="hint small votes-line">{line}</p>}
+        {voter && <p className="hint small">הדירוג שלך הוא קול אחד. הוא לא מוחק את של אחרים.</p>}
         <p className="hint small level-hint">{LEVEL_HINT}</p>
         {POSITIONS_LABEL}
         <PositionPicker

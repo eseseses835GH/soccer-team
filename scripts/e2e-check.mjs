@@ -1737,8 +1737,9 @@ if (SB_URL) {
   assert(!(await rating.count()) && (await roster()).find((p) => p.name === 'רונן')?.attrs.overall === 6, 'wa: contact added and rated, round over');
 
   // Nothing with a phone number, anywhere this phone keeps data.
-  const kept = await wp.evaluate(async () => JSON.stringify(localStorage) + JSON.stringify(await caches.keys()));
-  assert(!/4567|4321|0134/.test(kept), 'wa: a phone number was stored');
+  // (13-digit runs are millisecond timestamps, e.g. createdAt 1794567924719, not phones.)
+  const kept = (await wp.evaluate(async () => JSON.stringify(localStorage) + JSON.stringify(await caches.keys()))).replace(/\b\d{13}\b/g, '');
+  assert(!/4567|4321|0134/.test(kept), `wa: a phone number was stored (${(kept.match(/.{0,60}(4567|4321|0134).{0,20}/) ?? [''])[0]})`);
   assert(!/4567|4321/.test(JSON.stringify(ws.calls)), 'wa: a phone number was sent to the server');
   console.log(`whatsapp: ${(await roster()).length} players (zip, share target, contacts)`);
   await wctx.close();
