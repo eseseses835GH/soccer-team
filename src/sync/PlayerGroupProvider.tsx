@@ -26,7 +26,7 @@ interface PlayerGroupApi {
   /** "אני לא ברשימה": add me to the roster under `name` and claim him. Error code, or null when it worked. */
   joinNew(name: string): Promise<SyncError['code'] | null>;
   /** v23: add a guest for tonight (runner only). His id, or an error code. */
-  addGuest(name: string): Promise<{ id: string } | { error: SyncError['code'] }>;
+  addGuest(name: string, level?: number): Promise<{ id: string } | { error: SyncError['code'] }>;
   /** One vote (null takes it back). Resolves false when it didn't reach the server. */
   vote(playerId: string, level: number | null): Promise<boolean>;
   refresh(): void;
@@ -167,9 +167,9 @@ export function PlayerGroupProvider({ children }: { children: ReactNode }) {
   );
 
   const addGuest = useCallback(
-    async (name: string) => {
+    async (name: string, level = 5) => {
       try {
-        const id = await playersApi(await sync.client()).addGuest(gid, name);
+        const id = await playersApi(await sync.client()).addGuest(gid, name, level);
         const cur = pubRef.current;
         if (cur) {
           const next = withGuest(cur, id, name);

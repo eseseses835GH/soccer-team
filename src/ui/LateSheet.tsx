@@ -22,7 +22,7 @@ type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean;
  * "הגיע מאוחר" / "מישהו הגיע?": pick who arrived → he goes in now (the suggested team, or
  * another with a tap) or waits on the side → if he completed the teams, an optional swap or two.
  * `mode: 'runner'` (a player running the match, no ratings on his phone): roster, bench or a new
- * guest at level 5 (v23), the smallest team and no swap suggestions (DECISIONS → v15).
+ * guest with a level (v23), the smallest team and no swap suggestions (DECISIONS → v15).
  */
 export function LateSheet({ onClose, arrived, mode }: { onClose: () => void; arrived?: Player; mode?: 'runner' }) {
   const { state, dispatch } = useStore();
@@ -192,11 +192,12 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
   );
 }
 
-/** A player runner's pick: the roster (names only), the bench, or a new guest (level 5, added on the server). */
+/** A player runner's pick: the roster (names only), the bench, or a new guest (name + level, added on the server). */
 function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, sub: boolean, isNew?: boolean) => void }) {
   const { state } = useStore();
   const pg = usePlayerGroup();
   const [name, setName] = useState('');
+  const [level, setLevel] = useState(5);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!state.result) return null;
@@ -206,9 +207,9 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
     e.preventDefault();
     if (!n || taken || busy) return;
     setBusy(true);
-    const res = await pg.addGuest(n);
+    const res = await pg.addGuest(n, level);
     setBusy(false);
-    if ('id' in res) return onPick(newGuest(res.id, n), false, true);
+    if ('id' in res) return onPick(newGuest(res.id, n, level), false, true);
     setError(GUEST_ERROR[res.error] ?? 'משהו השתבש, נסו שוב');
   };
   const { roster, bench } = arrivalChoices(state.players, state.result, state.history);
@@ -249,6 +250,8 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
           }}
         />
         {(taken || error) && <p className="field-error">{taken ? NAME_TAKEN : error}</p>}
+        <span className="label">רמה</span>
+        <LevelPicker value={level} onChange={setLevel} />
         <button type="submit" className="btn btn-primary btn-block" disabled={!n || taken || busy}>
           המשך
         </button>

@@ -1727,7 +1727,7 @@ if (SB_URL) {
   await lp.getByRole('button', { name: 'מישהו הגיע?' }).click();
   const sheet = lp.getByRole('dialog');
   assert((await sheet.locator('input').count()) === 1, 'runner late: only the guest name field (v23)');
-  assert(!(await sheet.locator('.level-picker, [role=radiogroup]').count()), 'runner late: a level picker for a player');
+  assert((await sheet.locator('[role=radiogroup]').count()) === (await sheet.locator('form.late-new [role=radiogroup]').count()), 'runner late: a level picker outside the guest form');
   assert(await sheet.getByRole('button', { name: 'מתן' }).count(), 'runner late: the bench not offered');
   await sheet.getByRole('button', { name: 'ליאור' }).click();
   await sheet.getByRole('button', { name: /^נכנס עכשיו/ }).click();
@@ -1744,15 +1744,16 @@ if (SB_URL) {
   assert(db.data.gone?.some((p) => p.id === 'p10'), `runner late: who left not in the snapshot (${JSON.stringify(db.data.gone)})`);
   assert(db.data.subs.join() === 'p13', `runner late: bench ${db.data.subs}`);
   assert(!/"(attrs|levelVotes|cards|overall|weaknesses)":/.test(JSON.stringify(db.data)), 'runner late: ratings in the snapshot');
-  // v23: a stranger turns up: the runner adds him as a guest (on the server, level 5) and he goes in.
+  // v23: a stranger turns up: the runner adds him as a guest (on the server, with a level) and he goes in.
   await lp.getByRole('button', { name: 'מישהו הגיע?' }).click();
   await sheet.getByPlaceholder('שם').fill('אבי');
   assert(await sheet.getByText('כבר יש שחקן בשם הזה').isVisible(), 'runner guest: a taken name is not stopped');
   await sheet.getByPlaceholder('שם').fill('זר מהמגרש');
+  await sheet.getByRole('radio', { name: '8', exact: true }).click();
   await sheet.getByRole('button', { name: 'המשך' }).click();
   await sheet.getByRole('button', { name: /^נכנס עכשיו/ }).click();
   const gid = db.guests?.[0]?.id;
-  assert(gid && db.guests[0].name === 'זר מהמגרש', `runner guest: add_guest not called (${JSON.stringify(db.guests)})`);
+  assert(gid && db.guests[0].name === 'זר מהמגרש' && db.guests[0].level === 8, `runner guest: add_guest not called with the level (${JSON.stringify(db.guests)})`);
   assert(!db.claimed.includes(gid), 'runner guest: the guest was claimed');
   await waitFor(() => db.data.players.some((p) => p.id === gid) && db.data.teams.some((t) => t.ids.includes(gid)), 'runner guest: not in tonight’s teams');
   console.log(`runner late/left: ${db.sets.length} live writes`);

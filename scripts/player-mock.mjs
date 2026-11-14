@@ -343,7 +343,7 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
       if (db.roster.some((p) => key(p.name) === key(name))) return json(route, { code: '23505', message: 'name_taken' }, 409);
       const id = `g${db.roster.length + 1}`;
       db.roster = [...db.roster, { id, name, occasional: true }];
-      db.guests = [...(db.guests ?? []), { id, name }];
+      db.guests = [...(db.guests ?? []), { id, name, level: args.p_level }];
       return json(route, id);
     }
     if (path.endsWith('/rpc/claim_player')) {

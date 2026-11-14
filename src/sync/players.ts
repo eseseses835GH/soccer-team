@@ -150,9 +150,9 @@ export function playersApi(sb: SupabaseClient) {
      * v23: whoever runs tonight (an organizer, or the player running the open evening / about to open
      * one) adds a guest: level 5, not claimed. Returns the new id. Errors as joinAsNew ('name', 'denied'…).
      */
-    async addGuest(groupId: string, name: string): Promise<string> {
+    async addGuest(groupId: string, name: string, level = 5): Promise<string> {
       try {
-        const id = await rpc('add_guest', { p_group_id: groupId, p_name: name });
+        const id = await rpc('add_guest', { p_group_id: groupId, p_name: name, p_level: level });
         if (typeof id !== 'string' || !id) throw new SyncError('no id', 'other');
         return id;
       } catch (e) {
