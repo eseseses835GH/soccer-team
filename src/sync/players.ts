@@ -31,6 +31,8 @@ export interface PublicPlayer {
   name: string;
   positions?: Position[];
   canGK?: boolean;
+  /** "לא בשער": skipped by the keeper rotation. */
+  noGK?: boolean;
 }
 
 /** What a player may see of a group (group_public_get). Never any rating. */
@@ -76,7 +78,7 @@ export function parsePublic(raw: unknown): PublicGroup | null {
     .filter((p) => typeof p.id === 'string' && typeof p.name === 'string' && (p.name as string).trim())
     .map((p) => {
       const positions = sanitizePositions(p.positions);
-      return { id: p.id as string, name: p.name as string, ...(positions.length ? { positions } : {}), ...(p.canGK === true ? { canGK: true } : {}) };
+      return { id: p.id as string, name: p.name as string, ...(positions.length ? { positions } : {}), ...(p.canGK === true ? { canGK: true } : {}), ...(p.noGK === true ? { noGK: true } : {}) };
     });
   return {
     groupId: r.groupId,

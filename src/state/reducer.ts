@@ -1,7 +1,7 @@
 import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solution } from '../engine';
-import { addTeam, type MatchState } from '../match/match';
-import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, teamBibs, type AppState, type Player, type Settings } from './model';
-import { addEvening, buildEvening, mergeHistory, stampSides, type EveningRecord } from './history';
+import { addTeam, swapKeepers, type MatchState } from '../match/match';
+import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, noGKIds, teamBibs, type AppState, type Player, type Settings } from './model';
+import { addEvening, buildEvening, mergeHistory, stampSides, teamMembers, type EveningRecord } from './history';
 import { addFromBench, lateJoin, type LateChoice } from './late';
 import { leaveEarly, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
@@ -35,6 +35,8 @@ export type Action =
   | { type: 'swapSub'; subId: string; i: number }
   | { type: 'applyAssignment'; assignment: number[]; swaps: [number, number][] }
   | { type: 'resetSwaps' }
+  /** "סדר שוערים": swap two players of one team in its keeper order. */
+  | { type: 'swapKeepers'; team: number; a: string; b: string }
   /** Someone arrived late (late.ts): he goes in now or waits on the side; nobody reshuffled. */
   | { type: 'lateJoin'; player?: Player; id: string; choice: LateChoice; seed: number; now: number }
   /** Someone left early (leave.ts): out of the teams and today's attendance, nobody reshuffled. */
@@ -76,6 +78,7 @@ export function leaveCtx(state: AppState): LeaveCtx {
     constraints: state.constraints,
     rotate: state.settings.gkMode === 'rotate',
     every: state.settings.gkSwitchGoals,
+    noGK: noGKIds(state.players),
   };
 }
 
@@ -240,6 +243,12 @@ function baseReducer(state: AppState, action: Action): AppState {
       const r = state.result;
       if (!r) return state;
       return { ...state, result: { ...r, assignment: r.generated, gkOrder: reorderKeepers(r.gkOrder, r.playerIds, r.generated, r.numTeams) } };
+    }
+    case 'swapKeepers': {
+      const r = state.result;
+      if (!r || action.team < 0 || action.team >= r.numTeams) return state;
+      const gkOrder = Array.from({ length: r.numTeams }, (_, t) => (t === action.team ? swapKeepers(teamMembers(r, t), action.a, action.b) : (r.gkOrder[t] ?? [])));
+      return { ...state, result: { ...r, gkOrder } };
     }
     case 'lateJoin': {
       if (!state.result) return state;

@@ -10,7 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { teamMembers, type EveningRecord } from '../state/history';
 import { defaultMatchMs, teamBibs, type GameResult, type Settings } from '../state/model';
-import { inDrawExtraTime, keeperIndex, matchLength, score, type MatchState, type Pens } from '../match/match';
+import { inDrawExtraTime, keeperAt, matchLength, score, type MatchState, type Pens } from '../match/match';
 import { fail } from './supabase';
 
 export interface LiveClock {
@@ -138,7 +138,7 @@ export interface LiveRow {
 export interface LiveInput {
   result: GameResult | null;
   match: MatchState | null;
-  players: { id: string; name: string }[];
+  players: { id: string; name: string; noGK?: boolean }[];
   settings: Settings;
   now: number;
 }
@@ -163,10 +163,10 @@ export function liveFromState({ result: r, match: m, players, settings, now }: L
   if (!r) return null;
   const bibs = teamBibs(settings, r.numTeams);
   const rotate = settings.gkMode === 'rotate';
+  const noGK = new Set(players.filter((p) => p.noGK).map((p) => p.id));
   const teams: LiveTeam[] = Array.from({ length: r.numTeams }, (_, t) => {
     const ids = teamMembers(r, t);
-    const idx = m && rotate ? keeperIndex(m.conceded[t] ?? 0, settings.gkSwitchGoals, ids.length) : 0;
-    return { bib: bibs[t], ids, keeper: ids[idx] ?? null };
+    return { bib: bibs[t], ids, keeper: keeperAt(ids, m?.conceded[t] ?? 0, settings.gkSwitchGoals, !!m && rotate, noGK).now };
   });
   const tonight = new Set([...r.playerIds, ...r.subIds, ...(m?.borrow?.ids ?? [])]);
   const out: LiveData = {

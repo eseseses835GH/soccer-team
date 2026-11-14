@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Attributes, Position } from '../engine';
 import { playersCount } from '../i18n';
 import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
-import { newId, type Player } from '../state/model';
+import { newId, withNoGK, type Player } from '../state/model';
 import { withPositions } from '../state/positions';
 import { SHARED_HASH } from '../state/whatsapp';
 import { loadJSON, saveJSON } from '../state/storage';
@@ -388,8 +388,16 @@ function PlayerSheet({
           canGK={draft.canGK}
           positions={draft.positions ?? []}
           fixedKeepers={fixedKeepers}
-          onChange={(gk, ps) => setDraft((d) => withPositions({ ...d, canGK: gk }, ps))}
+          onChange={(gk, ps) => setDraft((d) => withPositions(gk ? withNoGK({ ...d, canGK: true }, false) : { ...d, canGK: false }, ps))}
         />
+        <div className="card-chips nogk-row">
+          <button type="button" className={`card-chip ${draft.noGK ? 'on' : ''}`} aria-pressed={!!draft.noGK} onClick={() => setDraft((d) => withNoGK(d, !d.noGK))}>
+            <span className="card-emoji" aria-hidden="true">
+              🚫
+            </span>
+            לא בשער
+          </button>
+        </div>
         <MoreAboutPlayer
           attrs={draft.attrs}
           cards={draft.cards}

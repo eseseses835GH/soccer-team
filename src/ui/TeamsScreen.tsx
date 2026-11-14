@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ATTR_KEYS, evaluate } from '../engine';
-import { ATTR_LABELS, goalsEvery } from '../i18n';
-import { startSession } from '../match/match';
+import { ATTR_LABELS } from '../i18n';
+import { keeperAt, startSession } from '../match/match';
+import { teamMembers } from '../state/history';
 import { FIELD_POSITIONS } from '../state/positions';
-import { engineOptions, teamLook, type AppState, type GameResult, type Player } from '../state/model';
+import { engineOptions, noGKIds, teamLook, type AppState, type GameResult, type Player } from '../state/model';
 import { isResultStale, useStore } from '../state/store';
 import { buildShareText, copyText, downloadBlob, shareFile, TEAMS_TITLE, type ShareTeam } from '../share';
 import { teamsImage, type ImageTeam } from '../shareImage';
 import { useUi } from './App';
 import { CardBadges, Empty, ScoreMeter, Sheet } from './components';
+import { GkOrderButton, GkOrderSheet, useGkOrderSheet } from './GkOrder';
 import { Icon } from './icons';
 import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
@@ -51,7 +53,7 @@ export function evaluateResult(state: AppState, r: GameResult, assignment = r.as
   };
 }
 
-/** Names only, keeper first, for the picture and the short text. */
+/** Names only (fixed keeper first), for the picture and the short text. Rotating keepers: no keeper mark. */
 export function shareData(state: AppState, r: GameResult): { teams: (ShareTeam & ImageTeam)[]; subs: string[] } {
   const byId = new Map(state.players.map((p) => [p.id, p]));
   const indexOf = new Map(r.playerIds.map((id, i) => [id, i]));
@@ -60,16 +62,16 @@ export function shareData(state: AppState, r: GameResult): { teams: (ShareTeam &
   return {
     teams: Array.from({ length: r.numTeams }, (_, t) => {
       const look = teamLook(state.settings, t);
-      const order = (r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t)).filter(
-        (id) => r.assignment[indexOf.get(id) ?? -1] === t,
-      );
+      const order = rotate
+        ? r.playerIds.filter((_, i) => r.assignment[i] === t)
+        : (r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t)).filter((id) => r.assignment[indexOf.get(id) ?? -1] === t);
       return {
         name: look.name,
         emoji: look.emoji,
         color: look.color,
         sub: t < 2 ? undefined : r.numTeams === 3 ? 'בחוץ' : `בתור #${t - 1}`,
         names: order.map(name),
-        keeper: order.length > 0 && (rotate || !!byId.get(order[0])?.canGK),
+        keeper: !rotate && order.length > 0 && !!byId.get(order[0])?.canGK,
       };
     }),
     subs: r.subIds.map(name),
@@ -92,6 +94,8 @@ export function TeamsScreen() {
   /** Re-rolling once matches were played reshuffles who is "קבוצה 1" in tonight's table: ask first. */
   const [confirmReroll, setConfirmReroll] = useState(false);
   const r = state.result;
+  /** "סדר שוערים" (rotating keepers): opens by itself the first time teams are seen on this phone. */
+  const [gkOpen, setGkOpen] = useGkOrderSheet(!!r && state.settings.gkMode === 'rotate');
   const data = useMemo(() => (r ? evaluateResult(state, r) : null), [state, r]);
   const shared = useMemo(() => (r ? shareData(state, r) : null), [state, r]);
   const sharedKey = JSON.stringify(shared);
@@ -127,6 +131,7 @@ export function TeamsScreen() {
   const animKey = `${r.createdAt}-${r.shown.length}`;
   const nameOf = (id: string) => byId.get(id)?.name ?? '?';
   const rotate = state.settings.gkMode === 'rotate';
+  const noGK = noGKIds(state.players);
   // v20: one number per team, the same one a player sees when he makes teams.
   const totals = teamTotals(r.playerIds, r.assignment, k, state.players, state.settings.weights);
 
@@ -231,9 +236,10 @@ export function TeamsScreen() {
       <div className="team-grid" key={animKey}>
         {Array.from({ length: k }, (_, t) => {
           const look = teamLook(state.settings, t);
-          const order = (r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t)).filter(
-            (id) => r.assignment[indexOf.get(id) ?? -1] === t,
-          );
+          // Rotating keepers: a plain list (the order is in "סדר שוערים"). Fixed: the keeper first, with 🧤.
+          const order = rotate
+            ? r.playerIds.filter((_, i) => r.assignment[i] === t)
+            : (r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t)).filter((id) => r.assignment[indexOf.get(id) ?? -1] === t);
           // With a queue, any short team (the one outside, or one that lost a player) borrows from the loser.
           const short = counts[t] < r.teamSize && k > 2;
           return (
@@ -256,9 +262,11 @@ export function TeamsScreen() {
                   return (
                     <li key={id} style={{ '--i': slot + t * 2 } as React.CSSProperties}>
                       <button type="button" className={`member ${isSel ? 'sel' : ''} ${isTarget ? 'target' : ''}`} aria-pressed={isSel} onClick={() => tapMember(i)}>
-                        <span className="slot" aria-label={slot === 0 ? 'מתחיל בשער' : undefined}>
-                          {slot === 0 && (rotate || p.canGK) ? '🧤' : rotate ? slot + 1 : ''}
-                        </span>
+                        {!rotate && (
+                          <span className="slot" aria-label={slot === 0 && p.canGK ? 'שוער' : undefined}>
+                            {slot === 0 && p.canGK ? '🧤' : ''}
+                          </span>
+                        )}
                         <span className="name">{p.name}</span>
                         <CardBadges cards={p.cards} />
                       </button>
@@ -270,9 +278,7 @@ export function TeamsScreen() {
           );
         })}
       </div>
-      <p className="hint center small">
-        {rotate ? `🧤 סדר השוערים לפי המספרים · מתחלפים ${goalsEvery(state.settings.gkSwitchGoals)}` : '🧤 השוער הקבוע של כל קבוצה'}
-      </p>
+      {rotate ? <GkOrderButton onClick={() => setGkOpen(true)} /> : <p className="hint center small">🧤 השוער הקבוע של כל קבוצה</p>}
 
       {r.subIds.length > 0 && (
         <div className="bench">
@@ -373,6 +379,20 @@ export function TeamsScreen() {
             })}
           </div>
         </Sheet>
+      )}
+      {gkOpen && rotate && (
+        <GkOrderSheet
+          teams={Array.from({ length: k }, (_, t) => ({
+            look: teamLook(state.settings, t),
+            ids: teamMembers(r, t),
+            keeper: state.match ? keeperAt(teamMembers(r, t), state.match.conceded[t] ?? 0, state.settings.gkSwitchGoals, true, noGK).now : null,
+          }))}
+          name={nameOf}
+          every={state.settings.gkSwitchGoals}
+          noGK={noGK}
+          onSwap={(team, a, b) => dispatch({ type: 'swapKeepers', team, a, b })}
+          onClose={() => setGkOpen(false)}
+        />
       )}
       {leaving && (
         <LeaveSheet

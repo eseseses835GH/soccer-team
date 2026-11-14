@@ -388,6 +388,36 @@ export function keeperIndex(conceded: number, every: number, orderLength: number
   return Math.floor(conceded / Math.max(1, every)) % orderLength;
 }
 
+/**
+ * Who takes turns in goal, in order: the keeper order without the players marked "לא בשער".
+ * If that leaves nobody, everyone takes turns.
+ */
+export function rotation(order: string[], noGK?: ReadonlySet<string>): string[] {
+  if (!noGK?.size) return order;
+  const r = order.filter((id) => !noGK.has(id));
+  return r.length ? r : order;
+}
+
+/** The keeper now and the next one in the rotation (fixed mode: the first one stays, no next). */
+export function keeperAt(
+  order: string[],
+  conceded: number,
+  every: number,
+  rotate: boolean,
+  noGK?: ReadonlySet<string>,
+): { now: string | null; next: string | null } {
+  const r = rotation(order, noGK);
+  if (!r.length) return { now: null, next: null };
+  const i = rotate ? keeperIndex(conceded, every, r.length) : 0;
+  return { now: r[i], next: rotate && r.length > 1 ? r[(i + 1) % r.length] : null };
+}
+
+/** Swap two players in a keeper order (anything else stays where it is). */
+export function swapKeepers(order: string[], a: string, b: string): string[] {
+  if (a === b || !order.includes(a) || !order.includes(b)) return order;
+  return order.map((id) => (id === a ? b : id === b ? a : id));
+}
+
 export function sanitizeMatch(raw: unknown, numTeams: number): MatchState | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Partial<MatchState>;

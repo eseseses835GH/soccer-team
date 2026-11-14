@@ -22,6 +22,19 @@ export interface Player extends EnginePlayer {
   cards: CardId[];
   /** Synced groups: each organizer's 1–10 level by auth user id; the level is their average (votes.ts). */
   levelVotes?: LevelVotes;
+  /** "לא בשער": never in the keeper rotation (left out of the field when false). */
+  noGK?: true;
+}
+
+/** Ids of players marked "לא בשער". */
+export function noGKIds(players: readonly { id: string; noGK?: boolean }[]): Set<string> {
+  return new Set(players.filter((p) => p.noGK).map((p) => p.id));
+}
+
+/** Mark or unmark "לא בשער". Marking him also drops 🧤 טוב בשער (the two contradict each other). */
+export function withNoGK<T extends { canGK: boolean; noGK?: true }>(p: T, on: boolean): T {
+  const { noGK: _, ...rest } = p;
+  return (on ? { ...rest, canGK: false, noGK: true } : rest) as T;
 }
 
 export type GkMode = 'rotate' | 'fixed';
@@ -268,6 +281,7 @@ export function sanitizePlayer(p: unknown): Player | null {
     cards: m.cards,
     ...(positions.length ? { positions } : {}),
     ...(levelVotes ? { levelVotes } : {}),
+    ...(r.noGK === true ? { noGK: true as const } : {}),
   };
 }
 
