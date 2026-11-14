@@ -12,7 +12,7 @@ import {
   endOnPenalties,
   addDrawExtraTime,
   inDrawExtraTime,
-  keeperIndex,
+  keeperAt,
   loserOf,
   matchLength,
   MAX_MINUTES,
@@ -30,7 +30,7 @@ import {
   type MatchState,
 } from '../match/match';
 import { hasEveningData } from '../state/history';
-import { defaultMatchMs, engineOptions, teamLook, verb } from '../state/model';
+import { defaultMatchMs, engineOptions, noGKIds, teamLook, verb } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
 import { BorrowCard } from './BorrowCard';
@@ -181,10 +181,12 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
     const own = members(t);
     return [...own, ...borrowedInto(m, t).filter((id) => !own.includes(id))];
   };
+  const noGK = noGKIds(state.players);
+  /** In goal now and next (rotating keepers skip players marked "לא בשער"). */
   const keeper = (t: number) => {
-    const order = members(t);
-    const idx = state.settings.gkMode === 'rotate' ? keeperIndex(m.conceded[t] ?? 0, state.settings.gkSwitchGoals, order.length) : 0;
-    return byId.get(order[idx])?.name ?? '';
+    const k = keeperAt(members(t), m.conceded[t] ?? 0, state.settings.gkSwitchGoals, state.settings.gkMode === 'rotate', noGK);
+    const nameOf = (id: string | null) => (id ? (byId.get(id)?.name ?? '') : '');
+    return { now: nameOf(k.now), next: nameOf(k.next) };
   };
   const counts = new Array<number>(k).fill(0);
   r.assignment.forEach((t) => counts[t]++);
@@ -347,7 +349,8 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
               <div className="goals" aria-label={`${look.name}: ${side === 0 ? ga : gb}`}>
                 <span key={side === 0 ? ga : gb}>{side === 0 ? ga : gb}</span>
               </div>
-              <div className="keeper">🧤 {keeper(t)}</div>
+              <div className="keeper">🧤 {keeper(t).now}</div>
+              {keeper(t).next && <div className="keeper-next">הבא: {keeper(t).next}</div>}
               <button type="button" className="btn btn-goal" onClick={() => goal(t)}>
                 + גול
               </button>

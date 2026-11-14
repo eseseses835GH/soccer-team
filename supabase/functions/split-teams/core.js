@@ -725,7 +725,8 @@ function sanitizePlayer(p) {
     cards: m.cards,
     ...positions.length ? { positions } : {},
     ...levelVotes ? { levelVotes } : {},
-    ...r.occasional === true ? { occasional: true } : {}
+    ...r.occasional === true ? { occasional: true } : {},
+    ...r.noGK === true ? { noGK: true } : {}
   };
 }
 function sanitizeSettings(raw) {
@@ -804,9 +805,9 @@ function pickSubs(present, count, constraints, rng) {
 }
 function keeperOrder(members, mode, rng) {
   const ids = shuffle(rng, members.map((p) => p.id));
-  if (mode !== "fixed") return ids;
-  const gk = new Set(members.filter((p) => p.canGK).map((p) => p.id));
-  return [...ids.filter((id) => gk.has(id)), ...ids.filter((id) => !gk.has(id))];
+  const out = new Set(members.filter((p) => p.noGK).map((p) => p.id));
+  const gk = new Set(mode === "fixed" ? members.filter((p) => p.canGK && !p.noGK).map((p) => p.id) : []);
+  return [...ids.filter((id) => gk.has(id)), ...ids.filter((id) => !gk.has(id) && !out.has(id)), ...ids.filter((id) => out.has(id))];
 }
 function keeperOrders(playerIds, asg, k, byId, mode, seed) {
   const rng = createRng(seed);

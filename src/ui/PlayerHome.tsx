@@ -11,6 +11,7 @@ import { useSync } from '../sync/SyncProvider';
 import { loadJSON, saveJSON } from '../state/storage';
 import { useUi } from './App';
 import { Empty, PositionBadges, Sheet } from './components';
+import { GkOrderButton, GkOrderSheet, useGkOrderSheet } from './GkOrder';
 import { MatchScreen } from './MatchScreen';
 import { NewEvening } from './PlayerEvening';
 import type { PublicPlayer } from '../sync/players';
@@ -297,6 +298,10 @@ export function LiveView({
   const onPitch = new Set(m?.onPitch ?? []);
   const borrowed = new Set(m?.borrow?.ids ?? []);
   const next = m?.queue[0];
+  // Rotating keepers: no 🧤 in the lists before a match (it would read as "he's the keeper"); the order is in "סדר שוערים".
+  const rotate = data.rules?.gkRotate !== false;
+  const [gkOpen, setGkOpen] = useGkOrderSheet(rotate);
+  const showKeeper = !!m || !rotate;
 
   return (
     <div className="live">
@@ -357,7 +362,7 @@ export function LiveView({
                 {team.ids.map((id) => (
                   <li key={id}>
                     <span className={`member ${id === me ? 'me' : ''} ${borrowed.has(id) ? 'away' : ''}`} aria-current={id === me ? 'true' : undefined}>
-                      <span className="slot">{id === team.keeper ? '🧤' : ''}</span>
+                      <span className="slot">{showKeeper && id === team.keeper ? '🧤' : ''}</span>
                       <span className="name">{name(id)}</span>
                       {badges(id)}
                     </span>
@@ -368,6 +373,17 @@ export function LiveView({
           );
         })}
       </div>
+
+      {rotate && <GkOrderButton onClick={() => setGkOpen(true)} />}
+      {gkOpen && rotate && (
+        <GkOrderSheet
+          teams={data.teams.map((team, t) => ({ look: look(t), ids: team.ids, keeper: m ? team.keeper : null }))}
+          name={name}
+          every={data.rules?.gkEvery ?? 1}
+          noGK={new Set(roster.filter((p) => p.noGK).map((p) => p.id))}
+          onClose={() => setGkOpen(false)}
+        />
+      )}
 
       {data.subs.length > 0 && (
         <div className="bench">

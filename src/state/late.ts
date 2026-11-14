@@ -58,7 +58,7 @@ export function lateJoin(
   m: MatchState | null,
   id: string,
   choice: LateChoice,
-  ctx: Pick<LeaveCtx, 'rotate' | 'every'>,
+  ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'>,
   seed: number,
 ): LateJoin {
   if (r.playerIds.includes(id) || r.subIds.includes(id)) return { result: r, match: m, outcome: 'bench', team: null };
@@ -134,7 +134,7 @@ export function addFromBench(
   m: MatchState | null,
   subId: string,
   team: number,
-  ctx: Pick<LeaveCtx, 'rotate' | 'every'>,
+  ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'>,
 ): { result: GameResult; match: MatchState | null } {
   const result = subIn(r, m, subId, team, ctx);
   if (result === r) return { result: r, match: m };

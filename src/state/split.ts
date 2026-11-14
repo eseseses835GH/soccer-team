@@ -30,12 +30,13 @@ export function pickSubs(present: Player[], count: number, constraints: Constrai
 /**
  * Keeper order for one team: random. In "fixed" mode declared keepers go first. When keepers
  * rotate, the order is plain random: 🧤 means "good in goal", not "wants to stand in goal" (v7).
+ * Players marked "לא בשער" go last (the rotation skips them, see `rotation`). Same shuffle either way.
  */
 export function keeperOrder(members: Player[], mode: GkMode, rng: Rng): string[] {
   const ids = shuffle(rng, members.map((p) => p.id));
-  if (mode !== 'fixed') return ids;
-  const gk = new Set(members.filter((p) => p.canGK).map((p) => p.id));
-  return [...ids.filter((id) => gk.has(id)), ...ids.filter((id) => !gk.has(id))];
+  const out = new Set(members.filter((p) => p.noGK).map((p) => p.id));
+  const gk = new Set(mode === 'fixed' ? members.filter((p) => p.canGK && !p.noGK).map((p) => p.id) : []);
+  return [...ids.filter((id) => gk.has(id)), ...ids.filter((id) => !gk.has(id) && !out.has(id)), ...ids.filter((id) => out.has(id))];
 }
 
 export function keeperOrders(playerIds: string[], asg: Assignment, k: number, byId: Map<string, Player>, mode: GkMode, seed: number): string[][] {

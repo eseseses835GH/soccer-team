@@ -1882,6 +1882,64 @@ if (SB_URL) {
   await jc.close();
 }
 
+// 20b. Keeper order (rotating keepers): the team cards are plain lists; "סדר שוערים" opens by itself
+// once per phone, the 🧤 button reopens it, tapping two swaps them, and a "לא בשער" player isn't in it.
+{
+  const kc = await browser.newContext({ viewport: { width: 390, height: 844 }, gkIntro: true });
+  const kp = await kc.newPage();
+  kp.on('pageerror', (e) => errors.push(`gk order: ${e.message}`));
+  const stored = () => kp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  await kp.goto(base);
+  await kp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  const out = (await stored()).players[0];
+  await kp.goto(base + '#players');
+  await kp.locator('.roster li', { hasText: out.name }).first().locator('.swipe-content > button').click();
+  await kp.locator('.sheet').getByRole('button', { name: 'לא בשער' }).click();
+  await kp.locator('.sheet').getByRole('button', { name: 'שמירה' }).click();
+  const saved = (await stored()).players.find((x) => x.id === out.id);
+  assert(saved.noGK === true && saved.canGK === false, `gk order: "לא בשער" saved ${JSON.stringify(saved)}`);
+  await kp.goto(base + '#home');
+  if (!(await kp.getByRole('button', { name: 'עושים כוחות' }).isEnabled())) await kp.getByRole('button', { name: /^כולם$/ }).click();
+  const st = await stored();
+  if (!st.presentIds.includes(out.id)) await kp.locator('ul.attend label', { hasText: out.name }).first().click();
+  await kp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await kp.waitForSelector('.team');
+  const sheet = kp.getByRole('dialog', { name: 'סדר שוערים' });
+  await sheet.waitFor({ timeout: 3000 }).catch(() => errors.push('gk order: not shown the first time'));
+  assert((await kp.locator('.team .slot').count()) === 0 && !(await kp.locator('.team-grid').innerText()).includes('🧤'), 'gk order: team cards have no 🧤 or numbers');
+  assert((await sheet.getByText('מתחלפים אחרי כל גול').count()) === 1, 'gk order: says how they switch');
+  const r = (await stored()).result;
+  const t = r.assignment[r.playerIds.indexOf(out.id)];
+  assert(t >= 0, 'gk order: the "לא בשער" player is on a team');
+  const lists = await sheet.locator('.gk-team').evaluateAll((cs) => cs.map((c) => [...c.querySelectorAll('ol .name')].map((n) => n.textContent)));
+  assert(lists.length === r.numTeams && !lists.flat().includes(out.name), `gk order: "לא בשער" not in the order ${JSON.stringify(lists)}`);
+  assert((await sheet.locator('.gk-team').nth(t).locator('.gk-out').innerText()).includes(out.name), 'gk order: listed as "לא בשער"');
+  assert(JSON.stringify((await sheet.locator('.gk-team').first().locator('ol .slot').allInnerTexts()).slice(0, 3)) === '["1","2","3"]', 'gk order: numbered 1, 2, 3');
+  // Tap two to swap: the order is saved in result.gkOrder.
+  const [n1, n2] = lists[0];
+  await sheet.locator('.gk-team').first().getByRole('button', { name: n1 }).click();
+  await sheet.locator('.gk-team').first().getByRole('button', { name: n2 }).click();
+  const after = await sheet.locator('.gk-team').first().locator('ol .name').allInnerTexts();
+  assert(after[0] === n2 && after[1] === n1, `gk order: swapped on screen ${after}`);
+  const nameOf = new Map((await stored()).players.map((x) => [x.id, x.name]));
+  const g0 = (await stored()).result.gkOrder[0].map((id) => nameOf.get(id));
+  assert(g0[0] === n2 && g0[1] === n1, `gk order: swap saved ${g0}`);
+  await sheet.getByRole('button', { name: 'סגירה' }).click();
+  await kp.reload();
+  await kp.waitForSelector('.team');
+  await kp.waitForTimeout(300);
+  assert((await kp.getByRole('dialog', { name: 'סדר שוערים' }).count()) === 0, 'gk order: only once per phone');
+  await kp.getByRole('button', { name: '🧤 סדר שוערים' }).click();
+  assert(await kp.getByRole('dialog', { name: 'סדר שוערים' }).isVisible(), 'gk order: the 🧤 button reopens it');
+  // The match screen: who is in goal now and who is next; never the "לא בשער" player.
+  await kp.getByRole('dialog', { name: 'סדר שוערים' }).getByRole('button', { name: 'סגירה' }).click();
+  await kp.getByRole('button', { name: /התחלת משחק/ }).click();
+  const keepers = await kp.locator('.side .keeper').allInnerTexts();
+  assert(keepers[0] === `🧤 ${n2}` && !keepers.some((k) => k.includes(out.name)), `gk order: keeper on the match screen ${keepers}`);
+  assert((await kp.locator('.side .keeper-next').first().innerText()) === `הבא: ${n1}`, 'gk order: next keeper shown');
+  await kc.close();
+}
+
 // My page (v17): the avatar opens "הדף שלי"; groups with role and who I am; an organizer claims
 // himself; numbers from both groups' history; a recent evening opens in its group; logging out.
 if (SB_URL) {

@@ -3426,4 +3426,49 @@ thead th {
   align-items: center;
   color: var(--ink-2);
   font-weight: 600;
+/* ---------- keeper order ("סדר שוערים") ---------- */
+.keeper-next {
+  margin-block-start: -2px;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gk-order-btn {
+  margin-block: 6px 2px;
+}
+.gk-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin-block: 8px;
+}
+.gk-team h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1rem;
+  font-weight: 800;
+}
+.gk-team .dot {
+  background: var(--team);
+}
+.gk-team ol {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.gk-team .member {
+  min-block-size: 40px;
+}
+.gk-out {
+  margin-block-start: 2px;
+}
+.nogk-row {
+  margin-block-start: 8px;
+}
+.gk-order-row {
+  text-align: center;
 }
