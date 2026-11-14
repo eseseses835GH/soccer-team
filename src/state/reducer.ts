@@ -3,7 +3,7 @@ import { addTeam, type MatchState } from '../match/match';
 import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, teamBibs, type AppState, type Player, type Settings } from './model';
 import { addEvening, buildEvening, mergeHistory, stampSides, type EveningRecord } from './history';
 import { addFromBench, lateJoin, type LateChoice } from './late';
-import { leaveEarly, subIn, type LeaveCtx } from './leave';
+import { leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
 export type Action =
@@ -39,6 +39,8 @@ export type Action =
   | { type: 'lateJoin'; player?: Player; id: string; choice: LateChoice; seed: number; now: number }
   /** Someone left early (leave.ts): out of the teams and today's attendance, nobody reshuffled. */
   | { type: 'leave'; id: string; now: number; subId?: string }
+  /** Several left at once (leave.ts leaveMany): the same rules for each, in the order picked. */
+  | { type: 'leaveMany'; ids: string[]; now: number }
   /** A sub joins a team that is short (after someone left). */
   | { type: 'subIn'; subId: string; team: number }
   /** A sub joins a team on request, nobody goes out: the team grows by one (late.ts). */
@@ -266,6 +268,13 @@ function baseReducer(state: AppState, action: Action): AppState {
       if (!l || l.outcome === 'blocked') return state;
       // Attendance follows the teams, so the result isn't "changed since the split".
       return { ...state, presentIds: state.presentIds.filter((x) => x !== action.id), dayAt: action.now, result: l.result, match: l.match };
+    }
+    case 'leaveMany': {
+      if (!state.result) return state;
+      const l = leaveMany(state.result, state.match, action.ids, leaveCtx(state));
+      if (!l.gone.length) return state;
+      const gone = new Set(l.gone);
+      return { ...state, presentIds: state.presentIds.filter((x) => !gone.has(x)), dayAt: action.now, result: l.result, match: l.match };
     }
     case 'subIn': {
       if (!state.result) return state;

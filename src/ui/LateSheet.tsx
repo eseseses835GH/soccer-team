@@ -8,8 +8,12 @@ import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
 import { arrivalChoices, benchTarget } from '../sync/runnerLate';
 import { useVoterId } from '../sync/SyncProvider';
+import { usePlayerGroup } from '../sync/PlayerGroupProvider';
+import { cleanName, sameName } from '../sync/playerGroup';
+import { newGuest, pickOrder } from '../state/guests';
 import { useUi } from './App';
-import { CardBadges, LevelPicker, Sheet } from './components';
+import { CardBadges, LevelPicker, Sheet, Toggle } from './components';
+import { NAME_TAKEN } from './GuestSheet';
 import { usePlayerGate } from './useGate';
 
 type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean; sub?: boolean } | { kind: 'suggest'; s: SwapSuggestion; names: string[] };
@@ -17,8 +21,8 @@ type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean;
 /**
  * "הגיע מאוחר" / "מישהו הגיע?": pick who arrived → he goes in now (the suggested team, or
  * another with a tap) or waits on the side → if he completed the teams, an optional swap or two.
- * `mode: 'runner'` (a player running the match, no ratings on his phone): roster or bench only, no
- * new players, the smallest team and no swap suggestions (DECISIONS → v15).
+ * `mode: 'runner'` (a player running the match, no ratings on his phone): roster, bench or a new
+ * guest at level 5 (v23), the smallest team and no swap suggestions (DECISIONS → v15).
  */
 export function LateSheet({ onClose, arrived, mode }: { onClose: () => void; arrived?: Player; mode?: 'runner' }) {
   const { state, dispatch } = useStore();
@@ -31,7 +35,7 @@ export function LateSheet({ onClose, arrived, mode }: { onClose: () => void; arr
 
   if (step.kind === 'pick')
     return mode === 'runner' ? (
-      <RunnerPick onClose={onClose} onPick={(player, sub) => setStep({ kind: 'choose', player, isNew: false, sub })} />
+      <RunnerPick onClose={onClose} onPick={(player, sub, isNew) => setStep({ kind: 'choose', player, isNew: !!isNew, sub })} />
     ) : (
       <PickStep onClose={onClose} onPick={(player, isNew) => setStep({ kind: 'choose', player, isNew })} />
     );
@@ -140,10 +144,12 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
   const { state } = useStore();
   const [name, setName] = useState('');
   const [level, setLevel] = useState(5);
+  const [guest, setGuest] = useState(false);
   const voter = useVoterId();
   const gate = usePlayerGate();
   const inGame = new Set([...(state.result?.playerIds ?? []), ...(state.result?.subIds ?? [])]);
-  const others = state.players.filter((p) => !inGame.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  // Regulars A–Z, then guests by how often they played (v23).
+  const others = pickOrder(state.players.filter((p) => !inGame.has(p.id)), state.history);
   const taken = state.players.some((p) => p.name.trim() === name.trim());
   return (
     <Sheet title="מי הגיע?" onClose={onClose}>
@@ -164,7 +170,9 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
         onSubmit={(e) => {
           e.preventDefault();
           if (!name.trim() || taken) return;
-          const p: Player = { id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [], ...(voter ? { levelVotes: { [voter]: level } } : {}) };
+          const p: Player = guest
+            ? newGuest(newId(), name, level, voter)
+            : { id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [], ...(voter ? { levelVotes: { [voter]: level } } : {}) };
           gate([p], () => onPick(p, true));
         }}
       >
@@ -175,6 +183,7 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
         {taken && <p className="field-error">כבר יש שחקן בשם הזה, בחרו אותו מהרשימה</p>}
         <span className="label">רמה</span>
         <LevelPicker value={level} onChange={setLevel} />
+        <Toggle label="אורח" hint="לא קבוע" checked={guest} onChange={setGuest} />
         <button type="submit" className="btn btn-primary btn-block" disabled={!name.trim() || taken}>
           המשך
         </button>
@@ -183,11 +192,26 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
   );
 }
 
-/** A player runner's pick: the roster (names only) or the bench; he can't add players. */
-function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, sub: boolean) => void }) {
+/** A player runner's pick: the roster (names only), the bench, or a new guest (level 5, added on the server). */
+function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, sub: boolean, isNew?: boolean) => void }) {
   const { state } = useStore();
+  const pg = usePlayerGroup();
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!state.result) return null;
-  const { roster, bench } = arrivalChoices(state.players, state.result);
+  const n = cleanName(name);
+  const taken = !!sameName(state.players, n);
+  const addGuest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!n || taken || busy) return;
+    setBusy(true);
+    const res = await pg.addGuest(n);
+    setBusy(false);
+    if ('id' in res) return onPick(newGuest(res.id, n), false, true);
+    setError(GUEST_ERROR[res.error] ?? 'משהו השתבש, נסו שוב');
+  };
+  const { roster, bench } = arrivalChoices(state.players, state.result, state.history);
   const list = (ps: Player[], sub: boolean) => (
     <ul className="pick-list">
       {ps.map((p) => (
@@ -208,7 +232,36 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
           {list(bench, true)}
         </>
       )}
-      <p className="hint small center">שחקן חדש? המארגן מוסיף אותו</p>
+      <form className="late-new" onSubmit={addGuest}>
+        <label className="label" htmlFor="late-guest">
+          אורח
+        </label>
+        <input
+          id="late-guest"
+          className="input"
+          placeholder="שם"
+          value={name}
+          maxLength={24}
+          autoComplete="off"
+          onChange={(e) => {
+            setName(e.target.value);
+            setError(null);
+          }}
+        />
+        {(taken || error) && <p className="field-error">{taken ? NAME_TAKEN : error}</p>}
+        <button type="submit" className="btn btn-primary btn-block" disabled={!n || taken || busy}>
+          המשך
+        </button>
+      </form>
     </Sheet>
   );
 }
+
+/** Why the server didn't add a guest (v23). */
+export const GUEST_ERROR: Partial<Record<string, string>> = {
+  name: NAME_TAKEN,
+  offline: 'אין חיבור לאינטרנט',
+  denied: 'רק מי שמנהל את הערב',
+  conflict: 'רק מי שמנהל את הערב',
+  limit: 'הקבוצה מלאה',
+};

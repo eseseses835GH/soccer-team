@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { scoreFromCost } from '../engine';
 import { teamMembers } from '../state/history';
-import { inProgress, leaveCase, leaveEarly, suggestAfterLeave, type Leave, type LeaveCase, type LeaveSuggestion } from '../state/leave';
+import { asLeave, inProgress, leaveCase, leaveEarly, leaveMany, suggestAfterLeave, type Leave, type LeaveCase, type LeaveSuggestion } from '../state/leave';
 import { teamLook } from '../state/model';
 import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
@@ -19,8 +19,10 @@ type Step =
   | { kind: 'pickSub'; team: number; subs: string[] };
 
 /**
- * "מישהו עזב?": pick who left → confirm (with what will happen) → an optional small fix
- * (a sub comes in, or a swap or two). The mirror of a late arrival: nobody is reshuffled.
+ * "מישהו עזב?": tap who left (one or several) → one → confirm (with what will happen) → an optional small fix
+ * (a sub comes in, or a swap or two). Several → they all leave on "N עזבו", then one fix at the end
+ * (leaveMany). The mirror of a late arrival: nobody is reshuffled; whoever left can come back
+ * through "מישהו הגיע?".
  * `mode: 'runner'` (a player running the match, no ratings on his phone): no suggestions, he picks
  * the sub himself or the team plays short (DECISIONS → v15).
  */
@@ -28,6 +30,7 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
   const { state, dispatch } = useStore();
   const { notify } = useUi();
   const [step, setStep] = useState<Step>({ kind: 'pick' });
+  const [picked, setPicked] = useState<string[]>([]);
   const r = state.result;
   if (!r) return null;
   const m = state.match;
@@ -37,10 +40,40 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
   const live = inProgress(m);
   const count = (res: typeof r, t: number) => res.assignment.filter((x) => x === t).length;
 
+  /** Several left: all out at once, then one fix for the shortest team they left. */
+  const leaveAll = (ids: string[]) => {
+    const l = leaveMany(r, m, ids, leaveCtx(state));
+    if (l.gone.length) dispatch({ type: 'leaveMany', ids: l.gone, now: Date.now() });
+    const stayed = l.blocked.length ? ` · ${names(l.blocked.map(nameOf))} נשאר (צריך חלוקה מחדש)` : '';
+    const one = asLeave(l);
+    if (one && !l.blocked.length) {
+      if (mode === 'runner') {
+        const subs = subsAfterLeave(one);
+        if (subs.length) return setStep({ kind: 'pickSub', team: one.team!, subs });
+      } else {
+        const after = { ...state, result: l.result, match: l.match };
+        const s = suggestAfterLeave(one, leaveCtx(after));
+        if (s) return setStep({ kind: 'suggest', s, team: one.team!, live: inProgress(m) && !!m?.onPitch.includes(one.team!) });
+      }
+    }
+    notify(l.gone.length ? `${names(l.gone.map(nameOf))} עזבו${stayed}` : `צריך חלוקה מחדש${stayed}`);
+    onClose();
+  };
+
   if (step.kind === 'pick') {
+    const toggle = (id: string) => setPicked((ps) => (ps.includes(id) ? ps.filter((x) => x !== id) : [...ps, id]));
+    const chip = (id: string) => (
+      <button key={id} type="button" className={`member chip ${picked.includes(id) ? 'sel' : ''}`} aria-pressed={picked.includes(id)} onClick={() => toggle(id)}>
+        {nameOf(id)}
+      </button>
+    );
+    const go = () => {
+      if (picked.length === 1) return setStep({ kind: 'confirm', id: picked[0], plan: leaveEarly(r, m, picked[0], leaveCtx(state))! });
+      leaveAll(picked);
+    };
     return (
       <Sheet title="מי עזב?" onClose={onClose}>
-        <p className="lead">הוא יוצא מהכוחות של היום, בלי לערבב את כולם. המשחקים ששוחקו נשארים כמו שהם.</p>
+        <p className="lead">יוצאים מהכוחות של היום, בלי לערבב את כולם. המשחקים ששוחקו נשארים כמו שהם.</p>
         <div className="leave-teams">
           {Array.from({ length: r.numTeams }, (_, t) => (
             <div key={t} className="leave-team" style={{ '--team': look(t).color } as React.CSSProperties}>
@@ -48,28 +81,19 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
                 <span className="dot" aria-hidden="true" /> {look(t).name}
                 {m?.onPitch.includes(t) && <span className="muted"> · על המגרש</span>}
               </span>
-              <div className="leave-chips">
-                {teamMembers(r, t).map((id) => (
-                  <button key={id} type="button" className="member chip" onClick={() => setStep({ kind: 'confirm', id, plan: leaveEarly(r, m, id, leaveCtx(state))! })}>
-                    {nameOf(id)}
-                  </button>
-                ))}
-              </div>
+              <div className="leave-chips">{teamMembers(r, t).map(chip)}</div>
             </div>
           ))}
           {r.subIds.length > 0 && (
             <div className="leave-team">
               <span className="leave-team-name">מחליפים</span>
-              <div className="leave-chips">
-                {r.subIds.map((id) => (
-                  <button key={id} type="button" className="member chip" onClick={() => setStep({ kind: 'confirm', id, plan: leaveEarly(r, m, id, leaveCtx(state))! })}>
-                    {nameOf(id)}
-                  </button>
-                ))}
-              </div>
+              <div className="leave-chips">{r.subIds.map(chip)}</div>
             </div>
           )}
         </div>
+        <button type="button" className="btn btn-primary btn-block" disabled={!picked.length} onClick={go}>
+          {picked.length > 1 ? `${picked.length} עזבו` : 'עזב'}
+        </button>
       </Sheet>
     );
   }

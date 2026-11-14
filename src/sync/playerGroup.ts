@@ -40,7 +40,7 @@ export function loadPublic(kv: KV, id: string): PublicGroup | null {
 export function publicToState(prev: AppState, pub: PublicGroup): AppState {
   return {
     ...prev,
-    players: pub.players.map((p) => sanitizePlayer({ id: p.id, name: p.name, positions: p.positions, canGK: p.canGK })).filter((p): p is Player => !!p),
+    players: pub.players.map((p) => sanitizePlayer({ id: p.id, name: p.name, positions: p.positions, canGK: p.canGK, occasional: p.occasional })).filter((p): p is Player => !!p),
     presentIds: [],
     lastPresentIds: [],
     result: null,
@@ -67,7 +67,7 @@ export function claimChoices(pub: PublicGroup): { id: string; name: string; take
     .sort((a, b) => Number(a.taken) - Number(b.taken) || a.name.localeCompare(b.name, 'he'));
 }
 
-/** Whom I rate, in a stable order (A–Z), never myself. */
+/** Whom I rate, in a stable order (A–Z), never myself or a guest. */
 export function surveyList(pub: PublicGroup): { id: string; name: string }[] {
   return [...rateable(pub.players, pub.me.playerId)].sort((a, b) => a.name.localeCompare(b.name, 'he'));
 }
@@ -118,4 +118,9 @@ export function withJoined(pub: PublicGroup, id: string, name: string): PublicGr
     claimed: pub.claimed.includes(id) ? pub.claimed : [...pub.claimed, id],
     me: { ...pub.me, playerId: id },
   };
+}
+
+/** The public copy after I added a guest (v23), until the next fetch brings the real one. */
+export function withGuest(pub: PublicGroup, id: string, name: string): PublicGroup {
+  return pub.players.some((p) => p.id === id) ? pub : { ...pub, players: [...pub.players, { id, name, occasional: true }] };
 }

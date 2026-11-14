@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../engine';
 import { addGoal, endMatch, keeperIndex, setBorrow, startClock, startSession, type MatchState } from '../match/match';
 import { teamMembers } from './history';
-import { keepKeeper, leaveCase, leaveEarly, lockedAfterLeave, suggestAfterLeave, type LeaveCtx } from './leave';
+import { asLeave, keepKeeper, leaveCase, leaveEarly, leaveMany, lockedAfterLeave, suggestAfterLeave, type LeaveCtx } from './leave';
 import { INITIAL_STATE, defaultAttrs, type AppState, type GameResult, type Player } from './model';
 import { reducer } from './reducer';
+import { arrivalChoices } from '../sync/runnerLate';
 import { isResultStale } from './store';
 
 const p = (id: string, level = 5): Player => ({ id, name: id, attrs: defaultAttrs(level), canGK: false, cards: [] });
@@ -272,5 +273,64 @@ describe('left early: reducer', () => {
     const r = result([['a1', 'a2'], ['b1', 'b2']], 2);
     const s0: AppState = { ...INITIAL_STATE, players: roster, teamSize: 2, presentIds: r.playerIds, result: r };
     expect(reducer(s0, { type: 'leave', id: 'a1', now: 1 })).toBe(s0);
+  });
+});
+
+describe('several left at once (leaveMany)', () => {
+  it('takes them all out with the same rules, one fix at the end for the shortest team', () => {
+    const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2']], 3, ['s1']);
+    const l = leaveMany(r, null, ['a2', 'b1', 'b2'], ctx);
+    expect(l.gone).toEqual(['a2', 'b1', 'b2']);
+    expect(l.blocked).toEqual([]);
+    // b3 alone would be below 2: a sub came in on his own.
+    expect(l.subIns).toEqual(['s1']);
+    expect(members(l.result, 1)).toEqual(['b3', 's1']);
+    expect(members(l.result, 0)).toEqual(['a1', 'a3']);
+    // Shortest team someone left: both have 2 → the first.
+    expect(l.short).toBe(0);
+    expect(asLeave(l)).toMatchObject({ outcome: 'short', team: 0 });
+    // Same as one at a time.
+    let one = r;
+    for (const id of ['a2', 'b1', 'b2']) one = leaveEarly(one, null, id, ctx)!.result;
+    expect(l.result).toEqual(one);
+  });
+
+  it('skips who would leave a team below 2 with nobody to fill it', () => {
+    const r = result([['a1', 'a2'], ['b1', 'b2', 'b3']], 3);
+    const l = leaveMany(r, null, ['b1', 'a1'], ctx);
+    expect(l.gone).toEqual(['b1']);
+    expect(l.blocked).toEqual(['a1']);
+    expect(members(l.result, 0)).toEqual(['a1', 'a2']);
+  });
+
+  it('a team that went to the bench gets no fix; subs only → nothing to offer', () => {
+    const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3']], 3, ['s1', 's2']);
+    const l = leaveMany(r, null, ['s1', 's2'], ctx);
+    expect(l.result.subIds).toEqual([]);
+    expect(asLeave(l)).toBeNull();
+  });
+
+  it('the fix is the same kind as for one leaver (best sub for the short team)', () => {
+    const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3']], 3, ['s1', 's3']);
+    const l = leaveMany(r, null, ['a1', 'a2'], ctx);
+    expect(l.short).toBe(0);
+    const s = suggestAfterLeave(asLeave(l)!, ctx);
+    expect(s?.kind).toBe('sub');
+  });
+
+  it('reducer: off the teams and attendance in one step; they can come back through "מישהו הגיע?"', () => {
+    const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3']], 3, ['s1']);
+    const s0: AppState = { ...INITIAL_STATE, players: roster, teamSize: 3, presentIds: [...r.playerIds, ...r.subIds], result: r };
+    const s1 = reducer(s0, { type: 'leaveMany', ids: ['a2', 'b3'], now: 5 });
+    expect(s1.presentIds).not.toContain('a2');
+    expect(s1.presentIds).not.toContain('b3');
+    expect(s1.result!.playerIds).not.toContain('a2');
+    expect(isResultStale(s1)).toBe(false);
+    expect(arrivalChoices(s1.players, s1.result!).roster.map((x) => x.id)).toEqual(expect.arrayContaining(['a2', 'b3']));
+    const s2 = reducer(s1, { type: 'lateJoin', id: 'a2', choice: { kind: 'now', team: 0 }, seed: 1, now: 6 });
+    expect(members(s2.result!, 0)).toContain('a2');
+    expect(s2.presentIds).toContain('a2');
+    // Nothing leaves → the same state.
+    expect(reducer(s0, { type: 'leaveMany', ids: ['zz'], now: 5 })).toBe(s0);
   });
 });

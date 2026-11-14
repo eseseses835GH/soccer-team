@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { MIN_TEAM_SIZE, planFormat, type FormatPlan } from '../engine';
-import type { Player } from '../state/model';
+import { newId, type Player } from '../state/model';
+import { checkInList, newGuest, withoutGuests } from '../state/guests';
 import { presentPlayers, useStore } from '../state/store';
 import { useUi } from './App';
 import { shouldOfferInstall } from '../state/install';
 import { CardBadges, Empty, Sheet } from './components';
 import { InstallCard, useInstall } from './InstallPrompt';
 import { LateSheet } from './LateSheet';
+import { GuestSheet } from './GuestSheet';
+import { usePlayerGate } from './useGate';
+import { useVoterId } from '../sync/SyncProvider';
 import { Welcome, shouldWelcome } from './Welcome';
 import { splitTeams } from './split';
 import { useLiveControl } from '../sync/OrganizerSync';
@@ -40,6 +44,9 @@ export function HomeScreen() {
   const [filter, setFilter] = useState('');
   const [confirmResplit, setConfirmResplit] = useState(false);
   const [arrived, setArrived] = useState<Player | null>(null);
+  const [guest, setGuest] = useState(false);
+  const gate = usePlayerGate();
+  const voter = useVoterId();
   // Teams are already made: someone ticked now arrived late. Don't reshuffle; ask "in now or wait".
   const inTeams = new Set(state.result ? [...state.result.playerIds, ...state.result.subIds] : []);
   const tick = (p: Player, on: boolean) => {
@@ -54,11 +61,25 @@ export function HomeScreen() {
   const now = () => Date.now();
   const sizes = SIZES.includes(state.teamSize) ? SIZES : [...SIZES, state.teamSize].sort((a, b) => a - b);
 
-  const sorted = [...state.players]
+  // Guests (v23) only while they're here tonight; the rest of them wait under "מזדמנים".
+  const listed = checkInList(state.players, state.presentIds);
+  const sorted = [...listed]
     .filter((p) => !filter.trim() || p.name.includes(filter.trim()))
     .sort((a, b) => a.name.localeCompare(b.name, 'he'));
 
-  const lastAvailable = state.lastPresentIds.length > 0 && state.presentIds.length === 0;
+  const lastIds = withoutGuests(state.lastPresentIds, state.players);
+  const lastAvailable = lastIds.length > 0 && state.presentIds.length === 0;
+
+  const addGuest = (name: string, level: number) => {
+    const p = newGuest(newId(), name, level, voter);
+    gate([p], () => {
+      // Teams already made: he arrived late (in now or wait), like a tick on the list.
+      dispatch({ type: 'addPlayer', player: p, present: !state.result });
+      if (state.result) setArrived(p);
+      else notify(`${p.name} נוסף כאורח`);
+    });
+    return null;
+  };
 
   // An evening is on: the main action is getting back to it, and a new split asks first
   // (it ends the evening; what was played is kept in the history).
@@ -124,7 +145,7 @@ export function HomeScreen() {
       <div className="hero">
         <h1 id="home-h">מי הגיע היום?</h1>
         <p className="hero-count" aria-live="polite">
-          <strong>{present.length}</strong> מתוך {state.players.length}
+          <strong>{present.length}</strong> מתוך {listed.length}
         </p>
       </div>
 
@@ -148,11 +169,11 @@ export function HomeScreen() {
 
       <div className="quick-row">
         {lastAvailable && (
-          <button type="button" className="text-btn" onClick={() => dispatch({ type: 'setPresent', ids: state.lastPresentIds, now: now() })}>
-            כמו בפעם הקודמת ({state.lastPresentIds.length})
+          <button type="button" className="text-btn" onClick={() => dispatch({ type: 'setPresent', ids: lastIds, now: now() })}>
+            כמו בפעם הקודמת ({lastIds.length})
           </button>
         )}
-        <button type="button" className="text-btn" onClick={() => dispatch({ type: 'setPresent', ids: state.players.map((p) => p.id), now: now() })}>
+        <button type="button" className="text-btn" onClick={() => dispatch({ type: 'setPresent', ids: listed.map((p) => p.id), now: now() })}>
           כולם
         </button>
         {state.presentIds.length > 0 && (
@@ -184,6 +205,10 @@ export function HomeScreen() {
         מישהו חסר?{' '}
         <button type="button" className="text-btn inline" onClick={() => go('players')}>
           הוספת שחקן
+        </button>
+        {' · '}
+        <button type="button" className="text-btn inline" onClick={() => setGuest(true)}>
+          אורח
         </button>
       </p>
 
@@ -219,6 +244,7 @@ export function HomeScreen() {
         )}
       </div>
 
+      {guest && <GuestSheet players={state.players} withLevel onAdd={addGuest} onClose={() => setGuest(false)} />}
       {arrived && <LateSheet arrived={arrived} onClose={() => setArrived(null)} />}
       {confirmResplit && (
         <Sheet title="לחלק מחדש?" onClose={() => setConfirmResplit(false)}>

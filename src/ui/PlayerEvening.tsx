@@ -14,6 +14,9 @@ import { useUi } from './App';
 import { planSentence, SIZES } from './HomeScreen';
 import { LiveView } from './PlayerHome';
 import { SyncError } from '../sync/supabase';
+import { checkInList } from '../state/guests';
+import { GuestSheet } from './GuestSheet';
+import { GUEST_ERROR } from './LateSheet';
 
 const pickKey = (gid: string) => `kochot:pick:${gid}`;
 
@@ -29,14 +32,23 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
   const [filter, setFilter] = useState('');
   const [busy, setBusy] = useState(false);
   const [teams, setTeams] = useState<{ reply: SplitReply; shown: number[][] } | null>(null);
+  const [guest, setGuest] = useState(false);
   const keep = (ids: string[], s: number) => saveJSON(pickKey(gid), { ids, size: s });
 
   const set = new Set(present);
   const plan = planFormat(present.length, size);
-  const sorted = [...state.players].filter((p) => !filter.trim() || p.name.includes(filter.trim())).sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  // Guests (v23) only when here tonight.
+  const listed = checkInList(state.players, present);
+  const sorted = [...listed].filter((p) => !filter.trim() || p.name.includes(filter.trim())).sort((a, b) => a.name.localeCompare(b.name, 'he'));
   const pick = (ids: string[]) => {
     setPresent(ids);
     keep(ids, size);
+  };
+  const addGuest = async (name: string) => {
+    const res = await pg.addGuest(name);
+    if ('error' in res) return GUEST_ERROR[res.error] ?? 'משהו השתבש, נסו שוב';
+    pick([...present, res.id]);
+    return null;
   };
 
   const split = async (again?: { reply: SplitReply; shown: number[][] }) => {
@@ -93,7 +105,7 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
       <div className="hero">
         <h1 id="new-h">מי הגיע היום?</h1>
         <p className="hero-count" aria-live="polite">
-          <strong>{present.length}</strong> מתוך {state.players.length}
+          <strong>{present.length}</strong> מתוך {listed.length}
         </p>
       </div>
 
@@ -119,7 +131,7 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
       </div>
 
       <div className="quick-row">
-        <button type="button" className="text-btn" onClick={() => pick(state.players.map((p) => p.id))}>
+        <button type="button" className="text-btn" onClick={() => pick(listed.map((p) => p.id))}>
           כולם
         </button>
         {present.length > 0 && (
@@ -146,6 +158,12 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
           );
         })}
       </ul>
+      <p className="list-foot">
+        <button type="button" className="text-btn inline" onClick={() => setGuest(true)}>
+          הוספת אורח
+        </button>
+      </p>
+      {guest && <GuestSheet players={state.players} onAdd={addGuest} onClose={() => setGuest(false)} />}
 
       <div className="cta-dock">
         <p className={`plan ${plan ? '' : 'warn'}`} aria-live="polite">

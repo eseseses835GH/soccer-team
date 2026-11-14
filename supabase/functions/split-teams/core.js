@@ -724,7 +724,8 @@ function sanitizePlayer(p) {
     canGK: !!r.canGK,
     cards: m.cards,
     ...positions.length ? { positions } : {},
-    ...levelVotes ? { levelVotes } : {}
+    ...levelVotes ? { levelVotes } : {},
+    ...r.occasional === true ? { occasional: true } : {}
   };
 }
 function sanitizeSettings(raw) {

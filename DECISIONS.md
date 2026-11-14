@@ -871,3 +871,15 @@ Only "שלחנו מייל. פותחים אותו ולוחצים על הקישו�
 ## v22: the invite login screen names the group
 - `public.invite_group_name(token)`: anyone with a live invite token (anon too) reads that group's name, nothing else. Security definer in `public` on purpose: anon has no usage on schema `private`. Tokens are 32 random chars, so only whoever got the link sees the name.
 - The player share text always names the group; copying (no native share) copies the text with the link.
+
+## v23: guests
+- **A guest ("אורח")** is a roster player with `occasional: true`: someone from the pitch who plays tonight. He plays like anyone (levels, teams, history by id and name); the flag only decides where he's listed and that nobody rates him.
+- **Adding:** check-in ("אורח" next to "הוספת שחקן": name + level, default 5); "מישהו הגיע?" ("מישהו חדש" has an "אורח" switch). A player running the evening adds one too (his "מי הגיע היום?" → "הוספת אורח", and "מישהו הגיע?" in runner mode): name only, level 5, through `add_guest` on the server; organizers change the level later.
+- **Lists:** check-in shows a guest only while he's here tonight; "כמו בפעם הקודמת" and "כולם" skip the others. The players screen keeps guests in a folded "מזדמנים (n)", most-played first (evenings in the history, ties by the latest one), then A–Z; the same order in the "מישהו הגיע?" pickers (after the regulars). One tap "הגיע" marks him here (teams already made → in now or wait); his sheet has "להפוך לקבוע". Deleting as for anyone.
+- **Rating:** guests are out of the players' survey and the "לדרג" card. `ratingProgress` counts member logins, never roster players, so it needed nothing.
+- **Server (`20261114120000_guests.sql`):** `public_doc` whitelists `occasional` (true only). `add_guest(group, name) → id`: security definer, roster advisory lock, the same name rules as `join_as_new_player` (23505 `name_taken`, 54000 `players_limit`), appends `{id, name, attrs 5, canGK false, cards [], occasional true}` and claims nobody. Allowed for organizers, the runner of the open evening, and any member while no evening is open (he may open one, v20); never while someone else runs tonight (42501). Organizers' phones get him through the normal merge.
+- **Not done:** a guest added on a player runner's phone reaches an organizer who takes the evening back through the doc merge; if the takeover lands before that merge, he comes in as a regular (live data carries names only). Rare; he can be deleted or kept as a regular.
+
+## Several leave at once
+- "עזב באמצע" / "מישהו עזב?" picks one or several (tap to toggle). One → the confirm step as before. Several → "N עזבו" takes them all out at once with the same rules in the order picked (`leaveMany`), then one fix at the end for the shortest team they left (a sub or a swap; in runner mode the sub pick). Anyone who'd drop a team below 2 with nobody to fill it stays, and the toast says so.
+- Whoever left is off tonight's attendance, so "מישהו הגיע?" offers him again.

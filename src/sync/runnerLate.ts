@@ -5,13 +5,15 @@
 import { nowTarget } from '../state/late';
 import type { Leave } from '../state/leave';
 import type { GameResult, Player } from '../state/model';
+import type { EveningRecord } from '../state/history';
+import { pickOrder } from '../state/guests';
 
-/** Who can arrive: roster players not here tonight (by name), and the bench (subs, in bench order). */
-export function arrivalChoices(players: Player[], r: GameResult): { roster: Player[]; bench: Player[] } {
+/** Who can arrive: roster players not here tonight (regulars by name, then guests by how often they played), and the bench (subs, in bench order). */
+export function arrivalChoices(players: Player[], r: GameResult, history: Pick<EveningRecord, 'players' | 'endedAt'>[] = []): { roster: Player[]; bench: Player[] } {
   const byId = new Map(players.map((p) => [p.id, p]));
   const tonight = new Set([...r.playerIds, ...r.subIds]);
   return {
-    roster: players.filter((p) => !tonight.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'he')),
+    roster: pickOrder(players.filter((p) => !tonight.has(p.id)), history),
     bench: r.subIds.map((id) => byId.get(id)).filter((p): p is Player => !!p),
   };
 }

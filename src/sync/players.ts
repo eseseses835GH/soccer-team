@@ -31,6 +31,8 @@ export interface PublicPlayer {
   name: string;
   positions?: Position[];
   canGK?: boolean;
+  /** v23: a guest (no rating, folded away). */
+  occasional?: true;
 }
 
 /** What a player may see of a group (group_public_get). Never any rating. */
@@ -76,7 +78,7 @@ export function parsePublic(raw: unknown): PublicGroup | null {
     .filter((p) => typeof p.id === 'string' && typeof p.name === 'string' && (p.name as string).trim())
     .map((p) => {
       const positions = sanitizePositions(p.positions);
-      return { id: p.id as string, name: p.name as string, ...(positions.length ? { positions } : {}), ...(p.canGK === true ? { canGK: true } : {}) };
+      return { id: p.id as string, name: p.name as string, ...(positions.length ? { positions } : {}), ...(p.canGK === true ? { canGK: true } : {}), ...(p.occasional === true ? { occasional: true as const } : {}) };
     });
   return {
     groupId: r.groupId,
@@ -96,8 +98,8 @@ export function parseMyVotes(raw: unknown): Record<string, number> {
   return out;
 }
 
-/** Roster players a rater may rate: everyone but himself. */
-export const rateable = (players: { id: string; name: string }[], me: string | null) => players.filter((p) => p.id !== me);
+/** Roster players a rater may rate: everyone but himself and the guests (v23). */
+export const rateable = <T extends { id: string; occasional?: boolean }>(players: T[], me: string | null) => players.filter((p) => p.id !== me && p.occasional !== true);
 
 export function playersApi(sb: SupabaseClient) {
   const rpc = async (fn: string, args: Record<string, unknown>) => {
@@ -137,6 +139,20 @@ export function playersApi(sb: SupabaseClient) {
     async joinAsNew(groupId: string, name: string): Promise<string> {
       try {
         const id = await rpc('join_as_new_player', { p_group_id: groupId, p_name: name });
+        if (typeof id !== 'string' || !id) throw new SyncError('no id', 'other');
+        return id;
+      } catch (e) {
+        if (e instanceof SyncError && e.code === 'taken' && /name_taken/.test(e.message)) throw new SyncError(e.message, 'name');
+        throw e;
+      }
+    },
+    /**
+     * v23: whoever runs tonight (an organizer, or the player running the open evening / about to open
+     * one) adds a guest: level 5, not claimed. Returns the new id. Errors as joinAsNew ('name', 'denied'…).
+     */
+    async addGuest(groupId: string, name: string): Promise<string> {
+      try {
+        const id = await rpc('add_guest', { p_group_id: groupId, p_name: name });
         if (typeof id !== 'string' || !id) throw new SyncError('no id', 'other');
         return id;
       } catch (e) {

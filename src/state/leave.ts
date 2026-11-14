@@ -252,3 +252,52 @@ export function suggestAfterLeave(l: Leave, ctx: LeaveCtx): LeaveSuggestion | nu
   const swaps = suggestSwaps(ps, r.assignment, r.numTeams, ctx.options, ctx.constraints, sizes, { locked: [...locked] });
   return swaps ? { kind: 'swaps', swaps } : null;
 }
+
+/** Several left at once ("N עזבו"): what happened to each, and where things stand after all of them. */
+export interface LeaveMany {
+  result: GameResult;
+  match: MatchState | null;
+  /** Who is out (in the order picked). */
+  gone: string[];
+  /** Who couldn't leave: his team would have dropped below 2 with nobody to fill it (re-split instead). */
+  blocked: string[];
+  /** Subs who came in on their own because a team dropped below 2. */
+  subIns: string[];
+  /** The team to offer one small fix for (the shortest team someone left), or null. */
+  short: number | null;
+}
+
+/**
+ * Several players leave in one go: the same rules as one at a time (leaveEarly, in the order
+ * picked), then one follow-up at the end for the shortest team they left (suggestAfterLeave on
+ * `asLeave`). Nobody is reshuffled.
+ */
+export function leaveMany(r: GameResult, m: MatchState | null, ids: string[], ctx: LeaveCtx): LeaveMany {
+  let result = r;
+  let match = m;
+  const out: LeaveMany = { result, match, gone: [], blocked: [], subIns: [], short: null };
+  const touched = new Set<number>();
+  for (const id of [...new Set(ids)]) {
+    const l = leaveEarly(result, match, id, ctx);
+    if (!l) continue;
+    if (l.outcome === 'blocked') {
+      out.blocked.push(id);
+      continue;
+    }
+    // A short team outside that went to the bench is gone: team numbers past it don't exist (it's the last one).
+    if (l.outcome === 'toBench' && l.team !== null) touched.delete(l.team);
+    if (l.outcome === 'short' && l.team !== null) touched.add(l.team);
+    if (l.outcome === 'subIn' && l.subId) out.subIns.push(l.subId);
+    result = l.result;
+    match = l.match;
+    out.gone.push(id);
+  }
+  const counts = countsOf(result);
+  const short = [...touched].filter((t) => t < result.numTeams && counts[t] < result.teamSize).sort((a, b) => counts[a] - counts[b] || a - b);
+  return { ...out, result, match, short: short[0] ?? null };
+}
+
+/** The end of a LeaveMany as one leave, for suggestAfterLeave / subsAfterLeave (null: nothing to offer). */
+export function asLeave(l: LeaveMany): Leave | null {
+  return l.short === null ? null : { outcome: 'short', team: l.short, result: l.result, match: l.match };
+}

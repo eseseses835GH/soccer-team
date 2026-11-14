@@ -416,6 +416,7 @@ const backupFile = await download.path();
   const goneId = before.players.find((p) => p.name === gone).id;
   assert(played.includes(goneId), 'he played the first match');
   await outside.locator('.member').first().click();
+  await sheet.getByRole('button', { name: 'עזב', exact: true }).click();
   assert((await sheet.locator('h2').innerText()) === `${gone} עזב?`, 'confirm step');
   assert(/נשארים 4/.test(await sheet.locator('.lead').innerText()), `confirm says what happens: ${await sheet.locator('.lead').innerText()}`);
   assert((await sheet.locator('.leave-case').innerText()) === 'בין משחקים · יש מחליף', `leave case line: ${await sheet.locator('.leave-case').innerText()}`);
@@ -444,6 +445,7 @@ const backupFile = await download.path();
   const out2 = pg.getByRole('dialog').locator('.leave-team').filter({ hasNotText: 'על המגרש' }).first();
   const gone2 = await out2.locator('.member').first().innerText();
   await out2.locator('.member').first().click();
+  await pg.getByRole('dialog').getByRole('button', { name: 'עזב', exact: true }).click();
   assert((await pg.getByRole('dialog').locator('.leave-case').innerText()) === 'בין משחקים · אין מחליף', 'leave: between-matches case line');
   const asgBefore = (await stored()).result;
   await pg.getByRole('button', { name: 'כן, הוא עזב' }).click();
@@ -554,6 +556,7 @@ const backupFile = await download.path();
   await pg.getByRole('button', { name: /עזב באמצע/ }).click();
   const sheet = pg.getByRole('dialog');
   await sheet.locator('.leave-team', { hasText: 'מחליפים' }).locator('.member', { hasText: sub }).click();
+  await sheet.getByRole('button', { name: 'עזב', exact: true }).click();
   assert((await sheet.locator('.leave-case').innerText()) === 'מחליף', 'leave: sub case line');
   await sheet.getByRole('button', { name: 'כן, הוא עזב' }).click();
   assert(!(await pg.getByRole('dialog').count()), 'leave: a sub leaving offers nothing');
@@ -567,6 +570,7 @@ const backupFile = await download.path();
   const team2 = sheet.locator('.leave-team').filter({ hasText: 'קבוצה 2' });
   const gone = await team2.locator('.member').first().innerText();
   await team2.locator('.member').first().click();
+  await sheet.getByRole('button', { name: 'עזב', exact: true }).click();
   assert((await sheet.locator('.leave-case').innerText()) === 'באמצע משחק · יש מחליף', `leave: live case line ${await sheet.locator('.leave-case').innerText()}`);
   await sheet.getByRole('button', { name: 'כן, הוא עזב' }).click();
   assert((await sheet.locator('h2').innerText()) === 'להכניס מחליף?', 'leave live: sub offered');
@@ -1058,6 +1062,99 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   assert(await ev.getByRole('dialog', { name: 'להגריל מחדש?' }).isVisible(), 'evening: re-roll asks first');
   await ev.getByRole('dialog').getByRole('button', { name: 'ביטול' }).click();
   await ev.context().close();
+}
+
+// 17b. Guests (v23): an organizer adds a guest at check-in (name + level) → he's in tonight's teams →
+// after the evening (next day) he's not on the check-in list but folded under "מזדמנים" → one tap
+// brings him back for tonight; "להפוך לקבוע" makes him a regular.
+{
+  const gp = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  gp.on('pageerror', (e) => errors.push(`guests: ${e.message}`));
+  const stored = () => gp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  await gp.goto(base);
+  await gp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await gp.locator('.list-foot').getByRole('button', { name: 'אורח' }).click();
+  const dlg = gp.getByRole('dialog', { name: 'אורח' });
+  await dlg.getByPlaceholder('שם').fill('Zed');
+  await dlg.getByRole('radio', { name: '7', exact: true }).click();
+  await dlg.getByRole('button', { name: 'הוספה' }).click();
+  const g = (await stored()).players.find((p) => p.name === 'Zed');
+  assert(g?.occasional === true && g.attrs.overall === 7, `guest: stored as a guest at level 7 (${JSON.stringify(g)})`);
+  assert(await gp.locator('ul.attend li', { hasText: 'Zed' }).locator('input').isChecked(), 'guest: checked in for tonight');
+  await gp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await gp.waitForSelector('.team');
+  const r = (await stored()).result;
+  assert([...r.playerIds, ...r.subIds].includes(g.id), 'guest: in tonight’s teams');
+  await gp.getByRole('button', { name: /התחלת משחק/ }).click();
+  await gp.getByRole('button', { name: 'סיום משחק' }).click();
+  if (await gp.locator('.pens-team').count()) await gp.locator('.pens-team').first().click();
+  await gp.getByRole('button', { name: 'סיום הערב' }).click();
+  await gp.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
+  const hist = (await stored()).history;
+  assert(hist[0]?.players.some((p) => p.id === g.id && p.name === 'Zed'), 'guest: his name is in the evening record');
+  // The next game day.
+  await gp.evaluate(() => {
+    const key = `kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`;
+    const st = JSON.parse(localStorage.getItem(key));
+    st.dayAt = Date.now() - 13 * 3600 * 1000;
+    localStorage.setItem(key, JSON.stringify(st));
+  });
+  await gp.goto(base + '#home');
+  await gp.reload();
+  assert((await gp.locator('ul.attend li', { hasText: 'Zed' }).count()) === 0, 'guest: not on the check-in list after the evening');
+  await gp.getByRole('button', { name: /כמו בפעם הקודמת/ }).click();
+  assert(!(await stored()).presentIds.includes(g.id), 'guest: "same as last time" does not bring him back');
+  await gp.goto(base + '#players');
+  assert((await gp.locator('.roster:not(details .roster) li', { hasText: 'Zed' }).count()) === 0, 'guest: not in the main roster');
+  await gp.getByText('מזדמנים (1)').click();
+  await gp.locator('details.guests li', { hasText: 'Zed' }).getByRole('button', { name: 'הגיע', exact: true }).click();
+  assert((await stored()).presentIds.includes(g.id), 'guest: one tap marks him here tonight');
+  await gp.goto(base + '#home');
+  assert(await gp.locator('ul.attend li', { hasText: 'Zed' }).locator('input').isChecked(), 'guest: back on the check-in list');
+  await gp.goto(base + '#players');
+  if (!(await gp.locator('details.guests').evaluate((d) => d.open))) await gp.getByText('מזדמנים (1)').click();
+  await gp.locator('details.guests li', { hasText: 'Zed' }).locator('.guest-row > button').first().click();
+  await gp.getByRole('button', { name: 'להפוך לקבוע' }).click();
+  const after = (await stored()).players.find((p) => p.id === g.id);
+  assert(after && !after.occasional, 'guest: "להפוך לקבוע" makes him a regular');
+  assert((await gp.locator('details.guests').count()) === 0, 'guest: no "מזדמנים" section once nobody is a guest');
+  await gp.context().close();
+}
+
+// 17c. Several leave at once: two players picked in "עזב באמצע" → "2 עזבו" → both are off the teams and
+// tonight's attendance in one step; one of them comes back through "הגיע מאוחר".
+{
+  const lp = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  lp.on('pageerror', (e) => errors.push(`leave many: ${e.message}`));
+  const stored = () => lp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  await lp.goto(base);
+  await lp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await lp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await lp.waitForSelector('.team');
+  await lp.getByRole('button', { name: /עזב באמצע/ }).click();
+  const sheet = lp.getByRole('dialog');
+  const teams = sheet.locator('.leave-team').filter({ hasNotText: 'מחליפים' });
+  const a = (await teams.nth(0).locator('.member').first().innerText()).trim();
+  const b = (await teams.nth(1).locator('.member').first().innerText()).trim();
+  await teams.nth(0).locator('.member').first().click();
+  await teams.nth(1).locator('.member').first().click();
+  await sheet.getByRole('button', { name: '2 עזבו' }).click();
+  if (await lp.getByRole('button', { name: 'להשאיר ככה' }).count()) await lp.getByRole('button', { name: 'להשאיר ככה' }).click();
+  const s1 = await stored();
+  const idOf = (n) => s1.players.find((p) => p.name === n).id;
+  const tonight = [...s1.result.playerIds, ...s1.result.subIds];
+  assert(!tonight.includes(idOf(a)) && !tonight.includes(idOf(b)), `leave many: ${a} and ${b} still on the teams`);
+  assert(!s1.presentIds.includes(idOf(a)) && !s1.presentIds.includes(idOf(b)), 'leave many: still in tonight’s attendance');
+  assert((await lp.getByText('הנוכחות או גודל הקבוצה השתנו').count()) === 0, 'leave many: flagged as changed since the split');
+  await lp.getByRole('button', { name: /הגיע מאוחר/ }).click();
+  await lp.getByRole('dialog').locator('.pick-list .name').getByText(a, { exact: true }).click();
+  await lp.getByRole('button', { name: /^נכנס עכשיו/ }).click();
+  if (await lp.getByRole('button', { name: 'להשאיר ככה' }).count()) await lp.getByRole('button', { name: 'להשאיר ככה' }).click();
+  const s2 = await stored();
+  assert(s2.result.playerIds.includes(idOf(a)) && s2.presentIds.includes(idOf(a)), `leave many: ${a} came back`);
+  assert(![...s2.result.playerIds, ...s2.result.subIds].includes(idOf(b)), `leave many: ${b} is still out`);
+  console.log(`left together: ${a}, ${b}; ${a} came back`);
+  await lp.context().close();
 }
 
 // 18. Logged out (v13): the sample squad is free, 4 own players are free; the 5th asks to log in and
@@ -1629,8 +1726,8 @@ if (SB_URL) {
   await lp.locator('.clock-ctrl').waitFor({ timeout: 5000 });
   await lp.getByRole('button', { name: 'מישהו הגיע?' }).click();
   const sheet = lp.getByRole('dialog');
-  await sheet.getByText('שחקן חדש? המארגן מוסיף אותו').waitFor({ timeout: 3000 }).catch(() => errors.push('runner late: no "new player" line'));
-  assert(!(await sheet.locator('input').count()), 'runner late: a new-player form for a player');
+  assert((await sheet.locator('input').count()) === 1, 'runner late: only the guest name field (v23)');
+  assert(!(await sheet.locator('.level-picker, [role=radiogroup]').count()), 'runner late: a level picker for a player');
   assert(await sheet.getByRole('button', { name: 'מתן' }).count(), 'runner late: the bench not offered');
   await sheet.getByRole('button', { name: 'ליאור' }).click();
   await sheet.getByRole('button', { name: /^נכנס עכשיו/ }).click();
@@ -1638,6 +1735,7 @@ if (SB_URL) {
   assert(db.data.players.some((p) => p.id === 'p12'), 'runner late: arrival missing from players');
   await lp.getByRole('button', { name: 'מישהו עזב?' }).click();
   await sheet.getByRole('button', { name: 'יוסי' }).click();
+  await sheet.getByRole('button', { name: 'עזב', exact: true }).click();
   await sheet.getByRole('button', { name: 'כן, הוא עזב' }).click();
   await sheet.getByText('להכניס מחליף?').waitFor({ timeout: 3000 }).catch(() => errors.push('runner late: no sub pick after a leave'));
   assert(!(await sheet.getByText('הכי מתאים').count()) && !(await sheet.getByText('האיזון').count()), 'runner late: a rating-based suggestion');
@@ -1646,6 +1744,17 @@ if (SB_URL) {
   assert(db.data.gone?.some((p) => p.id === 'p10'), `runner late: who left not in the snapshot (${JSON.stringify(db.data.gone)})`);
   assert(db.data.subs.join() === 'p13', `runner late: bench ${db.data.subs}`);
   assert(!/"(attrs|levelVotes|cards|overall|weaknesses)":/.test(JSON.stringify(db.data)), 'runner late: ratings in the snapshot');
+  // v23: a stranger turns up: the runner adds him as a guest (on the server, level 5) and he goes in.
+  await lp.getByRole('button', { name: 'מישהו הגיע?' }).click();
+  await sheet.getByPlaceholder('שם').fill('אבי');
+  assert(await sheet.getByText('כבר יש שחקן בשם הזה').isVisible(), 'runner guest: a taken name is not stopped');
+  await sheet.getByPlaceholder('שם').fill('זר מהמגרש');
+  await sheet.getByRole('button', { name: 'המשך' }).click();
+  await sheet.getByRole('button', { name: /^נכנס עכשיו/ }).click();
+  const gid = db.guests?.[0]?.id;
+  assert(gid && db.guests[0].name === 'זר מהמגרש', `runner guest: add_guest not called (${JSON.stringify(db.guests)})`);
+  assert(!db.claimed.includes(gid), 'runner guest: the guest was claimed');
+  await waitFor(() => db.data.players.some((p) => p.id === gid) && db.data.teams.some((t) => t.ids.includes(gid)), 'runner guest: not in tonight’s teams');
   console.log(`runner late/left: ${db.sets.length} live writes`);
   await lctx.close();
 }

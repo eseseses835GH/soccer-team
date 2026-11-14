@@ -335,6 +335,17 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
       onJoin?.(id, name);
       return json(route, id);
     }
+    // v23: whoever runs tonight (or anyone when no evening is open) adds a guest; not claimed.
+    if (path.endsWith('/rpc/add_guest')) {
+      const name = String(args.p_name ?? '').replace(/\s+/g, ' ').trim();
+      const key = (n) => n.replace(/\s/g, '').toLowerCase();
+      if (db.live && db.runner !== ME) return json(route, { code: '42501', message: 'not allowed' }, 403);
+      if (db.roster.some((p) => key(p.name) === key(name))) return json(route, { code: '23505', message: 'name_taken' }, 409);
+      const id = `g${db.roster.length + 1}`;
+      db.roster = [...db.roster, { id, name, occasional: true }];
+      db.guests = [...(db.guests ?? []), { id, name }];
+      return json(route, id);
+    }
     if (path.endsWith('/rpc/claim_player')) {
       if (db.claimed.includes(args.p_player_id)) return json(route, { code: '23505', message: 'taken' }, 409);
       db.me = args.p_player_id;

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { makeRegular, splitRoster } from '../state/guests';
+import { LateSheet } from './LateSheet';
 import type { Attributes, Position } from '../engine';
 import { playersCount } from '../i18n';
 import { MAX_CARDS, applyCards, toggleCard, type CardId } from '../state/cards';
@@ -88,6 +90,7 @@ export function PlayersScreen() {
   // A chat shared from WhatsApp to the installed app lands here (public/sw.js → #players?import=shared).
   const [importing, setImporting] = useState<false | 'open' | 'shared'>(() => (location.hash.includes(SHARED_HASH) ? 'shared' : false));
   const [deleting, setDeleting] = useState<Player[] | null>(null);
+  const [arrived, setArrived] = useState<Player | null>(null);
   // Motion only: the row just added slides in.
   const [fresh, setFresh] = useState<string | null>(null);
   // Select mode: tap rows to pick several players, then delete them in one go.
@@ -155,7 +158,16 @@ export function PlayersScreen() {
   };
 
   const fixedKeepers = state.settings.gkMode === 'fixed';
-  const sorted = [...state.players].sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  // Guests (v23) wait folded under "מזדמנים".
+  const { regulars: sorted, guests } = splitRoster(state.players, state.history);
+  const present = new Set(state.presentIds);
+  const inTeams = new Set(state.result ? [...state.result.playerIds, ...state.result.subIds] : []);
+  // One tap: he's here tonight (teams already made → in now or wait, as on the check-in list).
+  const bringBack = (p: Player) => {
+    if (state.result && !inTeams.has(p.id)) return setArrived(p);
+    dispatch({ type: 'setPresent', ids: [...state.presentIds, p.id], now: Date.now() });
+    notify(`${p.name} מסומן שהגיע`);
+  };
   const picked = sorted.filter((p) => selected.includes(p.id));
   const allSelected = sorted.length > 0 && picked.length === sorted.length;
 
@@ -201,14 +213,14 @@ export function PlayersScreen() {
       </form>
 
       <div className="section-title">
-        <h2>{playersCount(state.players.length)}</h2>
+        <h2>{playersCount(sorted.length)}</h2>
         {selecting ? (
           <button type="button" className="text-btn" onClick={() => setSelected(allSelected ? [] : sorted.map((p) => p.id))}>
             {allSelected ? 'ביטול הבחירה' : 'בחירת הכול'}
           </button>
         ) : (
           <div className="title-actions">
-            {state.players.length > 0 && (
+            {sorted.length > 0 && (
               <button type="button" className="text-btn" onClick={() => setSelecting(true)}>
                 בחירה
               </button>
@@ -272,6 +284,33 @@ export function PlayersScreen() {
         </ul>
       )}
 
+      {guests.length > 0 && !selecting && (
+        <details className="fold guests">
+          <summary>מזדמנים ({guests.length})</summary>
+          <ul className="roster">
+            {guests.map((p) => (
+              <SwipeRow key={p.id} actionLabel={`מחיקת ${p.name}`} className={p.id === fresh ? 'is-new' : undefined} onDelete={() => setDeleting([p])}>
+                <div className="guest-row">
+                  <button type="button" onClick={() => setEditing(p)}>
+                    <span className="name">{p.name}</span>
+                    <span className="level" aria-label={`רמה ${p.attrs.overall}`}>
+                      {p.attrs.overall}
+                    </span>
+                  </button>
+                  {present.has(p.id) ? (
+                    <span className="here">הגיע ✓</span>
+                  ) : (
+                    <button type="button" className="here" onClick={() => bringBack(p)}>
+                      הגיע
+                    </button>
+                  )}
+                </div>
+              </SwipeRow>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {selecting && (
         <div className="select-bar" role="toolbar" aria-label="פעולות על השחקנים שנבחרו">
           <span className="select-count" aria-live="polite">
@@ -318,6 +357,7 @@ export function PlayersScreen() {
           }}
         />
       )}
+      {arrived && <LateSheet arrived={arrived} onClose={() => setArrived(null)} />}
       {importing && <ImportSheet shared={importing === 'shared'} onClose={() => setImporting(false)} />}
     </section>
   );
@@ -402,6 +442,20 @@ function PlayerSheet({
           <button type="submit" className="btn btn-primary btn-block">
             שמירה
           </button>
+          {draft.occasional && (
+            <button
+              type="button"
+              className="btn btn-quiet btn-block"
+              onClick={() => {
+                const n = draft.name.trim();
+                if (!n) return setError('צריך שם');
+                if (nameTaken(n, draft.id)) return setError('כבר יש שחקן בשם הזה');
+                onSave(makeRegular({ ...draft, name: n }));
+              }}
+            >
+              להפוך לקבוע
+            </button>
+          )}
           <button type="button" className="btn btn-quiet danger btn-block" onClick={() => onDelete(player)}>
             מחיקה
           </button>

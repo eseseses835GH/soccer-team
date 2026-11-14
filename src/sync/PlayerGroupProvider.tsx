@@ -6,7 +6,7 @@ import { newGroupState } from '../state/groups';
 import { localKV, useGroups } from '../state/store';
 import { EMPTY_META, saveMeta } from './engine';
 import { liveApi, type LiveRow } from './live';
-import { isPlayerGroup, loadPublic, publicKey, publicToState, withJoined } from './playerGroup';
+import { isPlayerGroup, loadPublic, publicKey, publicToState, withGuest, withJoined } from './playerGroup';
 import { playersApi, type PublicGroup } from './players';
 import { SyncError } from './supabase';
 import { useSync } from './SyncProvider';
@@ -25,6 +25,8 @@ interface PlayerGroupApi {
   claim(playerId: string): Promise<SyncError['code'] | null>;
   /** "אני לא ברשימה": add me to the roster under `name` and claim him. Error code, or null when it worked. */
   joinNew(name: string): Promise<SyncError['code'] | null>;
+  /** v23: add a guest for tonight (runner only). His id, or an error code. */
+  addGuest(name: string): Promise<{ id: string } | { error: SyncError['code'] }>;
   /** One vote (null takes it back). Resolves false when it didn't reach the server. */
   vote(playerId: string, level: number | null): Promise<boolean>;
   refresh(): void;
@@ -164,6 +166,25 @@ export function PlayerGroupProvider({ children }: { children: ReactNode }) {
     [gid, sync],
   );
 
+  const addGuest = useCallback(
+    async (name: string) => {
+      try {
+        const id = await playersApi(await sync.client()).addGuest(gid, name);
+        const cur = pubRef.current;
+        if (cur) {
+          const next = withGuest(cur, id, name);
+          localKV.set(publicKey(gid), next);
+          groupsRef.current.setGroupState(gid, (s) => publicToState(s, next));
+          setPub(next);
+        }
+        return { id };
+      } catch (e) {
+        return { error: code(e) };
+      }
+    },
+    [gid, sync],
+  );
+
   const vote = useCallback(
     async (playerId: string, level: number | null) => {
       const before = votes;
@@ -185,8 +206,8 @@ export function PlayerGroupProvider({ children }: { children: ReactNode }) {
   );
 
   const api = useMemo<PlayerGroupApi>(
-    () => ({ active, pub, live, votes, load: sync.email === false ? 'signedOut' : load, claim, joinNew, vote, refresh: () => setTick((t) => t + 1) }),
-    [active, pub, live, votes, load, sync.email, claim, joinNew, vote],
+    () => ({ active, pub, live, votes, load: sync.email === false ? 'signedOut' : load, claim, joinNew, addGuest, vote, refresh: () => setTick((t) => t + 1) }),
+    [active, pub, live, votes, load, sync.email, claim, joinNew, addGuest, vote],
   );
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

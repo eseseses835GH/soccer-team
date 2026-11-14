@@ -22,6 +22,8 @@ export interface Player extends EnginePlayer {
   cards: CardId[];
   /** Synced groups: each organizer's 1–10 level by auth user id; the level is their average (votes.ts). */
   levelVotes?: LevelVotes;
+  /** v23: a guest ("אורח"), not a regular: listed under "מזדמנים", left out of check-in and rating (guests.ts). */
+  occasional?: true;
 }
 
 export type GkMode = 'rotate' | 'fixed';
@@ -268,6 +270,7 @@ export function sanitizePlayer(p: unknown): Player | null {
     cards: m.cards,
     ...(positions.length ? { positions } : {}),
     ...(levelVotes ? { levelVotes } : {}),
+    ...(r.occasional === true ? { occasional: true as const } : {}),
   };
 }
 

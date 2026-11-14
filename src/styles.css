@@ -3403,3 +3403,27 @@ thead th {
     opacity: 0;
   }
 }
+
+/* v23: guests under "מזדמנים" — the row opens the sheet, "הגיע" marks him here tonight. */
+.guest-row {
+  display: flex;
+  align-items: center;
+}
+.roster .guest-row > button:first-child {
+  flex: 1;
+  min-inline-size: 0;
+}
+.roster .guest-row .here {
+  inline-size: auto;
+  flex: none;
+  min-block-size: 44px;
+  padding-inline: 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.roster .guest-row span.here {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-2);
+  font-weight: 600;
+}
