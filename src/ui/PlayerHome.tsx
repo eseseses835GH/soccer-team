@@ -15,6 +15,10 @@ import { GkOrderButton, GkOrderSheet, useGkOrderSheet } from './GkOrder';
 import { MatchScreen } from './MatchScreen';
 import { NewEvening } from './PlayerEvening';
 import type { PublicPlayer } from '../sync/players';
+import { splitApi } from '../sync/splitRemote';
+import { SyncError } from '../sync/supabase';
+import { currentTeams } from '../state/shuffle';
+import { eveningOf } from '../state/evening';
 
 const laterKey = (gid: string) => `kochot:claim-later:${gid}`;
 
@@ -68,9 +72,42 @@ export function PlayerHome() {
       if (res.error) return notify(res.error === 'offline' ? 'אין חיבור לאינטרנט' : res.error === 'conflict' ? 'מישהו אחר מנהל את הערב' : 'משהו השתבש, נסו שוב');
       if (res.record) go('evening', res.record.id);
     };
+    // "שאפל": tonight's players split again on the server (never a level here), then the next part goes live.
+    const shuffle = async () => {
+      const a = runner.app;
+      if (!a?.result) return false;
+      const r = a.result;
+      const fail = (c: SyncError['code']) => {
+        notify(c === 'offline' ? 'אין חיבור לאינטרנט' : c === 'conflict' ? 'מישהו אחר מנהל את הערב' : 'משהו השתבש, נסו שוב');
+        return false;
+      };
+      try {
+        const reply = await splitApi(await sync.client()).split({
+          groupId: current.id,
+          present: [...r.playerIds, ...r.subIds],
+          teamSize: r.teamSize,
+          rules: eveningOf(a.settings),
+          avoid: currentTeams(r),
+        });
+        const res = await runner.shuffle({
+          type: 'shuffle',
+          playerIds: reply.playerIds,
+          subIds: reply.subIds,
+          sizes: reply.sizes,
+          teamSize: reply.teamSize,
+          assignment: reply.assignment,
+          pool: [],
+          gkOrder: reply.gkOrder,
+          now: Date.now(),
+        });
+        return res.error ? fail(res.error) : true;
+      } catch (e) {
+        return fail(e instanceof SyncError ? e.code : 'other');
+      }
+    };
     return (
       <LocalStore value={{ state: runner.app, dispatch: runner.dispatch }}>
-        <MatchScreen runner={{ onRelease: () => void release(), onEnd: end }} />
+        <MatchScreen runner={{ onRelease: () => void release(), onEnd: end, onShuffle: shuffle }} />
       </LocalStore>
     );
   }

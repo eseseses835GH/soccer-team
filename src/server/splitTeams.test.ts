@@ -125,6 +125,20 @@ describe('split-teams handler', () => {
     expect(keyOf(again.assignment)).not.toBe(keyOf(first.assignment));
   });
 
+  it('shuffle: `avoid` (tonight\'s teams) gives other teams of the same players; bad avoid → 400', async () => {
+    const first = ok(await handleSplit({ groupId: GID, present: TEN, teamSize: 5 }, deps()));
+    const teams = [0, 1].map((t) => first.playerIds.filter((_, i) => first.assignment[i] === t));
+    for (const s of [11, 12, 13]) {
+      const next = ok(await handleSplit({ groupId: GID, present: TEN, teamSize: 5, avoid: teams }, deps({ seed: () => s })));
+      expect(new Set(next.playerIds)).toEqual(new Set(first.playerIds));
+      const back = next.playerIds.map((id) => teams.findIndex((t) => t.includes(id)));
+      expect(keyOf(next.assignment)).not.toBe(keyOf(back));
+      expect(JSON.stringify(next)).not.toMatch(/attrs|overall|levelVotes|name/);
+    }
+    expect((await handleSplit({ groupId: GID, present: TEN, teamSize: 5, avoid: [[1]] }, deps())).status).toBe(400);
+    expect(parseSplitRequest({ groupId: GID, present: TEN, teamSize: 5, avoid: teams })?.avoid).toEqual(teams);
+  });
+
   it("tonight's rules from the runner: honored through the app's sanitizer, bad ones dropped, never weights", async () => {
     const plain = ok(await handleSplit({ groupId: GID, present: TEN, teamSize: 5 }, deps()));
     expect(plain.rules).toMatchObject({ gkMode: 'rotate', matchMinutes: DEFAULT_SETTINGS.matchMinutes, matchNoLimit: false });

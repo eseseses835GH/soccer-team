@@ -3426,6 +3426,7 @@ thead th {
   align-items: center;
   color: var(--ink-2);
   font-weight: 600;
+}
 /* ---------- keeper order ("סדר שוערים") ---------- */
 .keeper-next {
   margin-block-start: -2px;

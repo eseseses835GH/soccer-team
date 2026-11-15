@@ -282,6 +282,39 @@ describe('a player starts and ends an evening (v20)', () => {
     expect(t.kv.get(runnerKey(GID))).toBeNull();
   });
 
+  it('shuffle: the played part is saved like an end, the new teams go live at once (no rev), same night', async () => {
+    const t = setup({ ended: true });
+    t.r.startNew(fresh());
+    await tick();
+    let m = startClock(startSession(3), T0);
+    m = addGoal(m, 0, T0 + 1000);
+    t.r.dispatch({ type: 'setMatch', match: endMatch(m, 1, T0 + 60_000), now: T0 });
+    await tick();
+    const teams = [
+      ['a1', 'b1', 'c1'],
+      ['a2', 'b2', 'c2'],
+      ['a3', 'b3', 'c3'],
+    ];
+    const assignment = teams.flatMap((x, i) => x.map(() => i));
+    const sets = t.api.set.mock.calls.length;
+    const res = await t.r.shuffle({ type: 'shuffle', playerIds: teams.flat(), subIds: [], sizes: [3, 3, 3], teamSize: 3, assignment, pool: [], gkOrder: teams, now: T0 + 120_000 });
+    expect(res.error).toBeNull();
+    expect(t.ended).toHaveLength(1);
+    expect(t.ended[0]?.id).toBe(eveningId(result()));
+    expect(t.ended[0]?.teams.map((x) => x.ids)).toEqual([names.slice(0, 3), names.slice(3, 6), names.slice(6)]);
+    expect(t.ended[0]?.matches).toHaveLength(1);
+    const app = t.r.state()!;
+    expect(app.match).toEqual(startSession(3));
+    expect(app.result?.night).toBe(eveningId(result()));
+    await tick();
+    const call = t.api.set.mock.calls[sets];
+    expect(call[2]).toBeUndefined();
+    expect(call[1].night).toBe(eveningId(result()));
+    expect(call[1].teams.map((x) => x.ids)).toEqual(teams);
+    expect(t.server().runner).toBe(ME);
+    expect(t.r.rev()).toBe(t.server().rev);
+  });
+
   it('a stored new evening that never reached the server resumes and is sent without a rev', async () => {
     const kv = memKV();
     kv.set(runnerKey(GID), { user: ME, rev: null, app: { players: base.players, settings, result: result(), match: startSession(3) } });

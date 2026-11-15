@@ -1195,6 +1195,84 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await lp.context().close();
 }
 
+// Shuffle (organizer): between matches a quiet "שאפל"; after 2 wins in a row "…ניצחו 2 ברצף. לעשות שאפל?"
+// ("לא עכשיו" hides it for this match end, also after a reload; again at 4 wins, not at 3) → "שאפל" → new teams from tonight's players; the matches
+// played are saved as their own record with the old teams; the next part shares the night (one
+// evening in all-time).
+{
+  const sp = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  sp.on('pageerror', (e) => errors.push(`shuffle: ${e.message}`));
+  const stored = () => sp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  const parts = (r) => Array.from({ length: r.numTeams }, (_, t) => r.playerIds.filter((_, i) => r.assignment[i] === t).sort().join(',')).sort().join('|');
+  const win = async () => {
+    await sp.getByRole('button', { name: /^התחלה$/ }).click();
+    await sp.getByRole('button', { name: '+ גול' }).first().click();
+    await sp.getByRole('dialog').getByRole('button', { name: 'דילוג' }).click();
+    await sp.getByRole('button', { name: 'סיום משחק' }).click();
+  };
+  const suggestion = () => sp.locator('.notice', { hasText: 'לעשות שאפל?' });
+  await sp.goto(base);
+  await sp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await sp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await sp.waitForSelector('.team');
+  await sp.getByRole('button', { name: /התחלת משחק/ }).click();
+  assert(!(await sp.getByRole('button', { name: 'שאפל' }).count()), 'shuffle: offered before any match');
+  await win();
+  assert(await sp.locator('.match-links').getByRole('button', { name: 'שאפל' }).isVisible(), 'shuffle: no quiet button after a match');
+  assert(!(await suggestion().count()), 'shuffle: suggested after one win');
+  await sp.getByRole('button', { name: /^התחלה$/ }).click();
+  assert(!(await sp.getByRole('button', { name: 'שאפל' }).count()), 'shuffle: offered while a match runs');
+  await sp.getByRole('button', { name: 'עצירה' }).click();
+  await sp.getByRole('button', { name: 'איפוס שעון' }).click();
+  await win();
+  const text = await suggestion().innerText().catch(() => '');
+  assert(/ניצח(ו|ה) 2 ברצף\. לעשות שאפל\?/.test(text), `shuffle: streak suggestion "${text}"`);
+  assert(await sp.getByRole('button', { name: 'סיום משחק' }).isVisible(), 'shuffle: carrying on is still the main action');
+  await suggestion().getByRole('button', { name: 'לא עכשיו' }).click();
+  assert(!(await suggestion().count()), 'shuffle: dismiss did not hide the suggestion');
+  await sp.reload();
+  await sp.locator('.clock').waitFor();
+  assert(!(await suggestion().count()), 'shuffle: the dismissed suggestion came back after a reload');
+  // Same streak: not at 3 wins, again at 4.
+  await win();
+  assert(!(await suggestion().count()), 'shuffle: suggested again at 3 wins');
+  await win();
+  const text4 = await suggestion().innerText().catch(() => '');
+  assert(/4 ברצף\. לעשות שאפל\?/.test(text4), `shuffle: no suggestion at 4 wins "${text4}"`);
+  await suggestion().getByRole('button', { name: 'לא עכשיו' }).click();
+  const before = await stored();
+  await sp.locator('.match-links').getByRole('button', { name: 'שאפל' }).click();
+  await sp.getByRole('dialog', { name: 'לעשות שאפל?' }).getByRole('button', { name: 'שאפל' }).click();
+  const fresh = sp.getByRole('dialog', { name: 'קבוצות חדשות' });
+  await fresh.waitFor({ timeout: 5000 }).catch(() => errors.push('shuffle: no new teams sheet'));
+  assert((await fresh.locator('li').count()) >= before.result.numTeams, 'shuffle: new teams not listed');
+  await fresh.getByRole('button', { name: 'יאללה' }).click();
+  const after = await stored();
+  const tonight = (r) => [...r.playerIds, ...r.subIds].sort().join(',');
+  assert(tonight(after.result) === tonight(before.result), 'shuffle: not the same players tonight');
+  assert(parts(after.result) !== parts(before.result), 'shuffle: same teams as before');
+  assert(after.match.history.length === 0 && (await sp.locator('.match-no').innerText()) === 'משחק 1', 'shuffle: a new session did not start');
+  assert(after.result.gkOrder.flat().sort().join(',') === [...after.result.playerIds].sort().join(','), 'shuffle: keeper order not for the new teams');
+  assert(after.history.length === 1 && after.history[0].matches.length === 4, `shuffle: first part ${JSON.stringify(after.history.map((h) => h.matches.length))}`);
+  const firstTeams = after.history[0].teams.map((t) => t.ids);
+  const oldTeams = Array.from({ length: before.result.numTeams }, (_, t) => before.result.playerIds.filter((_, i) => before.result.assignment[i] === t));
+  assert(firstTeams.map((l) => [...l].sort().join()).join('|') === oldTeams.map((l) => [...l].sort().join()).join('|'), 'shuffle: the saved part lost the old teams');
+  assert(after.result.night === after.history[0].id, `shuffle: night ${after.result.night} vs ${after.history[0].id}`);
+  await win();
+  await sp.getByRole('button', { name: 'סיום הערב' }).click();
+  await sp.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
+  await sp.waitForSelector('.evening');
+  await sp.getByRole('button', { name: /^חזרה$/ }).click();
+  const rows = await sp.locator('.ev-list li').allInnerTexts();
+  assert(rows.length === 2 && rows.filter((r) => r.includes('אחרי שאפל')).length === 1, `shuffle: history list ${JSON.stringify(rows)}`);
+  await sp.getByRole('radio', { name: 'כל הזמנים' }).click();
+  await sp.waitForTimeout(1200);
+  const all = await sp.locator('.ev-stats dd').allInnerTexts();
+  assert(all[0] === '1' && all[1] === '5', `shuffle: all-time evenings/matches ${all}`);
+  console.log('shuffle: organizer quiet button, streak suggestion at 2 and 4 + dismiss, new teams, history split by night');
+  await sp.context().close();
+}
+
 // 18. Logged out (v13): the sample squad is free, 4 own players are free; the 5th asks to log in and
 // is added after it, and the group goes to the cloud; "+ קבוצה חדשה" asks too and goes on to the
 // new group; a late "מישהו חדש" past the limit asks and goes on; an old phone keeps its 6 players.
@@ -2287,6 +2365,57 @@ if (SB_URL) {
   assert(!db.calls.includes('groups') && !db.calls.some((c) => /group_(push|save|update)/.test(c)), `runner settings: wrote the group's doc (${db.calls})`);
   console.log(`runner settings: request ${JSON.stringify(req.rules)}, 4 a side, snapshot ${db.data.rules.matchMs / 60e3} min`);
   await sctx.close();
+}
+
+// 23c. Shuffle by a player running the evening: 2 wins in a row → "לעשות שאפל?" → "שאפל" → split-teams
+// on the server with tonight's players, team size, his rules and the current teams to avoid →
+// end_evening saves what was played (old teams) → the new teams go live at once (no rev, same night).
+if (SB_URL) {
+  const { ctx: hctx, page: hp, db } = await playerContext(browser, { me: 'p3', canRate: false, live: false });
+  hp.on('pageerror', (e) => errors.push(`runner shuffle: ${e.message}`));
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 50 && !fn(); i++) await hp.waitForTimeout(100);
+    assert(fn(), `runner shuffle: ${what}`);
+  };
+  await hp.goto(base);
+  await hp.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  await hp.getByRole('button', { name: 'ערב חדש' }).click();
+  await hp.getByRole('button', { name: 'כולם' }).click();
+  for (const n of ['כפיר', 'ליאור', 'מתן']) await hp.locator('.attend label', { hasText: n }).click();
+  await hp.getByRole('radio', { name: '5' }).click();
+  await hp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await hp.getByRole('button', { name: 'התחלת משחק' }).click();
+  await hp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('runner shuffle: no match controls'));
+  for (let i = 0; i < 2; i++) {
+    await hp.getByRole('button', { name: /^התחלה$/ }).click();
+    await hp.getByRole('button', { name: '+ גול' }).first().click();
+    await hp.getByRole('dialog').getByRole('button', { name: 'דילוג' }).click();
+    await hp.getByRole('button', { name: 'סיום משחק' }).click();
+  }
+  await waitFor(() => db.sets.length > 0 && db.runner === ME && db.data?.match?.played?.length === 2, 'the matches were not published');
+  const old = db.data;
+  const writes = db.sets.length;
+  const note = hp.locator('.notice', { hasText: 'לעשות שאפל?' });
+  assert(/2 ברצף/.test(await note.innerText().catch(() => '')), 'runner shuffle: no streak suggestion');
+  await note.getByRole('button', { name: 'שאפל' }).click();
+  await waitFor(() => db.ended.length === 1 && db.sets.length > writes && db.runner === ME, 'end_evening + the new teams were not sent');
+  const req = db.splits[db.splits.length - 1].req;
+  const tonight = (d) => [...d.teams.flatMap((t) => t.ids), ...d.subs].sort().join(',');
+  assert(req.present.slice().sort().join(',') === tonight(old) && req.teamSize === 5 && req.avoid?.length === 2 && req.rules?.matchMinutes === 7, `runner shuffle: request ${JSON.stringify(req)}`);
+  const rec = db.ended[0];
+  assert(rec.matches.length === 2 && rec.teams.map((t) => t.ids.join()).join('|') === old.teams.map((t) => t.ids.join()).join('|'), `runner shuffle: saved part ${JSON.stringify(rec).slice(0, 200)}`);
+  const first = db.sets[writes];
+  assert(first.rev === undefined && db.runner === ME, `runner shuffle: new teams written with rev ${first.rev}, runner ${db.runner}`);
+  const part = (d) => d.teams.map((t) => [...t.ids].sort().join()).sort().join('|');
+  assert(part(db.data) !== part(old) && tonight(db.data) === tonight(old), 'runner shuffle: the snapshot did not get new teams of the same players');
+  assert(db.data.night === rec.id && !db.data.match?.played?.length, `runner shuffle: snapshot night ${db.data.night} / ${rec.id}`);
+  assert(!/"(attrs|levelVotes|cards|overall|weaknesses)":/.test(JSON.stringify(db.data)), 'runner shuffle: ratings in the snapshot');
+  await hp.getByRole('dialog', { name: 'קבוצות חדשות' }).getByRole('button', { name: 'יאללה' }).click();
+  assert((await hp.locator('.match-no').innerText()) === 'משחק 1' && (await hp.locator('.clock-ctrl').isVisible()), 'runner shuffle: still running the next part');
+  const members = await hp.locator('.ev-rosters').allTextContents();
+  assert(members.every((t) => !/\d/.test(t)), 'runner shuffle: a number next to a player');
+  console.log(`runner shuffle: server split with avoid, end_evening (${rec.matches.length} matches), new teams live (rev ${first.rev})`);
+  await hctx.close();
 }
 
 // 24. The same login on a second phone, and an organizer is "me" in his group (v21). A fresh phone

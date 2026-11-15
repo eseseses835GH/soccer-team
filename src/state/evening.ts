@@ -31,3 +31,8 @@ export function withEvening(base: Settings, o: Partial<EveningRules>): Settings 
   return sanitizeSettings({ ...base, ...(parseEvening(o) ?? {}) });
 }
 
+
+/** Tonight's match rules as they are now (a shuffle's split keeps them). */
+export function eveningOf(s: Settings): EveningRules {
+  return { matchMinutes: s.matchMinutes, matchNoLimit: s.matchNoLimit, drawExtraMinutes: s.drawExtraMinutes, gkMode: s.gkMode, gkSwitchGoals: s.gkSwitchGoals };
+}

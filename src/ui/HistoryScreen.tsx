@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  afterShuffle,
   allTimeStats,
   eveningStats,
   leaders,
@@ -426,7 +427,10 @@ function EveningRow({ rec }: { rec: EveningRecord }) {
       <button type="button" onClick={() => go('evening', rec.id)}>
         <span className="ev-row-dot" style={{ background: champ ? lookOf(rec, champ.team).color : 'var(--sunk)' }} aria-hidden="true" />
         <span className="ev-row-text">
-          <span className="name">{dateLabel(rec.startedAt)}</span>
+          <span className="name">
+            {dateLabel(rec.startedAt)}
+            {afterShuffle(rec.id) && ' · אחרי שאפל'}
+          </span>
           <small className="muted">
             {plural(s.matches, 'משחק אחד', 'משחקים')} · {plural(s.goals, 'שער אחד', 'שערים')} · {plural(rec.players.length, 'שחקן אחד', 'שחקנים')}
             {champ && ` · 🏆 ${lookOf(rec, champ.team).name}`}

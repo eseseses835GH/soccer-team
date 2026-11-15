@@ -113,6 +113,8 @@ export interface GameResult {
   /** Goalkeeper rotation per team (player ids, first = starts in goal). */
   gkOrder: string[][];
   createdAt: number;
+  /** Teams made by a shuffle: the id of the night's first evening record (see eveningId). */
+  night?: string;
 }
 
 export interface AppState {
@@ -341,8 +343,10 @@ export function sanitize(raw: unknown, now = Date.now()): AppState {
       Number.isInteger(g.numTeams) &&
       g.assignment.every((t) => Number.isInteger(t) && t >= 0 && t < g.numTeams);
     if (ok) {
+      const { night, ...rest } = g;
       result = {
-        ...g,
+        ...rest,
+        ...(typeof night === 'string' && night && night.length <= 64 ? { night } : {}),
         pool: Array.isArray(g.pool) ? g.pool.filter((s) => s?.assignment?.length === g.playerIds.length) : [],
         shown: Array.isArray(g.shown) ? g.shown : [],
         generated: g.generated?.length === g.assignment.length ? g.generated : g.assignment,

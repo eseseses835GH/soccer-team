@@ -29,7 +29,10 @@ import {
   undoGoal,
   type MatchState,
 } from '../match/match';
-import { hasEveningData } from '../state/history';
+import { hasEveningData, teamMembers } from '../state/history';
+import { shuffleSuggestion } from '../state/shuffle';
+import { loadJSON, saveJSON } from '../state/storage';
+import { shuffleTeams } from './split';
 import { defaultMatchMs, engineOptions, noGKIds, teamLook, verb } from '../state/model';
 import { useStore } from '../state/store';
 import { useUi } from './App';
@@ -46,6 +49,8 @@ import { celebrateGoal, playWhistle, stopSounds, unlockAudio, unlockOnNextTap } 
 
 /** Quick picks in the match length sheet, in minutes. */
 const QUICK_MINUTES = [5, 6, 7, 8, 10, 12];
+/** The match end whose "לעשות שאפל?" was dismissed on this phone (asked again 2 wins later). */
+const SHUFFLE_NO = 'kochot:shuffle-no';
 
 function fmt(ms: number): string {
   const s = Math.floor(Math.abs(ms) / 1000);
@@ -84,7 +89,7 @@ function useWakeLock(on: boolean) {
  * ratings (v15), no re-split, no dominance swap; "stop running", and (v20) ending the evening
  * through the server (`onEnd`), which saves it to the group's history.
  */
-export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd(): Promise<void> } } = {}) {
+export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd(): Promise<void>; onShuffle(): Promise<boolean> } } = {}) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
   const m = state.match;
@@ -100,6 +105,11 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
   const [rulesOpen, setRulesOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [arriving, setArriving] = useState(false);
+  /** "שאפל": the confirm (small button), in progress, then the new teams. */
+  const [shuffleAsk, setShuffleAsk] = useState(false);
+  const [shuffling, setShuffling] = useState(false);
+  const [newTeams, setNewTeams] = useState(false);
+  const [shuffleNo, setShuffleNo] = useState(() => loadJSON<string>(SHUFFLE_NO));
   const soundOn = useRef(true);
   soundOn.current = state.settings.goalSound !== 'off';
   // After a reload the time-up whistle has no tap of its own: unlock audio on any tap first.
@@ -262,6 +272,28 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
     } else notify(won);
   };
 
+  // Between matches (one played, the next not started): a shuffle may be offered.
+  const between = m.history.length > 0 && !m.goals.length && elapsed === 0 && !running;
+  const streak = between ? shuffleSuggestion(m.history) : null;
+  const streakKey = streak ? `${r.createdAt}:${streak.team}:${streak.from}:${streak.wins}` : '';
+  const suggest = !!streak && shuffleNo !== streakKey;
+  const shuffle = async () => {
+    setShuffleAsk(false);
+    if (shuffling) return;
+    setShuffling(true);
+    try {
+      const ok = runner ? await runner.onShuffle() : await shuffleTeams(state, dispatch);
+      if (ok) setNewTeams(true);
+      else if (!runner) notify('אין מספיק שחקנים');
+    } finally {
+      setShuffling(false);
+    }
+  };
+  const noShuffle = () => {
+    saveJSON(SHUFFLE_NO, streakKey);
+    setShuffleNo(streakKey);
+  };
+
   const table = standings(m, k);
   const scorers = topScorers(m).slice(0, 5);
   const nextUp = m.queue[0];
@@ -376,13 +408,34 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
         <button type="button" className="text-btn" onClick={() => setLeaving(true)}>
           <Icon name="leave" size={18} /> מישהו עזב?
         </button>
+        {between && !suggest && (
+          <button type="button" className="text-btn" disabled={shuffling} onClick={() => setShuffleAsk(true)}>
+            <Icon name="dice" size={18} /> שאפל
+          </button>
+        )}
       </div>
       {arriving && <LateSheet onClose={() => setArriving(false)} mode={runner ? 'runner' : undefined} />}
       {leaving && <LeaveSheet onClose={() => setLeaving(false)} mode={runner ? 'runner' : undefined} />}
 
       <BorrowCard m={m} r={r} set={set} />
 
-      {!runner && dom !== null && weaken && (
+      {suggest && streak && (
+        <div className="notice tip" role="status">
+          <p>
+            {teamLook(state.settings, streak.team).the} {verb(teamLook(state.settings, streak.team), 'ניצחו', 'ניצחה')} {streak.wins} ברצף. לעשות שאפל?
+          </p>
+          <div className="row-2">
+            <button type="button" className="btn btn-small btn-primary" disabled={shuffling} onClick={() => void shuffle()}>
+              {shuffling ? 'מערבבים…' : 'שאפל'}
+            </button>
+            <button type="button" className="btn btn-small btn-quiet" onClick={noShuffle}>
+              לא עכשיו
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!runner && !suggest && dom !== null && weaken && (
         <div className="notice tip">
           <p>
             {teamLook(state.settings, dom).the} {verb(teamLook(state.settings, dom), 'שולטים', 'שולטת')} ({m.streak[dom] >= 3 ? `${m.streak[dom]} ניצחונות ברצף` : 'רוב המשחקים'}). להחליף את{' '}
@@ -539,6 +592,43 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
               </button>
             ))}
           </div>
+        </Sheet>
+      )}
+
+      {shuffleAsk && (
+        <Sheet title="לעשות שאפל?" onClose={() => setShuffleAsk(false)}>
+          <p className="lead">קבוצות חדשות מכל מי שכאן. המשחקים עד עכשיו נשמרים.</p>
+          <div className="stack">
+            <button type="button" className="btn btn-primary btn-block" onClick={() => void shuffle()}>
+              שאפל
+            </button>
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => setShuffleAsk(false)}>
+              ביטול
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {newTeams && (
+        <Sheet title="קבוצות חדשות" onClose={() => setNewTeams(false)}>
+          <ul className="ev-rosters">
+            {Array.from({ length: k }, (_, t) => (
+              <li key={t}>
+                <span className="dot" style={{ background: teamLook(state.settings, t).color }} /> <strong>{teamLook(state.settings, t).name}:</strong>{' '}
+                {teamMembers(r, t)
+                  .map((id) => byId.get(id)?.name ?? '?')
+                  .join(', ')}
+              </li>
+            ))}
+            {r.subIds.length > 0 && (
+              <li>
+                <strong>מחליפים:</strong> {r.subIds.map((id) => byId.get(id)?.name ?? '?').join(', ')}
+              </li>
+            )}
+          </ul>
+          <button type="button" className="btn btn-primary btn-block" onClick={() => setNewTeams(false)}>
+            יאללה
+          </button>
         </Sheet>
       )}
 

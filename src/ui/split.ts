@@ -3,6 +3,7 @@ import { engineOptions, type AppState, type Player } from '../state/model';
 import type { Action } from '../state/reducer';
 import { keeperOrders, orderBySize } from '../state/split';
 import { finishSplit, prepareSplit } from '../state/splitCore';
+import { avoidAssignment, currentTeams, pickShuffle } from '../state/shuffle';
 import { balance } from '../worker/balancer';
 
 /** Make teams from today's attendance. Returns false if there aren't enough players. */
@@ -12,6 +13,24 @@ export async function splitTeams(state: AppState, dispatch: (a: Action) => void)
   if (!prep) return false;
   const res = await balance(prep.req);
   dispatch({ type: 'setResult', ...finishSplit(state, prep, res.best.assignment, seed), pool: res.pool, now: Date.now() });
+  return true;
+}
+
+/**
+ * "שאפל": tonight's players (teams + bench; whoever left is already out) split again, preferring a
+ * split other than the current teams. Same subs rule and team size as the evening's split.
+ */
+export async function shuffleTeams(state: AppState, dispatch: (a: Action) => void): Promise<boolean> {
+  const r = state.result;
+  if (!r) return false;
+  const seed = randomSeed();
+  const src = { ...state, presentIds: [...r.playerIds, ...r.subIds], teamSize: r.teamSize };
+  const prep = prepareSplit(src, seed);
+  if (!prep) return false;
+  const res = await balance(prep.req);
+  const away = avoidAssignment(prep.onTeams.map((p) => p.id), currentTeams(r));
+  const asg = pickShuffle(res.pool, res.best.assignment, away, createRng(seed + 2));
+  dispatch({ type: 'shuffle', ...finishSplit(src, prep, asg, seed), pool: res.pool, now: Date.now() });
   return true;
 }
 

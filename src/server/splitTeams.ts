@@ -9,6 +9,7 @@ import { parseEvening, withEvening, type EveningRules } from '../state/evening';
 import { applyPlayerVotes, effectiveCanRate, parseRatingMode, parseVoteRows, type MemberRole } from '../state/playerVotes';
 import { finishSplit, prepareSplit, teamTotals, type SplitSource } from '../state/splitCore';
 import { sanitizeDoc } from '../sync/doc';
+import { avoidAssignment, pickShuffle } from '../state/shuffle';
 
 export interface SplitRequest {
   groupId: string;
@@ -21,6 +22,8 @@ export interface SplitRequest {
   shown?: number[][];
   /** Tonight's match rules set by whoever runs the evening (on top of the group's; clamped like the app). */
   rules?: Partial<EveningRules>;
+  /** "שאפל": tonight's current teams (ids per team); the split prefers other teams. */
+  avoid?: string[][];
 }
 
 /** How the group runs matches (the organizer's settings; nothing about players). */
@@ -87,6 +90,11 @@ export function parseSplitRequest(raw: unknown): SplitRequest | null {
     if (!Array.isArray(r.shown) || r.shown.length > 100 || !r.shown.every((a) => Array.isArray(a) && a.length <= 200 && a.every((t) => isInt(t, 0, 7)))) return null;
     out.shown = r.shown as number[][];
   }
+  if (r.avoid !== undefined) {
+    const ok = (t: unknown) => Array.isArray(t) && t.length <= 50 && t.every((x) => typeof x === 'string' && x.length > 0 && x.length <= 100);
+    if (!Array.isArray(r.avoid) || r.avoid.length > 8 || !r.avoid.every(ok)) return null;
+    out.avoid = r.avoid as string[][];
+  }
   if (r.rules !== undefined) {
     const rules = parseEvening(r.rules);
     if (!rules) return null;
@@ -131,6 +139,8 @@ export async function handleSplit(raw: unknown, deps: SplitDeps): Promise<SplitR
     const next = pickReroll(res.pool, shown, createRng(deps.seed?.() ?? randomSeed()));
     if (keyOf(next.assignment) !== keyOf(shown[shown.length - 1])) asg = next.assignment;
     else asg = shown[shown.length - 1];
+  } else if (req.avoid) {
+    asg = pickShuffle(res.pool, asg, avoidAssignment(prep.onTeams.map((p) => p.id), req.avoid), createRng(deps.seed?.() ?? randomSeed()));
   }
   const teams = finishSplit(src, prep, asg, seed);
   const k = teams.sizes.length;

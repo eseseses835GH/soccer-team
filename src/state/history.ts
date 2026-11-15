@@ -63,15 +63,25 @@ export interface EveningRecord {
 
 // ---------- building a record ----------
 
-/** Stable id for the evening of a split: archiving the same session twice merges instead of duplicating. */
-export function eveningId(result: Pick<GameResult, 'createdAt' | 'playerIds' | 'subIds'>): string {
+/**
+ * Stable id for the evening of a split: archiving the same session twice merges instead of duplicating.
+ * Teams made by a shuffle carry the night's first id (`night`): their records are `<night>~<own>`.
+ */
+export function eveningId(result: Pick<GameResult, 'createdAt' | 'playerIds' | 'subIds' | 'night'>): string {
   let h = 2166136261;
   for (const ch of [...result.playerIds, ...result.subIds].sort().join('|')) {
     h ^= ch.charCodeAt(0);
     h = Math.imul(h, 16777619);
   }
-  return `ev-${Math.max(0, Math.round(result.createdAt)).toString(36)}-${(h >>> 0).toString(36)}`;
+  const own = `ev-${Math.max(0, Math.round(result.createdAt)).toString(36)}-${(h >>> 0).toString(36)}`;
+  return result.night ? `${result.night}~${own}` : own;
 }
+
+/** The night a record belongs to: records split by a shuffle share it (one evening in the stats). */
+export const nightOf = (id: string): string => id.split('~')[0];
+
+/** A record of teams made by a shuffle (not the night's first teams). */
+export const afterShuffle = (id: string): boolean => id.includes('~');
 
 /** Team members in keeper order (as on the teams and match screens). */
 export function teamMembers(r: GameResult, t: number): string[] {
@@ -437,6 +447,8 @@ export function allTimeStats(history: EveningRecord[], roster: { id: string; nam
   const byId = new Map(roster.map((p) => [p.id, p]));
   const byName = new Map(roster.map((p) => [p.name.trim(), p]));
   const rows = new Map<string, AllTimeRow>();
+  /** Nights per player: the parts of a night split by a shuffle count as one evening. */
+  const nights = new Map<AllTimeRow, Set<string>>();
   const row = (rec: EveningRecord, id: string) => {
     const snap = nameIn(rec, id);
     const cur = byId.get(id) ?? byName.get(snap.trim());
@@ -449,9 +461,11 @@ export function allTimeStats(history: EveningRecord[], roster: { id: string; nam
   let goals = 0;
   let pens = 0;
   for (const rec of history) {
-    const seen = new Set<AllTimeRow>();
-    for (const p of rec.players) seen.add(row(rec, p.id));
-    seen.forEach((r) => r.evenings++);
+    const night = nightOf(rec.id);
+    for (const p of rec.players) {
+      const r = row(rec, p.id);
+      nights.set(r, (nights.get(r) ?? new Set()).add(night));
+    }
     for (const mt of rec.matches) {
       matches++;
       goals += mt.goalsA + mt.goalsB;
@@ -468,7 +482,8 @@ export function allTimeStats(history: EveningRecord[], roster: { id: string; nam
       for (const g of mt.goals) if (g.by && rec.players.some((p) => p.id === g.by)) row(rec, g.by).goals++;
     }
   }
-  return { evenings: history.length, matches, goals, pens, rows: [...rows.values()] };
+  nights.forEach((set, r) => (r.evenings = set.size));
+  return { evenings: new Set(history.map((h) => nightOf(h.id))).size, matches, goals, pens, rows: [...rows.values()] };
 }
 
 /** Win percentage, or null below the minimum number of matches. */
