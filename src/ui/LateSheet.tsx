@@ -12,7 +12,7 @@ import { usePlayerGroup } from '../sync/PlayerGroupProvider';
 import { cleanName, sameName } from '../sync/playerGroup';
 import { newGuest, pickOrder } from '../state/guests';
 import { useUi } from './App';
-import { CardBadges, LevelPicker, Sheet, Toggle } from './components';
+import { CardBadges, LevelPicker, Segmented, Sheet } from './components';
 import { NAME_TAKEN } from './GuestSheet';
 import { usePlayerGate } from './useGate';
 
@@ -183,7 +183,16 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
         {taken && <p className="field-error">כבר יש שחקן בשם הזה, בחרו אותו מהרשימה</p>}
         <span className="label">רמה</span>
         <LevelPicker value={level} onChange={setLevel} />
-        <Toggle label="אורח" hint="לא קבוע" checked={guest} onChange={setGuest} />
+        <Segmented
+          label="קבוע או אורח"
+          value={guest ? 'guest' : 'regular'}
+          onChange={(v) => setGuest(v === 'guest')}
+          options={[
+            { value: 'regular', label: 'קבוע בקבוצה' },
+            { value: 'guest', label: 'אורח להיום' },
+          ]}
+        />
+        <p className="hint small">{guest ? 'אחרי הערב יעבור ל״מזדמנים״, בתחתית רשימת השחקנים' : 'יתווסף לרשימת השחקנים של הקבוצה'}</p>
         <button type="submit" className="btn btn-primary btn-block" disabled={!name.trim() || taken}>
           המשך
         </button>
