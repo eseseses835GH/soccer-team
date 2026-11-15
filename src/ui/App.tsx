@@ -91,6 +91,8 @@ export function App() {
   const groups = useGroups();
   const sync = useSync();
   const [groupsOpen, setGroupsOpen] = useState(false);
+  // The open cloud group is gone from the server: ask once per group what to do with the copy here.
+  const [goneSeen, setGoneSeen] = useState<string | null>(null);
   const [route, setRoute] = useState<Route>(() => initialRoute(!!state.result, !!state.match));
   const [param, setParam] = useState(() => parseHash().param);
   const [toast, setToast] = useState<string | null>(null);
@@ -320,6 +322,19 @@ export function App() {
             </button>
             <button type="button" className="btn btn-quiet btn-block" onClick={() => setIncoming(null)}>
               ביטול
+            </button>
+          </div>
+        </Sheet>
+      )}
+      {sync.status === 'gone' && groups.current.synced && goneSeen !== groups.current.id && (
+        <Sheet title="הקבוצה נמחקה" onClose={() => setGoneSeen(groups.current.id)}>
+          <p className="lead">״{groups.current.name}״ נמחקה, או שכבר אינך חבר בה.</p>
+          <div className="stack">
+            <button type="button" className="btn btn-primary btn-block" onClick={() => sync.resolveGone(false)}>
+              הסרה מהטלפון
+            </button>
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => sync.resolveGone(true)}>
+              להשאיר בטלפון
             </button>
           </div>
         </Sheet>

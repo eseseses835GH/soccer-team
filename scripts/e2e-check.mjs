@@ -272,6 +272,25 @@ const backupFile = await download.path();
   const restored = await other.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
   assert(restored.history.length === 2, `the file brings the history: ${restored.history.length}`);
   assert(restored.constraints.apart.length === 1, `the file keeps the rules between players: ${JSON.stringify(restored.constraints)}`);
+  // The group is deleted on the server: one sheet asks; "להשאיר בטלפון" keeps it here as a local group, never re-uploaded.
+  {
+    const gid = await other.evaluate(() => JSON.parse(localStorage.getItem('kochot:groups')).currentId);
+    for (let i = 0; i < 50 && !ocloud.groups.has(gid); i++) await other.waitForTimeout(100);
+    assert(ocloud.groups.has(gid), 'gone: the group was uploaded first');
+    ocloud.groups.delete(gid);
+    const creates = ocloud.calls.filter((c) => c.rpc === 'create_group').length;
+    await other.reload();
+    const gone = other.getByRole('dialog', { name: 'הקבוצה נמחקה' });
+    await gone.waitFor({ timeout: 8000 }).catch(() => errors.push('gone: no "the group was deleted" sheet'));
+    await gone.getByRole('button', { name: 'להשאיר בטלפון' }).click();
+    const meta = await other.evaluate(() => { const i = JSON.parse(localStorage.getItem('kochot:groups')); return i.groups.find((g) => g.id === i.currentId); });
+    assert(meta.synced === false && meta.keepLocal === true, `gone: kept as a local group ${JSON.stringify(meta)}`);
+    assert((await other.locator('.roster li').count()) === 23, 'gone: the players stay on the phone');
+    await other.reload();
+    await other.waitForTimeout(1500);
+    assert(!(await other.getByRole('dialog', { name: 'הקבוצה נמחקה' }).isVisible()), 'gone: asked only once');
+    assert(ocloud.calls.filter((c) => c.rpc === 'create_group').length === creates && !ocloud.groups.has(gid), 'gone: a kept group is not uploaded again');
+  }
   await other.context().close();
   // An old link (deflate-raw + base64url after "#import=z.") still imports.
   const { deflateRawSync } = await import('node:zlib');

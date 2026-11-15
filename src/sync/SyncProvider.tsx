@@ -63,6 +63,8 @@ interface SyncApi {
    * everyone. A plain leave by the last organizer with players fails ('successor'). False = failed.
    */
   leaveCurrent(how?: { to: string } | 'delete'): Promise<boolean>;
+  /** The open cloud group is gone from the server: remove it from this phone, or keep it here as a local group. */
+  resolveGone(keep: boolean): void;
   /** Handle an opened `#join=<token>` link. */
   startJoin(token: string): void;
   /** Toasts for the UI ({n} changes on every new message). */
@@ -465,7 +467,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           saveMeta(localKV, gid, { ...EMPTY_META, baseName: existing.name });
         }
         await claimSelf(api, gid); // v21: I'm in my own group's roster (the next sync pulls him)
-        g.setMeta(gid, { synced: true, upload: undefined });
+        g.setMeta(gid, { synced: true, upload: undefined, keepLocal: undefined });
         if (!silent) say('הקבוצה מסונכרנת. עכשיו אפשר להזמין מארגנים');
       } finally {
         uploading.current.delete(gid);
@@ -587,6 +589,21 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           g.setMeta(gid, { synced: false });
         }
         return true;
+      },
+      resolveGone(keep) {
+        const g = groupsRef.current;
+        const { gid } = g.latest();
+        const meta = g.latestIndex().groups.find((x) => x.id === gid);
+        if (!meta?.synced) return;
+        if (isPlayerGroup(meta)) localKV.remove(publicKey(gid));
+        if (keep && !isPlayerGroup(meta)) {
+          saveMeta(localKV, gid, EMPTY_META);
+          g.setMeta(gid, { synced: false, keepLocal: true });
+        } else {
+          if (g.latestIndex().groups.length === 1) g.create('הקבוצה שלי');
+          g.remove(gid);
+        }
+        setStatus('local');
       },
       startJoin(token) {
         if (!syncConfigured) return say('ההצטרפות לא זמינה בגרסה הזו');

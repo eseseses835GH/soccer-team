@@ -100,6 +100,9 @@ describe('local group goes to the cloud after login', () => {
     expect(shouldAutoUpload({ loggedIn: true, meta: meta(), app, pendingJoin: false })).toBe(true);
     expect(shouldAutoUpload({ loggedIn: false, meta: meta(), app, pendingJoin: false })).toBe(false);
   });
+  it('never a group kept on the phone after it was gone from the server', () => {
+    expect(shouldAutoUpload({ loggedIn: true, meta: { ...meta(), keepLocal: true }, app, pendingJoin: false })).toBe(false);
+  });
   it('not an empty or sample-only group, unless it was created logged in', () => {
     expect(shouldAutoUpload({ loggedIn: true, meta: meta(), app: { players: [] }, pendingJoin: false })).toBe(false);
     expect(shouldAutoUpload({ loggedIn: true, meta: meta(), app: { players: sampleSquad() }, pendingJoin: false })).toBe(false);

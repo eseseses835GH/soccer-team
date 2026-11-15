@@ -41,7 +41,7 @@ export function gateNewGroup(loggedOut: boolean): GateResult {
  */
 export function shouldAutoUpload(o: { loggedIn: boolean; meta: GroupMeta | undefined; app: { players: Pick<Player, 'id'>[] }; pendingJoin: boolean }): boolean {
   const m = o.meta;
-  if (!o.loggedIn || !m || m.synced || m.role === 'player' || o.pendingJoin) return false;
+  if (!o.loggedIn || !m || m.synced || m.role === 'player' || m.keepLocal || o.pendingJoin) return false;
   return !!m.upload || ownCount(o.app.players) > 0;
 }
 
