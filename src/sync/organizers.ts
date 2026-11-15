@@ -80,3 +80,17 @@ export const JOIN_HASH = '#join=';
 export function inviteUrl(token: string, base: string): string {
   return `${base}${JOIN_HASH}${token}`;
 }
+
+/**
+ * What "leave" means for me, from group_members_list (DECISIONS → "Leaving as the last organizer"):
+ * 'leave' = a player, or other organizers stay; 'last' = the last organizer and no players (the
+ * group goes); 'handoff' = the last organizer with players: pick one of them (or delete for everyone).
+ */
+export type LeavePlan<M> = { kind: 'leave' } | { kind: 'last' } | { kind: 'handoff'; players: M[] };
+
+export function leavePlan<M extends { role: string; isMe: boolean; name: string }>(members: M[]): LeavePlan<M> {
+  const me = members.find((m) => m.isMe);
+  if (!me || me.role !== 'organizer' || members.some((m) => !m.isMe && m.role === 'organizer')) return { kind: 'leave' };
+  const players = members.filter((m) => !m.isMe && m.role === 'player').sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  return players.length ? { kind: 'handoff', players } : { kind: 'last' };
+}

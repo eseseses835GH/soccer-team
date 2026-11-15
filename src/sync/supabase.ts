@@ -73,8 +73,9 @@ export class SyncError extends Error {
      * conflict = live_set lost: someone else runs the evening, or the row moved on (stale rev).
      * limit = one of the server's caps (54000; the message names it, see sync/gate.ts limitText).
      * name = join_as_new_player: that name is already in the roster (v19).
+     * successor = leave_group: I'm the last organizer and players remain (pick one, or delete the group).
      */
-    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'taken' | 'conflict' | 'limit' | 'name' | 'other',
+    readonly code: 'offline' | 'auth' | 'denied' | 'invalid' | 'taken' | 'conflict' | 'limit' | 'name' | 'successor' | 'other',
   ) {
     super(message);
   }
@@ -98,7 +99,12 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
   createInvite(groupId: string): Promise<string>;
   /** `role`: what the caller is in the group now ('player' joined with the player link). */
   joinGroup(token: string): Promise<{ id: string; name: string; role: MemberRole }>;
+  /** Throws SyncError 'successor' when I'm the last organizer and players remain. */
   leaveGroup(groupId: string): Promise<void>;
+  /** Hand the group to a player member (he becomes organizer) and leave. */
+  leaveGroupTo(groupId: string, successor: string): Promise<void>;
+  /** Organizers: delete the group for everyone. */
+  deleteGroup(groupId: string): Promise<void>;
   listOrganizers(groupId: string): Promise<Organizer[]>;
   listInvites(groupId: string): Promise<Invite[]>;
   revokeInvite(token: string): Promise<void>;
@@ -139,6 +145,15 @@ export function remoteApi(sb: SupabaseClient): RemoteApi & {
     },
     async leaveGroup(groupId) {
       const { error } = await sb.rpc('leave_group', { p_group_id: groupId });
+      if (error && /pick_successor/.test(error.message ?? '')) throw new SyncError(error.message, 'successor');
+      if (error) fail(error);
+    },
+    async leaveGroupTo(groupId, successor) {
+      const { error } = await sb.rpc('leave_group_to', { p_group_id: groupId, p_successor: successor });
+      if (error) fail(error);
+    },
+    async deleteGroup(groupId) {
+      const { error } = await sb.rpc('delete_group', { p_group_id: groupId });
       if (error) fail(error);
     },
     async listOrganizers(groupId) {

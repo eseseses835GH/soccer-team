@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { GID, LEVELS, ME, ORG, ORG_GID, playerContext, SB_URL } from './player-mock.mjs';
 import { liveServer, organizerRoutes, ORG_ME, groupState, playOnElsewhere, signInOrganizer } from './organizer-mock.mjs';
-import { cloudRoutes, cloudServer, endEveningOnServer, joinOnServer, loginInSheet } from './cloud-mock.mjs';
+import { CLOUD_ME, cloudRoutes, cloudServer, endEveningOnServer, joinOnServer, loginInSheet } from './cloud-mock.mjs';
 
 const base = process.env.BASE_URL ?? 'http://localhost:4173/';
 const exe = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -2344,6 +2344,53 @@ if (SB_URL) {
   assert(Object.values(db.votes).includes(7), 'rate: vote sent');
   await vctx.close();
   console.log('rate: back + all players');
+}
+
+// Leaving as the last organizer: players remain, so pick who takes over (leave_group_to), or delete
+// the group for everyone (delete_group). Never a plain leave_group.
+{
+  const hctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const hs = cloudServer();
+  await cloudRoutes(hctx, hs);
+  const hp = await hctx.newPage();
+  hp.on('pageerror', (e) => errors.push(`handoff: ${e.message}`));
+  const idx = () => hp.evaluate(() => JSON.parse(localStorage.getItem('kochot:groups')));
+  const row = (user_id, display_name, role, is_me = false) => ({ user_id, display_name, role, player_id: null, can_rate: null, joined_at: '2026-10-21T10:00:00Z', is_me });
+  const newCloudGroup = async (name) => {
+    await hp.getByRole('button', { name: /החלפת קבוצה/ }).click();
+    await hp.getByRole('button', { name: /קבוצה חדשה/ }).click();
+    if (await hp.getByRole('dialog', { name: 'התחברות' }).count()) await loginInSheet(hp);
+    await hp.getByLabel('שם הקבוצה').fill(name);
+    await hp.getByRole('button', { name: 'יצירה' }).click();
+    await hp.waitForFunction((n) => JSON.parse(localStorage.getItem('kochot:groups')).groups.some((g) => g.name === n && g.synced), name, { timeout: 5000 }).catch(() => {});
+    const gid = (await idx()).currentId;
+    hs.members.set(gid, [row(CLOUD_ME, 'test', 'organizer', true), row('u-yossi', 'יוסי', 'player'), row('u-dani', 'דני', 'player')]);
+    await hp.getByRole('button', { name: /החלפת קבוצה/ }).click();
+    await hp.getByRole('button', { name: 'יציאה', exact: true }).click();
+    return gid;
+  };
+  await hp.goto(base);
+
+  const g1 = await newCloudGroup('בבסיס');
+  const pickSheet = hp.getByRole('dialog', { name: 'מי יהיה המארגן?' });
+  await pickSheet.getByRole('button', { name: 'יוסי' }).click();
+  await pickSheet.getByRole('button', { name: 'יציאה מהקבוצה' }).click();
+  await hp.getByRole('dialog', { name: 'הקבוצות שלי' }).waitFor({ timeout: 5000 }).catch(() => errors.push('handoff: still on the pick sheet'));
+  const to = hs.calls.filter((c) => c.rpc === 'leave_group_to');
+  assert(to.length === 1 && to[0].body.p_group_id === g1 && to[0].body.p_successor === 'u-yossi', `handoff: leave_group_to(${JSON.stringify(to)})`);
+  assert(!(await idx()).groups.some((g) => g.id === g1), 'handoff: the group is gone from this phone');
+  await hp.keyboard.press('Escape');
+
+  const g2 = await newCloudGroup('משרד');
+  await hp.getByRole('dialog', { name: 'מי יהיה המארגן?' }).getByRole('button', { name: 'למחוק את הקבוצה לכולם' }).click();
+  await hp.getByRole('dialog', { name: 'למחוק את הקבוצה לכולם?' }).getByRole('button', { name: 'למחוק את הקבוצה לכולם' }).click();
+  await hp.getByRole('dialog', { name: 'הקבוצות שלי' }).waitFor({ timeout: 5000 }).catch(() => errors.push('handoff: still on the delete sheet'));
+  const del = hs.calls.filter((c) => c.rpc === 'delete_group');
+  assert(del.length === 1 && del[0].body.p_group_id === g2, `handoff: delete_group(${JSON.stringify(del)})`);
+  assert(!(await idx()).groups.some((g) => g.id === g2), 'handoff: the deleted group is gone from this phone');
+  assert(!hs.calls.some((c) => c.rpc === 'leave_group'), 'handoff: a plain leave_group was sent');
+  await hctx.close();
+  console.log('handoff: last organizer picks a successor; delete for everyone');
 }
 
 console.log(`split 22 players in ${dt}ms`);

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MAX_GROUP_NAME } from '../state/groups';
-import { useGroups } from '../state/store';
+import { useGroups, useStore } from '../state/store';
 import { STATUS_TEXT, useSync } from '../sync/SyncProvider';
 import { useUi } from './App';
 import { Sheet } from './components';
@@ -9,6 +9,9 @@ import { InviteFriends } from './InviteFriends';
 import { OrganizersSheet } from './OrganizersSheet';
 import { isPlayerGroup } from '../sync/playerGroup';
 import { gateNewGroup } from '../sync/gate';
+import { leavePlan, type LeavePlan } from '../sync/organizers';
+import { playersApi, type Member } from '../sync/players';
+import { SyncError } from '../sync/supabase';
 
 type Mode = 'list' | 'new' | 'rename' | 'remove' | 'organizers';
 
@@ -67,6 +70,10 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
     setMode('list');
   };
 
+  if (mode === 'remove' && cur.synced && !player) {
+    return <LeaveCloudGroup onBack={() => setMode('list')} onClose={onClose} />;
+  }
+
   if (mode === 'organizers' && cur.synced && sync.email) {
     return <OrganizersSheet onBack={() => setMode('list')} onClose={onClose} />;
   }
@@ -102,8 +109,6 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
         <p className="lead">
           {player
             ? `״${cur.name}״ תוסר מהטלפון הזה.`
-            : cur.synced
-            ? `״${cur.name}״ תוסר מהטלפון הזה, והמארגנים האחרים ימשיכו כרגיל. אם אתם המארגנים האחרונים, הקבוצה תימחק גם מהשרת.`
             : `כל השחקנים וההגדרות של ״${cur.name}״ יימחקו מהטלפון הזה. אי אפשר לבטל.`}
         </p>
         <div className="stack">
@@ -180,6 +185,147 @@ export function GroupsSheet({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         {only && !cur.synced && <p className="hint small">זו הקבוצה היחידה בטלפון, אז אי אפשר למחוק אותה.</p>}
+      </div>
+    </Sheet>
+  );
+}
+
+type Load = 'loading' | 'offline' | 'error' | 'ok';
+
+/**
+ * Leaving a cloud group I organize (DECISIONS → "Leaving as the last organizer"): who stays is read
+ * from the server; the last organizer with players picks one of them to take over, or deletes the
+ * group for everyone.
+ */
+function LeaveCloudGroup({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
+  const groups = useGroups();
+  const sync = useSync();
+  const { notify } = useUi();
+  const roster = useStore().state.players;
+  const cur = groups.current;
+  const [load, setLoad] = useState<Load>('loading');
+  const [plan, setPlan] = useState<LeavePlan<Member>>({ kind: 'leave' });
+  const [pick, setPick] = useState<Member | null>(null);
+  const [del, setDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const client = sync.client;
+  const refresh = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return setLoad('offline');
+    try {
+      setPlan(leavePlan(await playersApi(await client()).listMembers(cur.id)));
+      setLoad('ok');
+    } catch (e) {
+      setLoad(e instanceof SyncError && e.code === 'offline' ? 'offline' : 'error');
+    }
+  }, [client, cur.id]);
+
+  useEffect(() => {
+    void refresh();
+    const onOnline = () => void refresh();
+    const onOffline = () => setLoad('offline');
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [refresh]);
+
+  const go = async (how?: { to: string } | 'delete') => {
+    setBusy(true);
+    const ok = await sync.leaveCurrent(how);
+    setBusy(false);
+    if (!ok) {
+      setPick(null);
+      setDel(false);
+      return void refresh();
+    }
+    notify(how === 'delete' ? 'הקבוצה נמחקה' : 'יצאתם מהקבוצה');
+    onBack();
+  };
+
+  const cancel = (
+    <button type="button" className="btn btn-quiet btn-block" onClick={pick || del ? () => (setPick(null), setDel(false)) : onBack}>
+      ביטול
+    </button>
+  );
+
+  if (del) {
+    return (
+      <Sheet title="למחוק את הקבוצה לכולם?" onClose={onClose}>
+        <p className="lead">השחקנים, הערבים והדירוגים של ״{cur.name}״ יימחקו לכל מי שבקבוצה. אי אפשר לבטל.</p>
+        <div className="stack">
+          <button type="button" className="btn btn-danger btn-block" disabled={busy} onClick={() => go('delete')}>
+            למחוק את הקבוצה לכולם
+          </button>
+          {cancel}
+        </div>
+      </Sheet>
+    );
+  }
+
+  if (pick) {
+    return (
+      <Sheet title="מי יהיה המארגן?" onClose={onClose}>
+        <p className="lead">
+          <bdi>{pick.name}</bdi> ינהל את ״{cur.name}״, ואתם תצאו מהקבוצה.
+        </p>
+        <div className="stack">
+          <button type="button" className="btn btn-danger btn-block" disabled={busy} onClick={() => go({ to: pick.userId })}>
+            יציאה מהקבוצה
+          </button>
+          {cancel}
+        </div>
+      </Sheet>
+    );
+  }
+
+  if (load === 'ok' && plan.kind === 'handoff') {
+    const plays = (m: Member) => (m.playerId && roster.find((p) => p.id === m.playerId)?.name) || '';
+    return (
+      <Sheet title="מי יהיה המארגן?" onClose={onClose}>
+        <p className="lead">אתם המארגנים האחרונים. בחרו שחקן שימשיך לנהל את הקבוצה.</p>
+        <ul className="group-list">
+          {plan.players.map((m) => (
+            <li key={m.userId}>
+              <button type="button" onClick={() => setPick(m)}>
+                <span className="group-text">
+                  <strong>
+                    <bdi>{m.name}</bdi>
+                  </strong>
+                  {plays(m) && plays(m) !== m.name && <small>{plays(m)}</small>}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="stack">
+          {cancel}
+          <button type="button" className="text-btn danger" onClick={() => setDel(true)}>
+            למחוק את הקבוצה לכולם
+          </button>
+        </div>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet title="יציאה מהקבוצה" onClose={onClose}>
+      <p className="lead">
+        {load === 'offline'
+          ? 'צריך אינטרנט כדי לצאת מהקבוצה.'
+          : load === 'ok' && plan.kind === 'last'
+          ? `אתם המארגנים האחרונים ואין שחקנים בקבוצה, אז ״${cur.name}״ תימחק גם מהשרת.`
+          : load === 'ok'
+          ? `״${cur.name}״ תוסר מהטלפון הזה, והמארגנים האחרים ימשיכו כרגיל.`
+          : `״${cur.name}״ תוסר מהטלפון הזה.`}
+      </p>
+      <div className="stack">
+        <button type="button" className="btn btn-danger btn-block" disabled={busy || load === 'loading' || load === 'offline'} onClick={() => go()}>
+          יציאה מהקבוצה
+        </button>
+        {cancel}
       </div>
     </Sheet>
   );

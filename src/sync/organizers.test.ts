@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
-import { creatorName, expiresIn, inviteUrl, parseInvites, parseOrganizers, shortDate } from './organizers';
+import { creatorName, expiresIn, inviteUrl, leavePlan, parseInvites, parseOrganizers, shortDate } from './organizers';
 import { SyncError, remoteApi } from './supabase';
 
 const NOW = Date.parse('2026-10-20T12:00:00Z');
@@ -119,5 +119,31 @@ describe('remoteApi: organizers and invites (mocked network)', () => {
     await expect(remoteApi(denied.sb).revokeInvite('tok')).rejects.toMatchObject({ code: 'denied' });
     const offline = fakeClient({ error: { message: 'TypeError: Failed to fetch' } });
     await expect(remoteApi(offline.sb).listOrganizers('g')).rejects.toBeInstanceOf(SyncError);
+  });
+  it('leave, hand over, delete: the right RPCs and the successor error', async () => {
+    const a = fakeClient({});
+    await remoteApi(a.sb).leaveGroupTo('g', 'u2');
+    await remoteApi(a.sb).deleteGroup('g');
+    expect(a.calls.rpc).toEqual([
+      ['leave_group_to', { p_group_id: 'g', p_successor: 'u2' }],
+      ['delete_group', { p_group_id: 'g' }],
+    ]);
+    const last = fakeClient({ error: { message: 'pick_successor', code: 'P0001' } });
+    await expect(remoteApi(last.sb).leaveGroup('g')).rejects.toMatchObject({ code: 'successor' });
+  });
+});
+
+describe('leavePlan', () => {
+  const m = (name: string, role: string, isMe = false) => ({ name, role, isMe });
+  it('a player, or another organizer stays: plain leave', () => {
+    expect(leavePlan([m('me', 'player', true), m('o', 'organizer')])).toEqual({ kind: 'leave' });
+    expect(leavePlan([m('me', 'organizer', true), m('o', 'organizer'), m('p', 'player')])).toEqual({ kind: 'leave' });
+  });
+  it('the last organizer alone: the group goes', () => {
+    expect(leavePlan([m('me', 'organizer', true)])).toEqual({ kind: 'last' });
+  });
+  it('the last organizer with players: pick one of them, sorted by name', () => {
+    const plan = leavePlan([m('me', 'organizer', true), m('יוסי', 'player'), m('דני', 'player')]);
+    expect(plan.kind === 'handoff' && plan.players.map((p) => p.name)).toEqual(['דני', 'יוסי']);
   });
 });

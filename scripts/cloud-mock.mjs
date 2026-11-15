@@ -10,9 +10,10 @@ export const CLOUD_ME = '00000000-0000-4000-8000-0000000000dd';
  * `claims` = my claim per group (gid → player id), also answered by group_members_list when `selfName` is set;
  * `auto` = the player claim_self made for me (gid → id); `invites` = token → { gid, role } for join_group;
  * `roles` = my role per joined group (group_public_get answers for those).
+ * `members` = group_members_list rows per group (gid → rows), when a block needs other members.
  */
 export function cloudServer() {
-  return { groups: new Map(), calls: [], logins: 0, beforePush: null, mine: [], selfName: null, claims: new Map(), auto: new Map(), invites: {}, roles: new Map() };
+  return { groups: new Map(), calls: [], logins: 0, beforePush: null, mine: [], selfName: null, claims: new Map(), auto: new Map(), invites: {}, roles: new Map(), members: new Map() };
 }
 
 const ATTRS5 = Object.fromEntries(['overall', 'stamina', 'passing', 'dribbling', 'shooting', 'defense', 'teamwork', 'leadership'].map((k) => [k, 5]));
@@ -150,6 +151,7 @@ export async function cloudRoutes(ctxOrPage, s) {
       }
       return json(removed);
     }
+    if (rpc === 'group_members_list' && s.members.has(body.p_group_id)) return json(s.members.get(body.p_group_id));
     if (rpc === 'group_members_list' && s.selfName)
       return json([{ user_id: CLOUD_ME, display_name: s.selfName, role: 'organizer', player_id: s.claims.get(body.p_group_id) ?? null, can_rate: false, joined_at: '2026-10-21T10:00:00Z', is_me: true }]);
     if (rpc === 'live_get' || rpc === 'group_votes') return json([]);

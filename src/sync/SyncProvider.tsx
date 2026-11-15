@@ -58,8 +58,11 @@ interface SyncApi {
   createGroup(name: string): string;
   /** An invite link for the open cloud group. */
   inviteLink(): Promise<string | null>;
-  /** Leave the open cloud group (the last organizer deletes it). Returns false if it failed. */
-  leaveCurrent(): Promise<boolean>;
+  /**
+   * Leave the open cloud group. `to`: hand it to that player member first; 'delete': delete it for
+   * everyone. A plain leave by the last organizer with players fails ('successor'). False = failed.
+   */
+  leaveCurrent(how?: { to: string } | 'delete'): Promise<boolean>;
   /** Handle an opened `#join=<token>` link. */
   startJoin(token: string): void;
   /** Toasts for the UI ({n} changes on every new message). */
@@ -553,7 +556,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           return null;
         }
       },
-      async leaveCurrent() {
+      async leaveCurrent(how) {
         const c = clientRef.current;
         const g = groupsRef.current;
         const { gid } = g.latest();
@@ -562,9 +565,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           return false;
         }
         try {
-          await remoteApi(c).leaveGroup(gid);
+          const api = remoteApi(c);
+          if (how === 'delete') await api.deleteGroup(gid);
+          else if (how) await api.leaveGroupTo(gid, how.to);
+          else await api.leaveGroup(gid);
         } catch (e) {
-          say(errCode(e) === 'offline' ? 'צריך אינטרנט כדי לצאת מהקבוצה' : 'היציאה לא הצליחה');
+          const code = errCode(e);
+          say(code === 'offline' ? 'צריך אינטרנט כדי לצאת מהקבוצה' : code === 'successor' ? 'יש שחקנים בקבוצה. בחרו מי ימשיך לנהל אותה.' : 'זה לא הצליח, נסו שוב');
           return false;
         }
         const meta = g.latestIndex().groups.find((x) => x.id === gid);
