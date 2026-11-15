@@ -262,6 +262,8 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
         name: 'כדורגל בשכונה',
         players: db.roster,
         history: db.history,
+        // public_settings: the group's match rules only (private.public_doc's whitelist).
+        settings: Object.fromEntries(Object.entries(SERVER_DOC.settings).filter(([k]) => ['matchMinutes', 'matchNoLimit', 'drawExtraMinutes', 'gkMode', 'gkSwitchGoals'].includes(k))),
         claimed: db.claimed,
         me: { role: 'player', playerId: db.me, canRate: db.canRate },
         updatedAt: new Date(now).toISOString(),

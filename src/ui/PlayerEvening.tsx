@@ -17,6 +17,8 @@ import { SyncError } from '../sync/supabase';
 import { checkInList } from '../state/guests';
 import { GuestSheet } from './GuestSheet';
 import { GUEST_ERROR } from './LateSheet';
+import { withEvening, type EveningRules } from '../state/evening';
+import { EveningSheet } from './EveningSheet';
 
 const pickKey = (gid: string) => `kochot:pick:${gid}`;
 
@@ -33,6 +35,9 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
   const [busy, setBusy] = useState(false);
   const [teams, setTeams] = useState<{ reply: SplitReply; shown: number[][] } | null>(null);
   const [guest, setGuest] = useState(false);
+  // Tonight's match rules he changed (only those go to the server, on top of the group's).
+  const [tonight, setTonight] = useState<Partial<EveningRules>>({});
+  const [rulesOpen, setRulesOpen] = useState(false);
   const keep = (ids: string[], s: number) => saveJSON(pickKey(gid), { ids, size: s });
 
   const set = new Set(present);
@@ -59,6 +64,7 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
         groupId: gid,
         present,
         teamSize: size,
+        ...(Object.keys(tonight).length ? { rules: tonight } : {}),
         ...(again ? { seed: again.reply.seed, shown: again.shown } : {}),
       });
       if (again && keyOf(reply.assignment) === keyOf(again.reply.assignment)) notify('אין חלוקה אחרת מאוזנת באותה מידה');
@@ -73,7 +79,8 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
 
   if (teams) {
     const now = Date.now();
-    const settings = withRules(state.settings, teams.reply);
+    // His choices again on top of the reply's rules (the same values from an up-to-date function).
+    const settings = withEvening(withRules(state.settings, teams.reply), tonight);
     const result = resultFromSplit(teams.reply, now);
     const data = liveFromState({ result, match: null, players: state.players, settings, now });
     const start = () => {
@@ -129,6 +136,13 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
           ))}
         </div>
       </div>
+
+      <p className="list-foot">
+        <button type="button" className="text-btn inline" onClick={() => setRulesOpen(true)}>
+          הגדרות הערב
+        </button>
+      </p>
+      {rulesOpen && <EveningSheet value={withEvening(state.settings, tonight)} onChange={(p) => setTonight((t) => ({ ...t, ...p }))} onClose={() => setRulesOpen(false)} />}
 
       <div className="quick-row">
         <button type="button" className="text-btn" onClick={() => pick(listed.map((p) => p.id))}>

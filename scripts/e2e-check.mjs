@@ -2188,6 +2188,58 @@ if (SB_URL) {
   await octx.close();
 }
 
+// 23b. Runner evening settings: a player who runs the evening sets tonight's rules himself. The sheet
+// starts from the group's (public copy: 7 min) → 10 min, extra time 3, 4 a side → the split request
+// carries them, the server's reply and the published snapshot use them, the clock shows 10:00 →
+// "הגדרות הערב" on the match screen → 12 min reaches the snapshot. Nothing goes to groups.data.
+if (SB_URL) {
+  const { ctx: sctx, page: sp, db } = await playerContext(browser, { me: 'p3', canRate: false, live: false });
+  sp.on('pageerror', (e) => errors.push(`runner settings: ${e.message}`));
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 50 && !fn(); i++) await sp.waitForTimeout(100);
+    assert(fn(), `runner settings: ${what}`);
+  };
+  await sp.goto(base);
+  await sp.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  await sp.getByRole('button', { name: 'ערב חדש' }).click();
+  await sp.getByRole('button', { name: 'כולם' }).click();
+  await sp.getByRole('radio', { name: '4' }).click();
+  await sp.getByRole('button', { name: 'הגדרות הערב' }).click();
+  const sheet = sp.getByRole('dialog');
+  const minutes = sheet.getByRole('group', { name: 'אורך משחק בדקות' });
+  assert((await minutes.textContent()).includes('7'), `runner settings: starts from the group's 7 min (${await minutes.textContent()})`);
+  for (let i = 0; i < 3; i++) await minutes.getByRole('button', { name: 'יותר' }).click();
+  await sheet.getByRole('radiogroup', { name: 'תוספת זמן בתיקו' }).getByRole('radio', { name: '3' }).click();
+  await sheet.getByRole('button', { name: 'אישור' }).click();
+  await sp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await sp.locator('.team-grid .team').first().waitFor({ timeout: 5000 }).catch(() => errors.push('runner settings: no teams'));
+  const req = db.splits[0]?.req;
+  assert(req?.teamSize === 4 && req.rules?.matchMinutes === 10 && req.rules?.drawExtraMinutes === 3 && Object.keys(req.rules).length === 2, `runner settings: request ${JSON.stringify(req)}`);
+  const reply = db.splits[0].body;
+  assert(reply.teamSize === 4 && reply.rules.matchMinutes === 10 && reply.rules.drawExtraMinutes === 3, `runner settings: reply ${JSON.stringify(reply.rules)} ${reply.teamSize}`);
+  await sp.getByRole('button', { name: 'הגרלה מחדש' }).click();
+  await waitFor(() => db.splits.length === 2, 're-roll did not ask the server');
+  assert(db.splits[1].req.rules?.matchMinutes === 10, `runner settings: re-roll keeps tonight's rules ${JSON.stringify(db.splits[1].req)}`);
+  await sp.waitForTimeout(300);
+  await sp.getByRole('button', { name: 'התחלת משחק' }).click();
+  await sp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('runner settings: no match controls'));
+  await waitFor(() => db.sets.length >= 1, 'the evening was not published');
+  assert(db.data.teamSize === 4 && db.data.teams.length === db.splits[1].body.sizes.length, `runner settings: published ${db.data.teamSize} / ${db.data.teams.length} teams`);
+  assert(db.data.rules?.matchMs === 10 * 60e3 && db.data.rules.drawExtraMinutes === 3, `runner settings: snapshot rules ${JSON.stringify(db.data.rules)}`);
+  assert((await sp.locator('.clock').textContent()).includes('10:00'), `runner settings: clock ${await sp.locator('.clock').textContent()}`);
+  // During the evening: the same sheet from the match screen.
+  const writes = db.sets.length;
+  await sp.getByRole('button', { name: 'הגדרות הערב' }).click();
+  await sp.getByRole('dialog').getByRole('group', { name: 'אורך משחק בדקות' }).getByRole('button', { name: 'יותר' }).click();
+  await sp.getByRole('dialog').getByRole('button', { name: 'יותר' }).click();
+  await sp.getByRole('dialog').getByRole('button', { name: 'אישור' }).click();
+  await waitFor(() => db.sets.length > writes && db.data.rules?.matchMs === 12 * 60e3, `the change during the evening was not published (${JSON.stringify(db.data.rules)})`);
+  assert((await sp.locator('.clock').textContent()).includes('12:00'), `runner settings: clock after the change ${await sp.locator('.clock').textContent()}`);
+  assert(!db.calls.includes('groups') && !db.calls.some((c) => /group_(push|save|update)/.test(c)), `runner settings: wrote the group's doc (${db.calls})`);
+  console.log(`runner settings: request ${JSON.stringify(req.rules)}, 4 a side, snapshot ${db.data.rules.matchMs / 60e3} min`);
+  await sctx.close();
+}
+
 // 24. The same login on a second phone, and an organizer is "me" in his group (v21). A fresh phone
 // logs in → its organizer group (with him already in the roster) and its player group appear, the
 // open group stays; a group created while logged in has him in the roster and "הדף שלי" doesn't ask

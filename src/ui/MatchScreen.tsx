@@ -36,6 +36,8 @@ import { useUi } from './App';
 import { BorrowCard } from './BorrowCard';
 import { Sheet, Stepper, Toggle } from './components';
 import { GoalBurst } from './GoalBurst';
+import { EveningSheet } from './EveningSheet';
+import { withEvening } from '../state/evening';
 import { Icon } from './icons';
 import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
@@ -95,6 +97,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
   const endEvening = useEndEvening();
   const [burst, setBurst] = useState<{ id: number; team: number } | null>(null);
   const [lengthOpen, setLengthOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [arriving, setArriving] = useState(false);
   const soundOn = useRef(true);
@@ -297,6 +300,9 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
         )}
       </div>
 
+      {rulesOpen && (
+        <EveningSheet value={state.settings} onChange={(p) => dispatch({ type: 'setSettings', settings: withEvening(state.settings, p) })} onClose={() => setRulesOpen(false)} />
+      )}
       {lengthOpen && (
         <Sheet title="אורך המשחק" onClose={() => setLengthOpen(false)}>
           <p className="lead len-now" aria-live="polite">
@@ -459,9 +465,14 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
 
       <div className="row-links">
         {runner && (
-          <button type="button" className="text-btn" onClick={runner.onRelease}>
-            להפסיק לנהל
-          </button>
+          <>
+            <button type="button" className="text-btn" onClick={() => setRulesOpen(true)}>
+              הגדרות הערב
+            </button>
+            <button type="button" className="text-btn" onClick={runner.onRelease}>
+              להפסיק לנהל
+            </button>
+          </>
         )}
         <button type="button" className="text-btn danger" onClick={() => setConfirmEnd(true)}>
           סיום הערב

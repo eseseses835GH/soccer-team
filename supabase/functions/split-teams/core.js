@@ -754,6 +754,23 @@ function sanitizeSettings(raw) {
   };
 }
 
+// src/state/evening.ts
+var inRange = (v, lo, hi) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
+function parseEvening(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw;
+  const out = {};
+  if (inRange(r.matchMinutes, 1, 60)) out.matchMinutes = r.matchMinutes;
+  if (typeof r.matchNoLimit === "boolean") out.matchNoLimit = r.matchNoLimit;
+  if (inRange(r.drawExtraMinutes, 0, 10)) out.drawExtraMinutes = r.drawExtraMinutes;
+  if (r.gkMode === "rotate" || r.gkMode === "fixed") out.gkMode = r.gkMode;
+  if (inRange(r.gkSwitchGoals, 1, 5)) out.gkSwitchGoals = r.gkSwitchGoals;
+  return out;
+}
+function withEvening(base, o) {
+  return sanitizeSettings({ ...base, ...parseEvening(o) ?? {} });
+}
+
 // src/state/playerVotes.ts
 var parseRatingMode = (v) => v === "everyone" ? "everyone" : "organizers";
 var effectiveCanRate = (memberRole, override, mode) => memberRole === "player" && (override ?? mode === "everyone");
@@ -905,6 +922,11 @@ function parseSplitRequest(raw) {
     if (!Array.isArray(r.shown) || r.shown.length > 100 || !r.shown.every((a) => Array.isArray(a) && a.length <= 200 && a.every((t) => isInt(t, 0, 7)))) return null;
     out.shown = r.shown;
   }
+  if (r.rules !== void 0) {
+    const rules = parseEvening(r.rules);
+    if (!rules) return null;
+    if (Object.keys(rules).length) out.rules = rules;
+  }
   return out;
 }
 var err = (status, error) => ({ status, body: { error } });
@@ -924,7 +946,7 @@ async function handleSplit(raw, deps) {
   );
   const rows = parseVoteRows(voteRows).filter((r2) => allowed.has(r2.rater));
   const players = applyPlayerVotes(doc.players, rows);
-  const settings = { ...DEFAULT_SETTINGS, ...doc.settings };
+  const settings = withEvening({ ...DEFAULT_SETTINGS, ...doc.settings }, req.rules ?? {});
   const src = { players, presentIds: req.present, teamSize: req.teamSize, settings, constraints: doc.constraints };
   const seed = req.seed ?? deps.seed?.() ?? randomSeed();
   const prep = prepareSplit(src, seed);
