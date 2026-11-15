@@ -21,13 +21,15 @@ interface RunnerCtx {
   startNew(app: AppState): void;
   /** v20: end the evening; its record goes into the group's history (null = nothing played). */
   end(): Promise<{ error: SyncError['code'] | null; record: EveningRecord | null }>;
+  /** "שאפל": save what was played and run tonight's next teams (from the split-teams function). */
+  shuffle(action: Extract<Action, { type: 'shuffle' }>): Promise<{ error: SyncError['code'] | null; record: EveningRecord | null }>;
   /** The last time control went to someone else (for the toast). */
   lost: { name: string; at: number } | null;
 }
 
 const none = async () => 'other' as const;
 const noEnd = async () => ({ error: 'other' as const, record: null });
-const Ctx = createContext<RunnerCtx>({ app: null, dispatch: () => {}, take: none, release: none, startNew: () => {}, end: noEnd, lost: null });
+const Ctx = createContext<RunnerCtx>({ app: null, dispatch: () => {}, take: none, release: none, startNew: () => {}, end: noEnd, shuffle: noEnd, lost: null });
 
 export function RunnerProvider({ children }: { children: ReactNode }) {
   const groups = useGroups();
@@ -103,7 +105,17 @@ export function RunnerProvider({ children }: { children: ReactNode }) {
     return res;
   }, [gid, pg]);
 
-  const value = useMemo(() => ({ app, dispatch, take, release, startNew, end, lost }), [app, dispatch, take, release, startNew, end, lost]);
+  const shuffle = useCallback(
+    async (a: Extract<Action, { type: 'shuffle' }>) => {
+      const res = await (runner.current?.shuffle(a) ?? noEnd());
+      const rec = res.record;
+      if (!res.error && rec) groupsRef.current.setGroupState(gid, (s) => ({ ...s, history: addEvening(s.history, rec) }));
+      return res;
+    },
+    [gid],
+  );
+
+  const value = useMemo(() => ({ app, dispatch, take, release, startNew, end, shuffle, lost }), [app, dispatch, take, release, startNew, end, shuffle, lost]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

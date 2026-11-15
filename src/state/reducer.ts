@@ -1,7 +1,7 @@
 import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solution } from '../engine';
-import { addTeam, swapKeepers, type MatchState } from '../match/match';
+import { addTeam, startSession, swapKeepers, type MatchState } from '../match/match';
 import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, noGKIds, teamBibs, type AppState, type Player, type Settings } from './model';
-import { addEvening, buildEvening, mergeHistory, stampSides, teamMembers, type EveningRecord } from './history';
+import { addEvening, buildEvening, eveningId, mergeHistory, nightOf, stampSides, teamMembers, type EveningRecord } from './history';
 import { addFromBench, lateJoin, type LateChoice } from './late';
 import { leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
@@ -21,6 +21,21 @@ export type Action =
   | { type: 'removeConstraint'; kind: keyof Constraints; index: number }
   | {
       type: 'setResult';
+      playerIds: string[];
+      subIds: string[];
+      sizes: number[];
+      teamSize: number;
+      assignment: number[];
+      pool: Solution[];
+      gkOrder: string[][];
+      now: number;
+    }
+  /**
+   * "שאפל" between matches: new teams from tonight's players. What was played is saved as its own
+   * evening record (the reducer archives a dropped session) and a new match session starts.
+   */
+  | {
+      type: 'shuffle';
       playerIds: string[];
       subIds: string[];
       sizes: number[];
@@ -199,6 +214,31 @@ function baseReducer(state: AppState, action: Action): AppState {
           createdAt: action.now,
         },
       };
+    case 'shuffle': {
+      const old = state.result;
+      if (!old) return state;
+      // The records of tonight's team sets share the night's first id (one evening in the stats).
+      const night = state.match?.history.length ? nightOf(eveningId(old)) : old.night;
+      return {
+        ...state,
+        dayAt: action.now,
+        result: {
+          playerIds: action.playerIds,
+          subIds: action.subIds,
+          sizes: action.sizes,
+          teamSize: action.teamSize,
+          numTeams: action.sizes.length,
+          assignment: action.assignment,
+          generated: action.assignment,
+          pool: action.pool,
+          shown: [action.assignment],
+          gkOrder: action.gkOrder,
+          createdAt: action.now,
+          ...(night ? { night } : {}),
+        },
+        match: startSession(action.sizes.length),
+      };
+    }
     case 'showSolution':
       if (!state.result) return state;
       return {

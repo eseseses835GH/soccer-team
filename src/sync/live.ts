@@ -105,6 +105,8 @@ export interface LiveData {
   at: number;
   /** v12: GameResult.createdAt of these teams (keeps the evening's id, see eveningId). */
   createdAt?: number;
+  /** Teams made by a shuffle: GameResult.night (the night's first evening id). */
+  night?: string;
   /** v12: how the runner runs matches. */
   rules?: LiveRules;
   teamSize: number;
@@ -173,6 +175,7 @@ export function liveFromState({ result: r, match: m, players, settings, now }: L
     v: 1,
     at: now,
     createdAt: r.createdAt,
+    ...(r.night ? { night: r.night } : {}),
     rules: { gkRotate: rotate, gkEvery: settings.gkSwitchGoals, matchMs: defaultMatchMs(settings), drawExtraMinutes: settings.drawExtraMinutes },
     teamSize: r.teamSize,
     players: players.filter((p) => tonight.has(p.id)).map((p) => ({ id: p.id, name: p.name })),
@@ -264,6 +267,7 @@ export function sanitizeLive(raw: unknown): LiveData | null {
   const gone = named(r.gone);
   if (gone.length) out.gone = gone;
   if (int(r.createdAt) !== null) out.createdAt = r.createdAt as number;
+  if (typeof r.night === 'string' && r.night && r.night.length <= 64) out.night = r.night;
   const ru = rec(r.rules);
   if (ru) {
     out.rules = {

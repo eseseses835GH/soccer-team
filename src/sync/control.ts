@@ -79,6 +79,7 @@ export function liveToState(live: LiveData, dfltMs: number | null = null): LiveI
     shown: [],
     gkOrder: live.teams.map((t) => [...t.ids]),
     createdAt: live.createdAt ?? live.at,
+    ...(live.night ? { night: live.night } : {}),
   };
   const out: LiveImport = { result, match: null, bibs: live.teams.map((t) => t.bib), players: [...live.players, ...(live.gone ?? []).filter((g) => !live.players.some((p) => p.id === g.id))].map((p) => ({ ...p })) };
   const lm = live.match;

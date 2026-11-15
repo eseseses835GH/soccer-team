@@ -64,6 +64,11 @@ export interface Runner {
    * with the same evening in the group's history and saved on the server.
    */
   end(): Promise<{ error: SyncError['code'] | null; record: EveningRecord | null }>;
+  /**
+   * "שאפל" (a `shuffle` action with teams from the server): what was played is saved like "סיום הערב"
+   * (end_evening with its record), then the new teams go live at once as the next part of the night.
+   */
+  shuffle(action: Extract<Action, { type: 'shuffle' }>): Promise<{ error: SyncError['code'] | null; record: EveningRecord | null }>;
   /** A live row seen (fetch or realtime; null = nothing live or not loaded yet). */
   seen(row: LiveRow | null): void;
   /** Back online: send what waits. */
@@ -108,6 +113,8 @@ export function createRunner(o: RunnerOptions): Runner {
   let ignoreUpTo = -1;
   let pub: LivePublisher | null = null;
   let disposed = false;
+  /** A shuffle is between end_evening and the new teams' first write: rows seen meanwhile are its own. */
+  let shuffling = false;
 
   const snapshot = () => (app ? liveFromState({ result: app.result, match: app.match, players: app.players, settings: app.settings, now: now() }) : null);
   const persist = () => {
@@ -116,6 +123,11 @@ export function createRunner(o: RunnerOptions): Runner {
     o.kv.set(runnerKey(o.gid), s);
   };
   const emit = () => !disposed && o.onChange(app);
+  /** The evening's record, merged with the same evening already in the history (ended once, then played on). */
+  const recordOf = (a: AppState, t: number): EveningRecord | null => {
+    const built = buildEvening({ match: a.match!, result: a.result!, players: a.players, bibs: teamBibs(a.settings, a.result!.numTeams), now: t });
+    return built ? (addEvening(o.base().history, built).find((h) => h.id === eveningId(a.result!)) ?? built) : null;
+  };
 
   const newPublisher = () =>
     createLivePublisher({
@@ -230,10 +242,7 @@ export function createRunner(o: RunnerOptions): Runner {
       try {
         await pub?.flush();
         if (rev === null) return { error: 'offline', record: null }; // it never went live yet
-        const t = now();
-        const built = buildEvening({ match: app.match, result: app.result, players: app.players, bibs: teamBibs(app.settings, app.result.numTeams), now: t });
-        // The same evening may already be in the history (ended once, then played on): send it merged.
-        const record = built ? (addEvening(o.base().history, built).find((h) => h.id === eveningId(app!.result!)) ?? built) : null;
+        const record = recordOf(app, now());
         const r = await o.api.end(o.gid, record, rev);
         ignoreUpTo = Math.max(ignoreUpTo, r);
         stop(null);
@@ -245,8 +254,30 @@ export function createRunner(o: RunnerOptions): Runner {
         return { error: c, record: null };
       }
     },
+    async shuffle(action) {
+      if (!app?.result || !app.match) return { error: null, record: null };
+      try {
+        await pub?.flush();
+        if (rev === null) return { error: 'offline', record: null }; // it never went live yet
+        const before = app;
+        const record = recordOf(before, now());
+        shuffling = true;
+        const r = await o.api.end(o.gid, record, rev);
+        ignoreUpTo = Math.max(ignoreUpTo, r);
+        shuffling = false;
+        // A player may open a new evening once nothing is open: the next part goes live without a rev.
+        start(reducer(before, action), null, null);
+        return { error: null, record };
+      } catch (e) {
+        shuffling = false;
+        const c = code(e);
+        if (c === 'invalid') stop(null);
+        else if (c === 'conflict') void recheck();
+        return { error: c, record: null };
+      }
+    },
     seen(row) {
-      if (disposed) return;
+      if (disposed || shuffling) return;
       if (!app) {
         // Opened as the runner (another tab, or local data gone): resume from the live data.
         if (row && iAmRunner(row, o.me) && row.rev > ignoreUpTo && liveNow(row, now())) start(runnerApp(o.base(), row.data), row.rev, row.data);

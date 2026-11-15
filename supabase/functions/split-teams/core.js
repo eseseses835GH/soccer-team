@@ -904,6 +904,20 @@ function sanitizeDoc(raw) {
   return doc;
 }
 
+// src/state/shuffle.ts
+function avoidAssignment(ids, teams) {
+  const team = /* @__PURE__ */ new Map();
+  teams.forEach((l, t) => l.forEach((id) => team.set(id, t)));
+  if (ids.length !== team.size || !ids.every((id) => team.has(id))) return null;
+  return ids.map((id) => team.get(id));
+}
+function pickShuffle(pool, best, away, rng) {
+  if (!away || keyOf(best) !== keyOf(away)) return best;
+  if (pool.length < 2) return best;
+  const next = pickReroll(pool, [away], rng);
+  return keyOf(next.assignment) !== keyOf(away) ? next.assignment : best;
+}
+
 // src/server/splitTeams.ts
 var UUID2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var isInt = (v, lo, hi) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
@@ -921,6 +935,11 @@ function parseSplitRequest(raw) {
   if (r.shown !== void 0) {
     if (!Array.isArray(r.shown) || r.shown.length > 100 || !r.shown.every((a) => Array.isArray(a) && a.length <= 200 && a.every((t) => isInt(t, 0, 7)))) return null;
     out.shown = r.shown;
+  }
+  if (r.avoid !== void 0) {
+    const ok = (t) => Array.isArray(t) && t.length <= 50 && t.every((x) => typeof x === "string" && x.length > 0 && x.length <= 100);
+    if (!Array.isArray(r.avoid) || r.avoid.length > 8 || !r.avoid.every(ok)) return null;
+    out.avoid = r.avoid;
   }
   if (r.rules !== void 0) {
     const rules = parseEvening(r.rules);
@@ -959,6 +978,8 @@ async function handleSplit(raw, deps) {
     const next = pickReroll(res.pool, shown, createRng(deps.seed?.() ?? randomSeed()));
     if (keyOf(next.assignment) !== keyOf(shown[shown.length - 1])) asg = next.assignment;
     else asg = shown[shown.length - 1];
+  } else if (req.avoid) {
+    asg = pickShuffle(res.pool, asg, avoidAssignment(prep.onTeams.map((p) => p.id), req.avoid), createRng(deps.seed?.() ?? randomSeed()));
   }
   const teams = finishSplit(src, prep, asg, seed);
   const k = teams.sizes.length;
