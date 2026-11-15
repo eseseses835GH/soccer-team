@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { sanitizeHistory, type EveningRecord } from '../state/history';
 import type { Position } from '../engine';
 import { sanitizePositions } from '../state/positions';
+import { parseEvening, type EveningRules } from '../state/evening';
 import { isLevel, parseRatingMode, parseVoteRows, type MemberRole, type RatingMode, type VoteRow } from '../state/playerVotes';
 import { SyncError, fail } from './supabase';
 
@@ -44,6 +45,8 @@ export interface PublicGroup {
   /** Positions and "good in goal" are shown to players (the organizer's "strong in"); never a rating. */
   players: PublicPlayer[];
   history: EveningRecord[];
+  /** The group's match rules (timer, keepers…), the starting point of a player-run evening. Absent before the public_settings migration. */
+  settings?: Partial<EveningRules>;
   /** Roster ids already claimed by some login (grey them out in "who are you?"). */
   claimed: string[];
   me: { role: MemberRole; playerId: string | null; canRate: boolean };
@@ -87,6 +90,7 @@ export function parsePublic(raw: unknown): PublicGroup | null {
     name: str(r.name),
     players,
     history: sanitizeHistory(r.history),
+    ...(r.settings !== undefined && parseEvening(r.settings) ? { settings: parseEvening(r.settings)! } : {}),
     claimed: (Array.isArray(r.claimed) ? r.claimed : []).filter((x): x is string => typeof x === 'string'),
     me: { role: role(me.role), playerId: typeof me.playerId === 'string' ? me.playerId : null, canRate: me.canRate === true },
     updatedAt: str(r.updatedAt),

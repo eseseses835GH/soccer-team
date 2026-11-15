@@ -5,6 +5,7 @@
 // Bundled into supabase/functions/split-teams/core.js by scripts/build-edge.mjs (committed).
 import { keyOf, MAX_TEAM_SIZE, MIN_TEAM_SIZE, pickReroll, randomSeed, search, createRng } from '../engine';
 import { DEFAULT_SETTINGS, type Settings } from '../state/model';
+import { parseEvening, withEvening, type EveningRules } from '../state/evening';
 import { applyPlayerVotes, effectiveCanRate, parseRatingMode, parseVoteRows, type MemberRole } from '../state/playerVotes';
 import { finishSplit, prepareSplit, teamTotals, type SplitSource } from '../state/splitCore';
 import { sanitizeDoc } from '../sync/doc';
@@ -18,6 +19,8 @@ export interface SplitRequest {
   /** Re-roll: the seed of the first split (same subs, same order) and the assignments already shown. */
   seed?: number;
   shown?: number[][];
+  /** Tonight's match rules set by whoever runs the evening (on top of the group's; clamped like the app). */
+  rules?: Partial<EveningRules>;
 }
 
 /** How the group runs matches (the organizer's settings; nothing about players). */
@@ -84,6 +87,11 @@ export function parseSplitRequest(raw: unknown): SplitRequest | null {
     if (!Array.isArray(r.shown) || r.shown.length > 100 || !r.shown.every((a) => Array.isArray(a) && a.length <= 200 && a.every((t) => isInt(t, 0, 7)))) return null;
     out.shown = r.shown as number[][];
   }
+  if (r.rules !== undefined) {
+    const rules = parseEvening(r.rules);
+    if (!rules) return null;
+    if (Object.keys(rules).length) out.rules = rules;
+  }
   return out;
 }
 
@@ -108,7 +116,7 @@ export async function handleSplit(raw: unknown, deps: SplitDeps): Promise<SplitR
   );
   const rows = parseVoteRows(voteRows).filter((r) => allowed.has(r.rater));
   const players = applyPlayerVotes(doc.players, rows);
-  const settings: Settings = { ...DEFAULT_SETTINGS, ...doc.settings };
+  const settings: Settings = withEvening({ ...DEFAULT_SETTINGS, ...doc.settings }, req.rules ?? {});
   const src: SplitSource = { players, presentIds: req.present, teamSize: req.teamSize, settings, constraints: doc.constraints };
 
   const seed = req.seed ?? deps.seed?.() ?? randomSeed();

@@ -2,6 +2,7 @@
 // Pure helpers; the React side is PlayerGroupProvider.tsx. A player group lives in the groups
 // index with `role: 'player'` and never runs the organizer sync (sync/engine): its roster names
 // and history come from group_public, the evening from group_live.
+import { withEvening } from '../state/evening';
 import { sanitizePlayer, type AppState, type Player } from '../state/model';
 import type { KV } from '../state/groups';
 import type { LiveData, LiveRow } from './live';
@@ -47,6 +48,8 @@ export function publicToState(prev: AppState, pub: PublicGroup): AppState {
     match: null,
     constraints: { together: [], apart: [] },
     history: pub.history,
+    // The group's match rules, so a player who starts an evening starts from them.
+    settings: pub.settings ? withEvening(prev.settings, pub.settings) : prev.settings,
   };
 }
 

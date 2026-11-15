@@ -125,6 +125,33 @@ describe('split-teams handler', () => {
     expect(keyOf(again.assignment)).not.toBe(keyOf(first.assignment));
   });
 
+  it("tonight's rules from the runner: honored through the app's sanitizer, bad ones dropped, never weights", async () => {
+    const plain = ok(await handleSplit({ groupId: GID, present: TEN, teamSize: 5 }, deps()));
+    expect(plain.rules).toMatchObject({ gkMode: 'rotate', matchMinutes: DEFAULT_SETTINGS.matchMinutes, matchNoLimit: false });
+    const body = ok(
+      await handleSplit(
+        { groupId: GID, present: TEN, teamSize: 5, rules: { matchMinutes: 12, matchNoLimit: false, drawExtraMinutes: 3, gkMode: 'fixed', gkSwitchGoals: 2 } },
+        deps(),
+      ),
+    );
+    expect(body.rules).toMatchObject({ matchMinutes: 12, drawExtraMinutes: 3, gkMode: 'fixed', gkSwitchGoals: 2, matchNoLimit: false });
+    // Outside the app's ranges, wrong types and unknown keys: dropped, the group's values stay.
+    const clamped = ok(
+      await handleSplit(
+        { groupId: GID, present: TEN, teamSize: 5, rules: { matchMinutes: 999, drawExtraMinutes: -4, gkSwitchGoals: 9, gkMode: 'nope', matchNoLimit: 'yes', weights: { pace: 0 } } },
+        deps(),
+      ),
+    );
+    expect(clamped.rules).toEqual(plain.rules);
+    expect(ok(await handleSplit({ groupId: GID, present: TEN, teamSize: 5, rules: { matchMinutes: 7.6 } }, deps())).rules.matchMinutes).toBe(8);
+    // Weights can't be changed from outside: same totals as without rules.
+    expect(clamped.totals).toEqual(plain.totals);
+    expect(parseSplitRequest({ groupId: GID, present: TEN, teamSize: 5, rules: { weights: { pace: 0 }, matchMinutes: 8 } })?.rules).toEqual({ matchMinutes: 8 });
+    expect(parseSplitRequest({ groupId: GID, present: TEN, teamSize: 5, rules: {} })?.rules).toBeUndefined();
+    expect(parseSplitRequest({ groupId: GID, present: TEN, teamSize: 5, rules: [1] })).toBeNull();
+    expect(parseSplitRequest({ groupId: GID, present: TEN, teamSize: 5, rules: 'x' })).toBeNull();
+  });
+
   it('CORS only for the app and local dev', () => {
     expect(corsHeaders('https://www.kadoregel.com')['Access-Control-Allow-Origin']).toBe('https://www.kadoregel.com');
     expect(corsHeaders('http://localhost:4173')['Access-Control-Allow-Origin']).toBe('http://localhost:4173');
