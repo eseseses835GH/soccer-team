@@ -1,5 +1,6 @@
 // The rating survey: one player at a time, 1–10 or skip. Each tap is sent at once, so closing
-// midway loses nothing; coming back opens at the first one not rated yet.
+// midway loses nothing; coming back opens at the first one not rated yet. "הקודם" goes back one,
+// "כל השחקנים" lists everyone with my vote and jumps to whoever is tapped.
 import { useMemo, useState } from 'react';
 import { surveyList, surveyStart } from '../sync/playerGroup';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
@@ -16,15 +17,44 @@ export function RateScreen() {
   // Where to start is decided once, when the survey opens with my votes loaded.
   const [i, setI] = useState<number | null>(null);
   const at = i ?? surveyStart(list, pg.votes);
+  const [all, setAll] = useState(false);
 
   if (!pg.pub?.me.canRate) return <Empty icon="🔒" title="הדירוג סגור" />;
   if (!pg.pub.me.playerId) return <ClaimView onDone={() => setI(null)} />;
+  if (all) {
+    return (
+      <section className="rate" aria-label="כל השחקנים">
+        <ul className="pick-list rate-all">
+          {list.map((q, k) => (
+            <li key={q.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setI(k);
+                  setAll(false);
+                }}
+              >
+                <span className="name">{q.name}</span>
+                <span className="level">{pg.votes[q.id] ?? '–'}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="btn btn-quiet btn-block" onClick={() => setAll(false)}>
+          חזרה
+        </button>
+      </section>
+    );
+  }
   if (at >= list.length) {
     return (
       <Empty icon="🙏" title="תודה!">
         <div className="stack narrow">
           <button type="button" className="btn btn-primary btn-block" onClick={() => go('home')}>
             סיום
+          </button>
+          <button type="button" className="btn btn-quiet btn-block" onClick={() => setAll(true)}>
+            כל השחקנים
           </button>
         </div>
       </Empty>
@@ -54,11 +84,19 @@ export function RateScreen() {
           </button>
         ))}
       </div>
-      <button type="button" className="btn btn-quiet btn-block" onClick={() => setI(at + 1)}>
-        דילוג
-      </button>
+      <div className="row-2">
+        <button type="button" className="btn btn-quiet" disabled={at === 0} onClick={() => setI(at - 1)}>
+          הקודם
+        </button>
+        <button type="button" className="btn btn-quiet" onClick={() => setI(at + 1)}>
+          דילוג
+        </button>
+      </div>
       <p className="hint small center">הדירוג אנונימי ונכנס לממוצע</p>
       <div className="row-links">
+        <button type="button" className="text-btn" onClick={() => setAll(true)}>
+          כל השחקנים
+        </button>
         <button type="button" className="text-btn" onClick={() => go('home')}>
           סיום
         </button>

@@ -3472,3 +3472,14 @@ thead th {
 .gk-order-row {
   text-align: center;
 }
+
+/* Rating: "כל השחקנים" — my vote on the trailing side. */
+.rate-all .name {
+  flex: 1;
+}
+.rate-all .level {
+  min-inline-size: 2ch;
+  text-align: center;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}

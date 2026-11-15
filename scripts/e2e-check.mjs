@@ -2323,6 +2323,29 @@ if (SB_URL) {
   console.log('v21: second phone gets its groups; a new group has me; an old group gets me; a link puts me straight in; rename; switch');
 }
 
+// Rating survey: "הקודם" goes back, "כל השחקנים" lists my votes and jumps.
+{
+  const { ctx: vctx, page: vp, db } = await playerContext(browser, { me: 'p3', canRate: true, live: false });
+  vp.on('pageerror', (e) => errors.push(`rate: ${e.message}`));
+  await vp.goto(base + '#rate');
+  const name = () => vp.locator('.rate-name').textContent();
+  await vp.locator('.rate-name').waitFor({ timeout: 10000 });
+  assert(await vp.getByRole('button', { name: 'הקודם' }).isDisabled(), 'rate: "הקודם" enabled on the first');
+  const first = await name();
+  await vp.getByRole('radio', { name: '7', exact: true }).click();
+  assert((await name()) !== first, 'rate: a tap moves on');
+  await vp.getByRole('button', { name: 'הקודם' }).click();
+  assert((await name()) === first && (await vp.getByRole('radio', { name: '7', exact: true }).getAttribute('aria-checked')) === 'true', 'rate: back shows my 7');
+  await vp.getByRole('button', { name: 'כל השחקנים' }).click();
+  const row = vp.locator('.rate-all li').filter({ hasText: first });
+  assert((await row.locator('.level').textContent()) === '7', 'rate: list shows my vote');
+  await vp.locator('.rate-all li').nth(2).getByRole('button').click();
+  assert((await vp.locator('.rate-progress').textContent()).startsWith('3/'), 'rate: list jumps to the tapped player');
+  assert(Object.values(db.votes).includes(7), 'rate: vote sent');
+  await vctx.close();
+  console.log('rate: back + all players');
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {
