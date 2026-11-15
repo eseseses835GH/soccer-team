@@ -1121,6 +1121,44 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await gp.context().close();
 }
 
+// 17b2. A regular added by a player waits for an organizer: the organizer's doc has two such players
+// (occasional + pendingRegular) → "ממתין לאישור" on top of the players screen and a dot on the players
+// button → "לאשר כקבוע" makes one a regular (not under "מזדמנים"), "להשאיר אורח" keeps the other a guest.
+{
+  const pp = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  pp.on('pageerror', (e) => errors.push(`pending: ${e.message}`));
+  const stored = () => pp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  await pp.goto(base);
+  await pp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await pp.evaluate(() => {
+    const key = `kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`;
+    const st = JSON.parse(localStorage.getItem(key));
+    const at = (id, name) => ({ id, name, attrs: { overall: 6, stamina: 6, passing: 6, dribbling: 6, shooting: 6, defense: 6, teamwork: 6, leadership: 6 }, canGK: false, cards: [], occasional: true, pendingRegular: true });
+    st.players.push(at('pend1', 'Neo'), at('pend2', 'Trin'));
+    localStorage.setItem(key, JSON.stringify(st));
+  });
+  await pp.reload();
+  assert(await pp.getByRole('button', { name: 'השחקנים · ממתין לאישור' }).isVisible(), 'pending: no mark on the players button');
+  await pp.getByRole('button', { name: 'השחקנים · ממתין לאישור' }).click();
+  const box = pp.getByRole('region', { name: 'ממתין לאישור' });
+  await box.waitFor({ timeout: 3000 });
+  assert((await box.locator('li').count()) === 2, 'pending: both listed');
+  await box.locator('li', { hasText: 'Neo' }).getByRole('button', { name: 'לאשר כקבוע' }).click();
+  await box.locator('li', { hasText: 'Trin' }).getByRole('button', { name: 'להשאיר אורח' }).click();
+  assert((await box.count()) === 0, 'pending: the block is still shown after both were decided');
+  const st = await stored();
+  const neo = st.players.find((p) => p.id === 'pend1');
+  const trin = st.players.find((p) => p.id === 'pend2');
+  assert(neo && !neo.occasional && !neo.pendingRegular, `pending: approve → a regular (${JSON.stringify(neo)})`);
+  assert(trin?.occasional === true && !trin.pendingRegular, `pending: keep → still a guest (${JSON.stringify(trin)})`);
+  assert((await pp.locator('.roster:not(details .roster) li', { hasText: 'Neo' }).count()) === 1, 'pending: approved not in the main roster');
+  assert((await pp.locator('details.guests li', { hasText: 'Neo' }).count()) === 0, 'pending: approved still under מזדמנים');
+  assert((await pp.locator('details.guests li', { hasText: 'Trin' }).count()) === 1, 'pending: kept not under מזדמנים');
+  await pp.goto(base + '#home');
+  assert(await pp.getByRole('button', { name: 'השחקנים', exact: true }).isVisible(), 'pending: the mark stays after deciding');
+  await pp.context().close();
+}
+
 // 17c. Several leave at once: two players picked in "עזב באמצע" → "2 עזבו" → both are off the teams and
 // tonight's attendance in one step; one of them comes back through "הגיע מאוחר".
 {
@@ -1756,6 +1794,17 @@ if (SB_URL) {
   assert(gid && db.guests[0].name === 'זר מהמגרש' && db.guests[0].level === 8, `runner guest: add_guest not called with the level (${JSON.stringify(db.guests)})`);
   assert(!db.claimed.includes(gid), 'runner guest: the guest was claimed');
   await waitFor(() => db.data.players.some((p) => p.id === gid) && db.data.teams.some((t) => t.ids.includes(gid)), 'runner guest: not in tonight’s teams');
+  assert(db.guests[0].regular === false, 'runner guest: a guest was sent as a regular');
+  // "קבוע בקבוצה" from a player: add_guest with p_regular (the server keeps him a guest until an organizer approves).
+  await lp.getByRole('button', { name: 'מישהו הגיע?' }).click();
+  await sheet.getByPlaceholder('שם').fill('חבר חדש');
+  await sheet.getByRole('radio', { name: 'קבוע בקבוצה' }).click();
+  assert(await sheet.getByText('ייכנס כקבוע אחרי אישור מארגן').isVisible(), 'runner regular: no approval hint');
+  await sheet.getByRole('button', { name: 'המשך' }).click();
+  await sheet.getByRole('button', { name: /^נכנס עכשיו/ }).click();
+  const rid = db.guests?.[1]?.id;
+  assert(rid && db.guests[1].name === 'חבר חדש' && db.guests[1].regular === true, `runner regular: add_guest not called with p_regular (${JSON.stringify(db.guests)})`);
+  await waitFor(() => db.data.teams.some((t) => t.ids.includes(rid)), 'runner regular: not in tonight’s teams');
   console.log(`runner late/left: ${db.sets.length} live writes`);
   await lctx.close();
 }

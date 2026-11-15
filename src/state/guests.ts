@@ -62,8 +62,18 @@ export function newGuest(id: string, name: string, level = 5, voter?: string | n
   };
 }
 
-/** "להפוך לקבוע": the same player, no longer a guest. */
+/** "להפוך לקבוע" / "לאשר כקבוע": the same player, no longer a guest. */
 export function makeRegular(p: Player): Player {
-  const { occasional: _, ...rest } = p;
+  const { occasional: _, pendingRegular: __, ...rest } = p;
+  return rest;
+}
+
+/** Added by a player as "קבוע בקבוצה": a guest until an organizer approves ("ממתין לאישור"). */
+export const pendingRegulars = <T extends { pendingRegular?: boolean; occasional?: boolean }>(players: T[]): T[] =>
+  players.filter((p) => p.pendingRegular === true && isGuest(p));
+
+/** "להשאיר אורח": no longer waiting, still a guest. */
+export function keepGuest(p: Player): Player {
+  const { pendingRegular: _, ...rest } = p;
   return rest;
 }

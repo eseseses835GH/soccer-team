@@ -726,6 +726,7 @@ function sanitizePlayer(p) {
     ...positions.length ? { positions } : {},
     ...levelVotes ? { levelVotes } : {},
     ...r.occasional === true ? { occasional: true } : {},
+    ...r.occasional === true && r.pendingRegular === true ? { pendingRegular: true } : {},
     ...r.noGK === true ? { noGK: true } : {}
   };
 }

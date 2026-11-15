@@ -24,6 +24,8 @@ export interface Player extends EnginePlayer {
   levelVotes?: LevelVotes;
   /** v23: a guest ("אורח"), not a regular: listed under "מזדמנים", left out of check-in and rating (guests.ts). */
   occasional?: true;
+  /** A player asked for him as a regular ("קבוע בקבוצה"); a guest until an organizer approves (guests.ts). */
+  pendingRegular?: true;
   /** "לא בשער": never in the keeper rotation (left out of the field when false). */
   noGK?: true;
 }
@@ -284,6 +286,7 @@ export function sanitizePlayer(p: unknown): Player | null {
     ...(positions.length ? { positions } : {}),
     ...(levelVotes ? { levelVotes } : {}),
     ...(r.occasional === true ? { occasional: true as const } : {}),
+    ...(r.occasional === true && r.pendingRegular === true ? { pendingRegular: true as const } : {}),
     ...(r.noGK === true ? { noGK: true as const } : {}),
   };
 }

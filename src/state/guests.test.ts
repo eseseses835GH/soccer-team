@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byPlayed, checkInList, makeRegular, newGuest, pickOrder, splitRoster, withoutGuests } from './guests';
+import { byPlayed, checkInList, keepGuest, makeRegular, newGuest, pendingRegulars, pickOrder, splitRoster, withoutGuests } from './guests';
 import { INITIAL_STATE, defaultAttrs, sanitize, sanitizePlayer, type Player } from './model';
 import { makeBackup, parseBackup } from './io';
 import { docFromState, mergeDocs, sanitizeDoc } from '../sync/doc';
@@ -109,5 +109,54 @@ describe('guests: players phones (public copy) and rating', () => {
     const next = withGuest(pub, 'new', 'New');
     expect(next.players.at(-1)).toEqual({ id: 'new', name: 'New', occasional: true });
     expect(withGuest(next, 'new', 'New')).toBe(next);
+  });
+});
+
+describe('guests: a regular added by a player waits for an organizer', () => {
+  // Exactly what add_guest appends for a player's "קבוע בקבוצה" (jsonb: key order doesn't matter).
+  const server = { id: 'w', name: 'w', attrs: defaultAttrs(6), canGK: false, cards: [], occasional: true, pendingRegular: true };
+
+  it('sanitize keeps pendingRegular on a guest only, and leaves the server copy as is', () => {
+    expect(sanitizePlayer(server)).toEqual(server);
+    expect('pendingRegular' in sanitizePlayer({ ...p('r'), pendingRegular: true })!).toBe(false);
+    expect('pendingRegular' in sanitizePlayer({ ...p('g', true), pendingRegular: 'yes' })!).toBe(false);
+  });
+
+  it('saved state, backups, the synced doc and the merge keep it', () => {
+    const players = [p('r'), server as Player];
+    expect(sanitize({ ...INITIAL_STATE, players }).players[1].pendingRegular).toBe(true);
+    expect(parseBackup(JSON.parse(JSON.stringify(makeBackup(players, { together: [], apart: [] }, DEFAULT_SETTINGS))))!.players[1].pendingRegular).toBe(true);
+    const base = docFromState({ ...INITIAL_STATE, players: [p('r')] });
+    expect(sanitizeDoc(JSON.parse(JSON.stringify({ ...base, players })))!.players[1].pendingRegular).toBe(true);
+    const merged = mergeDocs(base, { ...base, players: [...base.players, p('mine')] }, { ...base, players });
+    expect(merged.players.find((x) => x.id === 'w')?.pendingRegular).toBe(true);
+  });
+
+  it('he plays as a guest and is listed as waiting', () => {
+    const roster = [p('r'), server as Player, p('g', true)];
+    const { regulars, guests } = splitRoster(roster);
+    expect(regulars.map((x) => x.id)).toEqual(['r']);
+    expect(guests.map((x) => x.id)).toEqual(['g', 'w']);
+    expect(pendingRegulars(roster).map((x) => x.id)).toEqual(['w']);
+    expect(pendingRegulars([{ ...p('r'), pendingRegular: true as const }])).toEqual([]);
+  });
+
+  it('"לאשר כקבוע" makes him a regular; "להשאיר אורח" keeps him a guest', () => {
+    const yes = makeRegular(server as Player);
+    expect('occasional' in yes || 'pendingRegular' in yes).toBe(false);
+    expect(splitRoster([yes]).regulars).toHaveLength(1);
+    const no = keepGuest(server as Player);
+    expect(no.occasional).toBe(true);
+    expect('pendingRegular' in no).toBe(false);
+    expect(pendingRegulars([no])).toEqual([]);
+  });
+
+  it('approving on the organizer phone merges with a server change', () => {
+    const base = docFromState({ ...INITIAL_STATE, players: [p('r'), server as Player] });
+    const local = { ...base, players: base.players.map((x) => (x.id === 'w' ? makeRegular(x) : x)) };
+    const remote = { ...base, players: [...base.players, p('g', true)] };
+    const w = mergeDocs(base, local, remote).players.find((x) => x.id === 'w')!;
+    expect(w.occasional).toBeUndefined();
+    expect(w.pendingRegular).toBeUndefined();
   });
 });

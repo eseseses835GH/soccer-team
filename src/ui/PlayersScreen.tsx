@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { makeRegular, splitRoster } from '../state/guests';
+import { keepGuest, makeRegular, pendingRegulars, splitRoster } from '../state/guests';
 import { LateSheet } from './LateSheet';
 import type { Attributes, Position } from '../engine';
 import { playersCount } from '../i18n';
@@ -160,6 +160,12 @@ export function PlayersScreen() {
   const fixedKeepers = state.settings.gkMode === 'fixed';
   // Guests (v23) wait folded under "מזדמנים".
   const { regulars: sorted, guests } = splitRoster(state.players, state.history);
+  // Added by a player as "קבוע בקבוצה": an organizer approves or keeps him a guest.
+  const pending = pendingRegulars(guests);
+  const settle = (p: Player, regular: boolean) => {
+    dispatch({ type: 'updatePlayer', player: regular ? makeRegular(p) : keepGuest(p) });
+    notify(regular ? `${p.name} קבוע בקבוצה` : `${p.name} נשאר אורח`);
+  };
   const present = new Set(state.presentIds);
   const inTeams = new Set(state.result ? [...state.result.playerIds, ...state.result.subIds] : []);
   // One tap: he's here tonight (teams already made → in now or wait, as on the check-in list).
@@ -173,6 +179,24 @@ export function PlayersScreen() {
 
   return (
     <section className={`players ${selecting ? 'is-selecting' : ''}`} aria-label="השחקנים">
+      {pending.length > 0 && !selecting && (
+        <div className="pending" role="region" aria-label="ממתין לאישור">
+          <h2 className="label">ממתין לאישור</h2>
+          <ul>
+            {pending.map((p) => (
+              <li key={p.id}>
+                <span className="name">{p.name}</span>
+                <button type="button" className="btn btn-primary btn-small" onClick={() => settle(p, true)}>
+                  לאשר כקבוע
+                </button>
+                <button type="button" className="btn btn-quiet btn-small" onClick={() => settle(p, false)}>
+                  להשאיר אורח
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <form className="add" onSubmit={add} noValidate>
         <label className="label" htmlFor="add-name">
           שחקן חדש

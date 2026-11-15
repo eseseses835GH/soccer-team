@@ -12,8 +12,8 @@ import { usePlayerGroup } from '../sync/PlayerGroupProvider';
 import { cleanName, sameName } from '../sync/playerGroup';
 import { newGuest, pickOrder } from '../state/guests';
 import { useUi } from './App';
-import { CardBadges, LevelPicker, Segmented, Sheet } from './components';
-import { NAME_TAKEN } from './GuestSheet';
+import { CardBadges, LevelPicker, Sheet } from './components';
+import { KindChoice, NAME_TAKEN } from './GuestSheet';
 import { usePlayerGate } from './useGate';
 
 type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean; sub?: boolean } | { kind: 'suggest'; s: SwapSuggestion; names: string[] };
@@ -183,16 +183,7 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
         {taken && <p className="field-error">כבר יש שחקן בשם הזה, בחרו אותו מהרשימה</p>}
         <span className="label">רמה</span>
         <LevelPicker value={level} onChange={setLevel} />
-        <Segmented
-          label="קבוע או אורח"
-          value={guest ? 'guest' : 'regular'}
-          onChange={(v) => setGuest(v === 'guest')}
-          options={[
-            { value: 'regular', label: 'קבוע בקבוצה' },
-            { value: 'guest', label: 'אורח להיום' },
-          ]}
-        />
-        <p className="hint small">{guest ? 'אחרי הערב יעבור ל״מזדמנים״, בתחתית רשימת השחקנים' : 'יתווסף לרשימת השחקנים של הקבוצה'}</p>
+        <KindChoice guest={guest} onChange={setGuest} />
         <button type="submit" className="btn btn-primary btn-block" disabled={!name.trim() || taken}>
           המשך
         </button>
@@ -201,12 +192,13 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
   );
 }
 
-/** A player runner's pick: the roster (names only), the bench, or a new guest (name + level, added on the server). */
+/** A player runner's pick: the roster (names only), the bench, or someone new (name + level + guest/regular, added on the server). */
 function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, sub: boolean, isNew?: boolean) => void }) {
   const { state } = useStore();
   const pg = usePlayerGroup();
   const [name, setName] = useState('');
   const [level, setLevel] = useState(5);
+  const [guest, setGuest] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!state.result) return null;
@@ -216,7 +208,7 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
     e.preventDefault();
     if (!n || taken || busy) return;
     setBusy(true);
-    const res = await pg.addGuest(n, level);
+    const res = await pg.addGuest(n, level, !guest);
     setBusy(false);
     if ('id' in res) return onPick(newGuest(res.id, n, level), false, true);
     setError(GUEST_ERROR[res.error] ?? 'משהו השתבש, נסו שוב');
@@ -244,7 +236,7 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
       )}
       <form className="late-new" onSubmit={addGuest}>
         <label className="label" htmlFor="late-guest">
-          אורח
+          מישהו חדש
         </label>
         <input
           id="late-guest"
@@ -261,6 +253,7 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
         {(taken || error) && <p className="field-error">{taken ? NAME_TAKEN : error}</p>}
         <span className="label">רמה</span>
         <LevelPicker value={level} onChange={setLevel} />
+        <KindChoice guest={guest} onChange={setGuest} player />
         <button type="submit" className="btn btn-primary btn-block" disabled={!n || taken || busy}>
           המשך
         </button>

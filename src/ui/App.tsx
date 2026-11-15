@@ -22,6 +22,7 @@ import { ClaimView, PlayerHome } from './PlayerHome';
 import { PlayerSettings } from './PlayerSettings';
 import { RateScreen } from './RateScreen';
 import { isPlayerGroup } from '../sync/playerGroup';
+import { pendingRegulars } from '../state/guests';
 import { useLiveControl } from '../sync/OrganizerSync';
 import { ViewerScreen } from './LiveControl';
 import { SettingsScreen } from './SettingsScreen';
@@ -187,6 +188,8 @@ export function App() {
 
   // Screens that need data fall back home. A player group is read-only: no organizer screens.
   const isPlayer = isPlayerGroup(groups.current);
+  // Players added as "קבוע בקבוצה" by a player: a dot on the players button until an organizer decides.
+  const waiting = pendingRegulars(state.players).length > 0;
   // Another phone runs tonight: the teams and match screens show it read-only (LiveControl.tsx).
   const control = useLiveControl();
   const viewing = !isPlayer && !!control.viewer;
@@ -263,7 +266,12 @@ export function App() {
                 <Icon name="help" size={20} />
               </button>
               {!isPlayer && (
-                <button type="button" className="icon-btn" aria-label="השחקנים" onClick={() => go('players')}>
+                <button
+                  type="button"
+                  className={`icon-btn ${waiting ? 'has-dot' : ''}`}
+                  aria-label={waiting ? 'השחקנים · ממתין לאישור' : 'השחקנים'}
+                  onClick={() => go('players')}
+                >
                   <Icon name="users" />
                 </button>
               )}

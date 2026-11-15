@@ -49,8 +49,8 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
     setPresent(ids);
     keep(ids, size);
   };
-  const addGuest = async (name: string, level: number) => {
-    const res = await pg.addGuest(name, level);
+  const addGuest = async (name: string, level: number, regular: boolean) => {
+    const res = await pg.addGuest(name, level, regular);
     if ('error' in res) return GUEST_ERROR[res.error] ?? 'משהו השתבש, נסו שוב';
     pick([...present, res.id]);
     return null;
@@ -174,10 +174,10 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
       </ul>
       <p className="list-foot">
         <button type="button" className="text-btn inline" onClick={() => setGuest(true)}>
-          הוספת אורח
+          מישהו חדש
         </button>
       </p>
-      {guest && <GuestSheet players={state.players} withLevel onAdd={addGuest} onClose={() => setGuest(false)} />}
+      {guest && <GuestSheet players={state.players} withLevel withKind onAdd={addGuest} onClose={() => setGuest(false)} />}
 
       <div className="cta-dock">
         <p className={`plan ${plan ? '' : 'warn'}`} aria-live="polite">
