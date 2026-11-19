@@ -418,6 +418,68 @@ export function leaders<T extends { n: number }>(list: T[]): T[] {
   return top > 0 ? list.filter((x) => x.n === top) : [];
 }
 
+/** The team that clearly won (strictly ahead of the second on wins, goal difference, goals). */
+export function championOf(table: TeamRow[]): TeamRow | null {
+  const [a, b] = table;
+  if (!a || a.won === 0) return null;
+  if (!b) return a;
+  const key = (r: TeamRow) => [r.won, r.goalsFor - r.goalsAgainst, r.goalsFor];
+  const [x, y] = [key(a), key(b)];
+  return x[0] > y[0] || (x[0] === y[0] && (x[1] > y[1] || (x[1] === y[1] && x[2] > y[2]))) ? a : null;
+}
+
+// ---------- the whole night (parts split by a shuffle) ----------
+
+/** The records of `rec`'s night, oldest first (one, or one per part after a shuffle). */
+export function nightRecords(history: EveningRecord[], rec: EveningRecord): EveningRecord[] {
+  const night = nightOf(rec.id);
+  const list = history.filter((h) => nightOf(h.id) === night);
+  return (list.some((h) => h.id === rec.id) ? list : [...list, rec]).sort((a, b) => a.startedAt - b.startedAt);
+}
+
+/**
+ * Someone joined, left or moved team during the record: a match was played by a side that isn't
+ * the team's final roster. A player borrowed from another team for one match doesn't count.
+ */
+export function rosterChanged(rec: EveningRecord): boolean {
+  const all = new Set(rec.teams.flatMap((t) => t.ids));
+  return rec.matches.some((mt) =>
+    ([0, 1] as const).some((side) => {
+      const ids = mt.sides?.[side];
+      const own = rec.teams[side === 0 ? mt.a : mt.b]?.ids ?? [];
+      return !!ids && own.length > 0 && (own.some((id) => !ids.includes(id)) || ids.some((id) => !all.has(id)));
+    }),
+  );
+}
+
+/** Teams changed during the night (a shuffle, a latecomer…): the evening goes to a lineup, not a team. */
+export function teamsChanged(night: EveningRecord[]): boolean {
+  return night.length > 1 || night.some((r) => afterShuffle(r.id) || rosterChanged(r));
+}
+
+/** Goals per scorer over the night's records, best first. */
+export function nightScorers(night: EveningRecord[]): Ranked[] {
+  const by = new Map<string, Ranked>();
+  for (const rec of night)
+    for (const mt of rec.matches)
+      for (const g of mt.goals) {
+        if (!g.by) continue;
+        const r = by.get(g.by) ?? { id: g.by, name: nameIn(rec, g.by), n: 0 };
+        r.n++;
+        by.set(g.by, r);
+      }
+  return [...by.values()].sort(byN);
+}
+
+/** The team (in one part of the night) with the clearly best record, if there is one. */
+export function bestLineup(night: EveningRecord[]): { rec: EveningRecord; row: TeamRow } | null {
+  const all = night.flatMap((rec) => teamTable(rec).map((row) => ({ rec, row })));
+  const gd = (r: TeamRow) => r.goalsFor - r.goalsAgainst;
+  all.sort(({ row: x }, { row: y }) => y.won - x.won || gd(y) - gd(x) || y.goalsFor - x.goalsFor);
+  const best = championOf(all.map((x) => x.row));
+  return best ? all[0] : null;
+}
+
 // ---------- all time ----------
 
 export interface AllTimeRow {

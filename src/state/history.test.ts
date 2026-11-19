@@ -301,17 +301,18 @@ describe('history storage', () => {
 });
 
 describe('evening share text', () => {
-  it('has the winner, the table and highlights, one line each', () => {
+  it('has the winner, each team with its players, and highlights, one line each', () => {
     const text = buildEveningShareText({
       date: new Date(2026, 9, 15),
       champion: '🔴 האדומים לקחו את הערב',
-      table: ['🔴 אדומים: 4 נ׳', '🔵 כחולים: 1 נ׳'],
+      parts: [{ teams: [{ line: '🔴 אדומים: 4 נ׳', names: ['אבי', 'בני'] }, { line: '🔵 כחולים: 1 נ׳', names: ['גדי'] }] }],
       highlights: ['👑 מלך השערים: אבי (4)'],
     });
     expect(text).toContain('🏆 🔴 האדומים לקחו את הערב');
     expect(text).toContain('🔴 אדומים: 4 נ׳');
+    expect(text).toContain('אבי, בני');
     expect(text).toContain('👑 מלך השערים: אבי (4)');
-    expect(text.split('\n')).toHaveLength(5);
+    expect(text.split('\n')).toHaveLength(7);
   });
 });
 

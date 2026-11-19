@@ -2,20 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   afterShuffle,
   allTimeStats,
+  championOf,
   eveningStats,
   leaders,
   nameIn,
+  nightRecords,
   winPct,
   MIN_GAMES_FOR_PCT,
   type AllTimeRow,
   type EveningMatch,
   type EveningRecord,
   type EveningStats,
-  type TeamRow,
 } from '../state/history';
 import { bibLook, verb, type TeamLook } from '../state/model';
 import { useStore } from '../state/store';
-import { buildEveningShareText, copyText, nativeShare } from '../share';
+import { copyText, nativeShare } from '../share';
+import { eveningShareText } from '../state/eveningShare';
 import { useUi } from './App';
 import { Empty, Segmented, Sheet } from './components';
 import { Icon } from './icons';
@@ -48,16 +50,6 @@ function names(list: string[]): string {
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
-
-/** The team that clearly won the evening (strictly ahead of the second). */
-function championOf(table: TeamRow[]): TeamRow | null {
-  const [a, b] = table;
-  if (!a || a.won === 0) return null;
-  if (!b) return a;
-  const key = (r: TeamRow) => [r.won, r.goalsFor - r.goalsAgainst, r.goalsFor];
-  const [x, y] = [key(a), key(b)];
-  return x[0] > y[0] || (x[0] === y[0] && (x[1] > y[1] || (x[1] === y[1] && x[2] > y[2]))) ? a : null;
-}
 
 function useReducedMotion() {
   return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -230,7 +222,7 @@ function highlightsOf(rec: EveningRecord, s: EveningStats): Highlight[] {
 
 /** `readOnly`: a player's view (nothing to delete). */
 export function EveningScreen({ record: rec, readOnly = false }: { record: EveningRecord; readOnly?: boolean }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const { go, notify } = useUi();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const s = useMemo(() => eveningStats(rec), [rec]);
@@ -239,14 +231,7 @@ export function EveningScreen({ record: rec, readOnly = false }: { record: Eveni
   const champLook = champ ? lookOf(rec, champ.team) : null;
 
   const share = async () => {
-    const text = buildEveningShareText({
-      date: new Date(rec.startedAt),
-      champion: champLook ? `${champLook.emoji} ${champTitle(champLook)}` : undefined,
-      table: s.table.map(
-        (r) => `${lookOf(rec, r.team).emoji} ${lookOf(rec, r.team).name}: ${r.won} נ׳${r.pensWon ? ` (${r.pensWon} בפנדלים)` : ''} · ${r.drawn} ת׳ · ${r.lost} ה׳`,
-      ),
-      highlights: highlights.map((h) => h.text),
-    });
+    const text = eveningShareText(nightRecords(state.history, rec), rec, highlights.map((h) => h.text));
     if (await nativeShare({ text })) return;
     notify((await copyText(text)) ? 'הסיכום הועתק' : 'ההעתקה נכשלה');
   };

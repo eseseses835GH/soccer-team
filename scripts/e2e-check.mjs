@@ -1281,6 +1281,13 @@ await mob.getByRole('button', { name: 'ביטול' }).tap();
   await sp.getByRole('button', { name: 'סיום הערב' }).click();
   await sp.locator('.sheet').getByRole('button', { name: 'סיום הערב' }).click();
   await sp.waitForSelector('.evening');
+  // The shared summary covers both parts, with who played in each team.
+  await sp.evaluate(() => (navigator.share = async (d) => void (window.__evText = d.text)));
+  await sp.getByRole('button', { name: 'שיתוף הסיכום' }).click();
+  const evText = (await sp.waitForFunction(() => window.__evText).then((h) => h.jsonValue())).replace(/\u200f/g, '');
+  const firstNames = after.history[0].teams[0].ids.map((id) => after.history[0].players.find((x) => x.id === id).name).join(', ');
+  assert(evText.includes('🔀 אחרי שאפל') && evText.split('\n').includes(firstNames), `shuffle: share text ${evText}`);
+  assert(evText.includes('🏆 ההרכב שלקח את הערב: ') && !/לקח(ו|ה) את הערב$/m.test(evText), `shuffle: share champion ${evText}`);
   await sp.getByRole('button', { name: /^חזרה$/ }).click();
   const rows = await sp.locator('.ev-list li').allInnerTexts();
   assert(rows.length === 2 && rows.filter((r) => r.includes('אחרי שאפל')).length === 1, `shuffle: history list ${JSON.stringify(rows)}`);

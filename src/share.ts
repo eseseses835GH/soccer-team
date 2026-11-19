@@ -95,17 +95,25 @@ export interface EveningShareInput {
   date: Date;
   /** "🔴 האדומים לקחו את הערב" / "🔵 קבוצה 1 לקחה את הערב", if one team clearly won the evening. */
   champion?: string;
-  /** Standings, best first: "🔴 אדומים 4 נ׳ · 1 ת׳ · 1 ה׳". */
-  table: string[];
+  /** The night's teams: one part, or one per part after a shuffle (later parts have a title). */
+  parts: { title?: string; teams: { line: string; names: string[] }[] }[];
   /** Highlight lines, e.g. "👑 מלך השערים: אבי (4)". */
   highlights: string[];
 }
 
-/** Short recap of an evening for the group chat: no ratings, names only. */
-export function buildEveningShareText({ date, champion, table, highlights }: EveningShareInput): string {
+/**
+ * Short recap of an evening for the group chat: no ratings, names only.
+ * Per team its record ("🔴 אדומים: 4 נ׳ · 1 ת׳ · 1 ה׳"), then who played in it.
+ */
+export function buildEveningShareText({ date, champion, parts, highlights }: EveningShareInput): string {
   const d = date.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
+  const line = (t: string) => `${RLM}${t}${RLM}`;
   const lines = [`${RLM}⚽ סיכום הערב – ${d}`];
   if (champion) lines.push(`${RLM}🏆 ${champion}`);
-  lines.push(...table.map((t) => `${RLM}${t}${RLM}`), ...highlights.map((h) => `${RLM}${h}${RLM}`));
+  for (const p of parts) {
+    if (p.title) lines.push(line(p.title));
+    for (const t of p.teams) lines.push(line(t.line), ...(t.names.length ? [line(t.names.join(', '))] : []));
+  }
+  lines.push(...highlights.map(line));
   return lines.join('\n');
 }

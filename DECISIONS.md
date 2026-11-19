@@ -927,3 +927,10 @@ Only "שלחנו מייל. פותחים אותו ולוחצים על הקישו�
 
 ## v28: a cloud group gone from the server
 When the sync finds the open group missing on the server (deleted, or I was removed — the app can't tell which), one sheet asks: "הסרה מהטלפון" or "להשאיר בטלפון". Only on a clean "no such row" answer; offline/errors never trigger it. Keeping it makes it a local group (`keepLocal`) that is never uploaded by itself — only if the user explicitly syncs/invites again. Closing the sheet asks again next time the app opens. Removed by mistake (server bug) while still a member: my_groups brings it back within a minute.
+
+## v29: who played in each team, in the shared evening summary
+*Field feedback: the WhatsApp summary didn't say who was in each team; "X לקחו את הערב" misled when teams changed mid-evening.*
+- Each team line (record) is followed by one line of its players (final roster, keeper order; names only).
+- **Teams changed** (the night has more than one part after a shuffle, or a record's match sides differ from a final roster — a latecomer, a leaver, a swap; a player borrowed from another team for one match doesn't count): every part is listed (later ones under "🔀 אחרי שאפל"); the champion line becomes "🏆 ההרכב שלקח את הערב: {players} ({record})" for the lineup (one team in one part) with the clearly best record, omitted if none stands out; plus the night's top scorer(s). Other highlights are left out to keep it short.
+- **Teams the same all night:** as before (team champion when clear, highlights) plus the player lines.
+- Sharing from either part's screen gives the whole night. The in-app summary screen is unchanged (still per part). Logic: `src/state/eveningShare.ts`, helpers in `history.ts` (`nightRecords`, `rosterChanged`, `teamsChanged`, `nightScorers`, `bestLineup`, `championOf`).
