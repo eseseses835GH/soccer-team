@@ -14,6 +14,10 @@ import {
   inDrawExtraTime,
   keeperAt,
   loserOf,
+  nextKeeper,
+  pickKeeper,
+  rotation,
+  shiftOf,
   matchLength,
   MAX_MINUTES,
   MIN_MINUTES,
@@ -110,6 +114,10 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
   const [shuffling, setShuffling] = useState(false);
   const [newTeams, setNewTeams] = useState(false);
   const [shuffleNo, setShuffleNo] = useState(() => loadJSON<string>(SHUFFLE_NO));
+  /** "מי בשער?" open for this team. */
+  const [gkPick, setGkPick] = useState<number | null>(null);
+  /** The match end (history length) that offers "להחליף שוערים?"; asked once. */
+  const [gkAsk, setGkAsk] = useState<number | null>(null);
   const soundOn = useRef(true);
   soundOn.current = state.settings.goalSound !== 'off';
   // After a reload the time-up whistle has no tap of its own: unlock audio on any tap first.
@@ -184,22 +192,25 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
   const k = r.numTeams;
   const [a, b] = m.onPitch;
   const [ga, gb] = score(m);
-  const members = (t: number) => {
-    const order = r.gkOrder[t]?.length ? r.gkOrder[t] : r.playerIds.filter((_, i) => r.assignment[i] === t);
-    const inTeam = new Set(r.playerIds.filter((_, i) => r.assignment[i] === t));
-    return order.filter((id) => inTeam.has(id));
-  };
+  const members = (t: number) => teamMembers(r, t);
   /** Who can score for a team: its members plus anyone borrowed for this match. */
   const lineup = (t: number) => {
     const own = members(t);
     return [...own, ...borrowedInto(m, t).filter((id) => !own.includes(id))];
   };
   const noGK = noGKIds(state.players);
+  const rotate = state.settings.gkMode === 'rotate';
+  const every = state.settings.gkSwitchGoals;
+  const keeperId = (t: number) => keeperAt(members(t), m.conceded[t] ?? 0, every, rotate, noGK, shiftOf(m, t));
   /** In goal now and next (rotating keepers skip players marked "לא בשער"). */
   const keeper = (t: number) => {
-    const k = keeperAt(members(t), m.conceded[t] ?? 0, state.settings.gkSwitchGoals, state.settings.gkMode === 'rotate', noGK);
+    const k = keeperId(t);
     const nameOf = (id: string | null) => (id ? (byId.get(id)?.name ?? '') : '');
     return { now: nameOf(k.now), next: nameOf(k.next) };
+  };
+  /** After a match: offer the next keeper for the two teams that played (house rule at some venues). */
+  const offerNextKeeper = (next: MatchState) => {
+    if (rotate && [a, b].some((t) => rotation(members(t), noGK).length > 1)) setGkAsk(next.history.length);
   };
   const counts = new Array<number>(k).fill(0);
   r.assignment.forEach((t) => counts[t]++);
@@ -242,6 +253,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
     const outLook = teamLook(state.settings, out);
     const next = endMatch(m, out, Date.now());
     set(next);
+    offerNextKeeper(next);
     setDrawAsk(false);
     if (m.queue.length) {
       const inLook = teamLook(state.settings, m.queue[0]);
@@ -261,7 +273,9 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
   const plainDraw = () => (m.queue.length ? setDrawAsk('leave') : finish(a));
   const finishOnPens = (winner: number) => {
     const loserT = winner === a ? b : a;
-    set(endOnPenalties(m, winner, Date.now()));
+    const next = endOnPenalties(m, winner, Date.now());
+    set(next);
+    offerNextKeeper(next);
     setDrawAsk(false);
     const w = teamLook(state.settings, winner);
     const won = `${w.the} ${verb(w, 'ניצחו', 'ניצחה')} בפנדלים`;
@@ -277,6 +291,12 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
   const streak = between ? shuffleSuggestion(m.history) : null;
   const streakKey = streak ? `${r.createdAt}:${streak.team}:${streak.from}:${streak.wins}` : '';
   const suggest = !!streak && shuffleNo !== streakKey;
+  const last = m.history[m.history.length - 1];
+  const askGk = between && !!last && gkAsk === m.history.length;
+  const acceptNextKeeper = () => {
+    set(nextKeeper(m, [last.a, last.b], members, noGK));
+    setGkAsk(null);
+  };
   const shuffle = async () => {
     setShuffleAsk(false);
     if (shuffling) return;
@@ -387,7 +407,13 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
               <div className="goals" aria-label={`${look.name}: ${side === 0 ? ga : gb}`}>
                 <span key={side === 0 ? ga : gb}>{side === 0 ? ga : gb}</span>
               </div>
-              <div className="keeper">🧤 {keeper(t).now}</div>
+              {keeper(t).now ? (
+                <button type="button" className="keeper keeper-pick" onClick={() => setGkPick(t)}>
+                  🧤 {keeper(t).now}
+                </button>
+              ) : (
+                <div className="keeper" />
+              )}
               {keeper(t).next && <div className="keeper-next">הבא: {keeper(t).next}</div>}
               <button type="button" className="btn btn-goal" onClick={() => goal(t)}>
                 + גול
@@ -418,6 +444,20 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
       {leaving && <LeaveSheet onClose={() => setLeaving(false)} mode={runner ? 'runner' : undefined} />}
 
       <BorrowCard m={m} r={r} set={set} />
+
+      {askGk && (
+        <div className="notice tip" role="status">
+          <p>להחליף שוערים?</p>
+          <div className="row-2">
+            <button type="button" className="btn btn-small btn-primary" onClick={acceptNextKeeper}>
+              להחליף
+            </button>
+            <button type="button" className="btn btn-small btn-quiet" onClick={() => setGkAsk(null)}>
+              לא
+            </button>
+          </div>
+        </div>
+      )}
 
       {suggest && streak && (
         <div className="notice tip" role="status">
@@ -552,6 +592,28 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
           <button type="button" className="btn btn-quiet btn-block" onClick={() => setScorerFor(null)}>
             דילוג
           </button>
+        </Sheet>
+      )}
+
+      {gkPick !== null && (
+        <Sheet title={`מי בשער אצל ${teamLook(state.settings, gkPick).the}?`} onClose={() => setGkPick(null)}>
+          <ul className="pick-list">
+            {rotation(members(gkPick), noGK).map((id) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  aria-pressed={keeperId(gkPick).now === id}
+                  onClick={() => {
+                    set(pickKeeper(m, gkPick, members(gkPick), id, every, rotate, noGK));
+                    setGkPick(null);
+                  }}
+                >
+                  <span className="name">{byId.get(id)?.name}</span>
+                  {keeperId(gkPick).now === id && <span aria-hidden="true"> 🧤</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
         </Sheet>
       )}
 

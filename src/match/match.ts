@@ -83,6 +83,11 @@ export interface MatchState {
   length?: MatchLength;
   /** The match (`history.length`) that already got automatic extra time for a draw: only once. */
   extraAt?: number;
+  /**
+   * Per team, how many places the keeper was moved on from where the goals put him ("שוער הבא",
+   * picking who is in goal, or keeping him there when the roster changed). Missing = all 0.
+   */
+  gkShift?: number[];
 }
 
 /** A match length in ms; null = no time limit (the clock counts up and never runs out). */
@@ -305,6 +310,7 @@ export function addTeam(m: MatchState, team: number): MatchState {
     streak: grow(m.streak, 0),
     pitchSince: grow(m.pitchSince, m.history.length),
     conceded: grow(m.conceded, 0),
+    ...(m.gkShift ? { gkShift: grow(m.gkShift, 0) } : {}),
   };
 }
 
@@ -382,10 +388,11 @@ export function dismissDominance(m: MatchState, team: number): MatchState {
   return { ...m, dismissed: { team, atMatch: m.history.length } };
 }
 
-/** Index into a team's keeper order: rotate every `every` goals conceded. */
-export function keeperIndex(conceded: number, every: number, orderLength: number): number {
+/** Index into a team's keeper order: rotate every `every` goals conceded, moved on by `shift`. */
+export function keeperIndex(conceded: number, every: number, orderLength: number, shift = 0): number {
   if (orderLength <= 0) return 0;
-  return Math.floor(conceded / Math.max(1, every)) % orderLength;
+  const i = Math.floor(conceded / Math.max(1, every)) + shift;
+  return ((i % orderLength) + orderLength) % orderLength;
 }
 
 /**
@@ -398,18 +405,62 @@ export function rotation(order: string[], noGK?: ReadonlySet<string>): string[] 
   return r.length ? r : order;
 }
 
-/** The keeper now and the next one in the rotation (fixed mode: the first one stays, no next). */
+/**
+ * The keeper now and the next one in the rotation. Fixed mode: the goals don't move him (only
+ * `shift` does: who was picked to stay), no next.
+ */
 export function keeperAt(
   order: string[],
   conceded: number,
   every: number,
   rotate: boolean,
   noGK?: ReadonlySet<string>,
+  shift = 0,
 ): { now: string | null; next: string | null } {
   const r = rotation(order, noGK);
   if (!r.length) return { now: null, next: null };
-  const i = rotate ? keeperIndex(conceded, every, r.length) : 0;
+  const i = keeperIndex(rotate ? conceded : 0, every, r.length, shift);
   return { now: r[i], next: rotate && r.length > 1 ? r[(i + 1) % r.length] : null };
+}
+
+/** A team's keeper shift (0 when there is none). */
+export const shiftOf = (m: Pick<MatchState, 'gkShift'> | null | undefined, t: number): number => m?.gkShift?.[t] ?? 0;
+
+/** The match with team `t`'s shift set (kept within 0…len-1 of its rotation). */
+export function withShift(m: MatchState, t: number, shift: number, len: number): MatchState {
+  const v = len > 0 ? ((shift % len) + len) % len : 0;
+  if (shiftOf(m, t) === v) return m;
+  const n = Math.max(m.conceded.length, t + 1);
+  const gkShift = Array.from({ length: n }, (_, i) => (i === t ? v : shiftOf(m, i)));
+  return { ...m, gkShift };
+}
+
+/**
+ * The shift that puts `id` in goal for a team whose rotation is `order` (null: he isn't in it).
+ * The order itself doesn't change.
+ */
+export function shiftFor(order: string[], id: string, conceded: number, every: number, rotate: boolean, noGK?: ReadonlySet<string>): number | null {
+  const r = rotation(order, noGK);
+  const at = r.indexOf(id);
+  if (at < 0) return null;
+  const base = keeperIndex(rotate ? conceded : 0, every, r.length);
+  return (((at - base) % r.length) + r.length) % r.length;
+}
+
+/** "מי בשער?": put `id` in goal for team `t` now. */
+export function pickKeeper(m: MatchState, t: number, order: string[], id: string, every: number, rotate: boolean, noGK?: ReadonlySet<string>): MatchState {
+  const s = shiftFor(order, id, m.conceded[t] ?? 0, every, rotate, noGK);
+  return s === null ? m : withShift(m, t, s, rotation(order, noGK).length);
+}
+
+/** "שוער הבא": the next one in the rotation goes in goal for each of `teams`. */
+export function nextKeeper(m: MatchState, teams: number[], orders: (t: number) => string[], noGK?: ReadonlySet<string>): MatchState {
+  let out = m;
+  for (const t of teams) {
+    const len = rotation(orders(t), noGK).length;
+    if (len > 1) out = withShift(out, t, shiftOf(out, t) + 1, len);
+  }
+  return out;
 }
 
 /** Swap two players in a keeper order (anything else stays where it is). */
@@ -445,6 +496,7 @@ export function sanitizeMatch(raw: unknown, numTeams: number): MatchState | null
     dismissed: r.dismissed && inRange(r.dismissed.team) ? r.dismissed : null,
     borrow: sanitizeBorrow(r.borrow, numTeams, r.onPitch),
     ...sanitizeLength(r.length, Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)).length : 0),
+    ...(Array.isArray(r.gkShift) ? { gkShift: Array.from({ length: numTeams }, (_, i) => (Number.isInteger(r.gkShift![i]) ? Math.max(0, Math.min(1000, r.gkShift![i])) : 0)) } : {}),
     ...(typeof r.extraAt === 'number' && r.extraAt === (Array.isArray(r.history) ? r.history.filter((h) => inRange(h?.a) && inRange(h?.b)).length : 0) ? { extraAt: r.extraAt } : {}),
   };
 }

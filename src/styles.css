@@ -1241,6 +1241,22 @@ thead th {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.keeper-pick {
+  /* Above the big score's line box, which overlaps it. */
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-inline: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
 .btn-goal {
   inline-size: 100%;
   min-block-size: 56px;

@@ -5,7 +5,7 @@
  */
 import { MAX_TEAMS, createRng, shuffle, suggestSwaps, type SwapSuggestion } from '../engine';
 import type { MatchState } from '../match/match';
-import { inProgress, subIn, type LeaveCtx } from './leave';
+import { holdKeepers, inProgress, subIn, type LeaveCtx } from './leave';
 import type { GameResult, Player } from './model';
 
 export type LateOutcome =
@@ -91,14 +91,14 @@ export function lateJoin(
 
   const shortBefore = countsOf(r).some((c) => c < r.teamSize);
   // Same as a sub coming in: last in his team's keeper rotation, whoever is in goal stays there.
-  const joined = subIn({ ...r, subIds }, m, id, t, ctx);
+  const joined = subIn({ ...r, subIds }, id, t);
   const result = { ...joined, generated: joined.assignment };
   const counts = countsOf(result);
   // A short team with borrowers: he takes a borrower's place (that one goes back to his own team).
-  let match = m;
-  if (m?.borrow?.team === t && m.borrow.ids.length) {
-    const ids = m.borrow.ids.slice(0, Math.max(0, r.teamSize - counts[t]));
-    match = { ...m, borrow: ids.length ? { ...m.borrow, ids } : null };
+  let match = holdKeepers(r, m, result, m, ctx);
+  if (match?.borrow?.team === t && match.borrow.ids.length) {
+    const ids = match.borrow.ids.slice(0, Math.max(0, r.teamSize - counts[t]));
+    match = { ...match, borrow: ids.length ? { ...match.borrow, ids } : null };
   }
   const filled = shortBefore && counts.every((c) => c >= r.teamSize);
   return { result, match, outcome: filled ? 'filled' : 'joined', team: t };
@@ -136,12 +136,12 @@ export function addFromBench(
   team: number,
   ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'>,
 ): { result: GameResult; match: MatchState | null } {
-  const result = subIn(r, m, subId, team, ctx);
+  const result = subIn(r, subId, team);
   if (result === r) return { result: r, match: m };
-  let match = m;
-  if (m?.borrow?.team === team && m.borrow.ids.length) {
-    const ids = m.borrow.ids.slice(0, Math.max(0, r.teamSize - countsOf(result)[team]));
-    match = { ...m, borrow: ids.length ? { ...m.borrow, ids } : null };
+  let match = holdKeepers(r, m, result, m, ctx);
+  if (match?.borrow?.team === team && match.borrow.ids.length) {
+    const ids = match.borrow.ids.slice(0, Math.max(0, r.teamSize - countsOf(result)[team]));
+    match = { ...match, borrow: ids.length ? { ...match.borrow, ids } : null };
   }
   return { result, match };
 }
