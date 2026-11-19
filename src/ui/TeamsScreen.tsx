@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ATTR_KEYS, evaluate } from '../engine';
 import { ATTR_LABELS } from '../i18n';
-import { keeperAt, startSession } from '../match/match';
+import { keeperAt, shiftOf, startSession } from '../match/match';
 import { teamMembers } from '../state/history';
 import { FIELD_POSITIONS } from '../state/positions';
 import { engineOptions, noGKIds, teamLook, type AppState, type GameResult, type Player } from '../state/model';
@@ -385,7 +385,7 @@ export function TeamsScreen() {
           teams={Array.from({ length: k }, (_, t) => ({
             look: teamLook(state.settings, t),
             ids: teamMembers(r, t),
-            keeper: state.match ? keeperAt(teamMembers(r, t), state.match.conceded[t] ?? 0, state.settings.gkSwitchGoals, true, noGK).now : null,
+            keeper: state.match ? keeperAt(teamMembers(r, t), state.match.conceded[t] ?? 0, state.settings.gkSwitchGoals, state.settings.gkMode === 'rotate', noGK, shiftOf(state.match, t)).now : null,
           }))}
           name={nameOf}
           every={state.settings.gkSwitchGoals}

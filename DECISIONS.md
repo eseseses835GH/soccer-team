@@ -927,3 +927,10 @@ Only "שלחנו מייל. פותחים אותו ולוחצים על הקישו�
 
 ## v28: a cloud group gone from the server
 When the sync finds the open group missing on the server (deleted, or I was removed — the app can't tell which), one sheet asks: "הסרה מהטלפון" or "להשאיר בטלפון". Only on a clean "no such row" answer; offline/errors never trigger it. Keeping it makes it a local group (`keepLocal`) that is never uploaded by itself — only if the user explicitly syncs/invites again. Closing the sheet asks again next time the app opens. Removed by mistake (server bug) while still a member: my_groups brings it back within a minute.
+
+## v29: who is in goal stays put
+*Field: with "switch keeper at the end of a match" (some venues) the app's keeper went out of step, and roster changes moved him.* Rotation by goals conceded stays. New optional `MatchState.gkShift[t]`: the keeper is `rotation[(floor(conceded/every) + shift) mod len]` (fixed mode: `rotation[shift]`). Old states have none (= 0).
+- **Pick by hand:** tap the keeper's name on the match screen → "מי בשער אצל {הכחולים}?" → one tap on a name sets the shift. The order is untouched; "🧤 סדר שוערים" still reorders.
+- **End of match:** with rotating keepers, one quiet notice "להחליף שוערים?" — "להחליף" moves the two teams that just played on by one, "לא" does nothing. Asked once per match end, on the phone that ended it.
+- **Roster changes never move the keeper:** late, bench add, sub in, leave, swaps, keeper reorder — the order is kept (newcomers last, no more rotating the list) and `holdKeepers` sets the shift so whoever is in goal stays (he left → the next one). Done in the pure late/leave functions and once more in the reducer for any change to the teams under a match session (not for a new split or shuffle).
+- **Live:** the snapshot carries `match.gkShift` (only when non-zero); keepers on players' phones and a player who takes over (`liveToState`) follow it. Old phones ignore it (a player runner on an old version would drop it). No server change.

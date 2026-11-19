@@ -95,6 +95,7 @@ export function liveToState(live: LiveData, dfltMs: number | null = null): LiveI
     streak: fill(lm.streak, n),
     pitchSince: fill(lm.pitchSince, n),
     conceded: lm.conceded ? fill(lm.conceded, n) : concededFrom(history, goals, lm.onPitch, n),
+    ...(lm.gkShift ? { gkShift: fill(lm.gkShift, n) } : {}),
     clock: { running: lm.clock.running, startedAt: lm.clock.running ? lm.clock.startedAt : null, elapsedMs: lm.clock.elapsedMs },
     goals,
     history,

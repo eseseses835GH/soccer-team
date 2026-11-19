@@ -2086,6 +2086,64 @@ if (SB_URL) {
   await kc.close();
 }
 
+// 20c. Keepers: tapping the keeper picks who is in goal (the order stays); after "סיום משחק" one
+// quiet "להחליף שוערים?" moves the two teams that played to their next keeper; "לא" changes nothing.
+{
+  const gc = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const gp = await gc.newPage();
+  gp.on('pageerror', (e) => errors.push(`gk shift: ${e.message}`));
+  const stored = () => gp.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  await gp.goto(base);
+  await gp.getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  await gp.goto(base + '#home');
+  if (!(await gp.getByRole('button', { name: 'עושים כוחות' }).isEnabled())) await gp.getByRole('button', { name: /^כולם$/ }).click();
+  await gp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await gp.waitForSelector('.team');
+  await gp.getByRole('button', { name: /התחלת משחק/ }).click();
+  const keepers = () => gp.locator('.side .keeper').allInnerTexts();
+  const order0 = JSON.stringify((await stored()).result.gkOrder);
+  // Pick: tap team 1's keeper, choose the second one in the list.
+  const [k0] = await keepers();
+  await gp.locator('.side .keeper').first().click();
+  const pick = gp.getByRole('dialog', { name: /^מי בשער אצל/ });
+  await pick.waitFor();
+  const names = await pick.locator('.pick-list .name').allInnerTexts();
+  assert(names.length > 1 && `🧤 ${names[0]}` === k0, `gk shift: pick list starts with the keeper ${names} / ${k0}`);
+  await pick.getByRole('button', { name: names[1] }).click();
+  assert((await gp.getByRole('dialog', { name: /^מי בשער אצל/ }).count()) === 0, 'gk shift: one tap closes the pick');
+  assert((await keepers())[0] === `🧤 ${names[1]}`, `gk shift: picked keeper shown ${await keepers()}`);
+  assert(JSON.stringify((await stored()).result.gkOrder) === order0, 'gk shift: picking keeps the order');
+  assert((await stored()).match.gkShift[0] === 1, `gk shift: saved ${JSON.stringify((await stored()).match.gkShift)}`);
+  // End a match (team 1 wins 1–0): offered once; "להחליף" moves both teams that played on by one.
+  await gp.getByRole('button', { name: /התחלה/ }).click();
+  await gp.getByRole('button', { name: '+ גול' }).first().click();
+  await gp.getByRole('dialog').getByRole('button', { name: 'דילוג' }).click();
+  const before = await keepers();
+  const lastShift = (await stored()).match.gkShift ?? [];
+  await gp.getByRole('button', { name: 'סיום משחק' }).click();
+  const ask = gp.locator('.notice', { hasText: 'להחליף שוערים?' });
+  await ask.waitFor({ timeout: 3000 }).catch(() => errors.push('gk shift: not offered after the match'));
+  assert((await keepers())[0] === before[0], 'gk shift: nothing changes before answering');
+  await ask.getByRole('button', { name: 'להחליף' }).click();
+  assert((await ask.count()) === 0, 'gk shift: the offer goes away');
+  const after = await keepers();
+  assert(after[0] !== before[0], `gk shift: the winner's keeper changed ${before} → ${after}`);
+  const sh = (await stored()).match.gkShift;
+  assert(sh[0] === (lastShift[0] ?? 0) + 1 && sh[1] === (lastShift[1] ?? 0) + 1, `gk shift: both teams moved on ${JSON.stringify(sh)}`);
+  // Next match: "לא" changes nothing, and the offer doesn't come back after a reload.
+  await gp.getByRole('button', { name: /התחלה/ }).click();
+  await gp.getByRole('button', { name: '+ גול' }).first().click();
+  await gp.getByRole('dialog').getByRole('button', { name: 'דילוג' }).click();
+  await gp.getByRole('button', { name: 'סיום משחק' }).click();
+  const sh2 = JSON.stringify((await stored()).match.gkShift);
+  await gp.locator('.notice', { hasText: 'להחליף שוערים?' }).getByRole('button', { name: 'לא' }).click();
+  assert(JSON.stringify((await stored()).match.gkShift) === sh2, 'gk shift: "לא" changes nothing');
+  await gp.reload();
+  await gp.waitForSelector('.side .keeper');
+  assert((await gp.locator('.notice', { hasText: 'להחליף שוערים?' }).count()) === 0, 'gk shift: not asked again for the same match end');
+  await gc.close();
+}
+
 // My page (v17): the avatar opens "הדף שלי"; groups with role and who I am; an organizer claims
 // himself; numbers from both groups' history; a recent evening opens in its group; logging out.
 if (SB_URL) {

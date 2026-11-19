@@ -10,7 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { teamMembers, type EveningRecord } from '../state/history';
 import { defaultMatchMs, teamBibs, type GameResult, type Settings } from '../state/model';
-import { inDrawExtraTime, keeperAt, matchLength, score, type MatchState, type Pens } from '../match/match';
+import { inDrawExtraTime, keeperAt, matchLength, score, shiftOf, type MatchState, type Pens } from '../match/match';
 import { fail } from './supabase';
 
 export interface LiveClock {
@@ -56,6 +56,8 @@ export interface LiveMatch {
   pitchSince?: number[];
   /** v12: goals conceded per team tonight (drives keeper rotation). */
   conceded?: number[];
+  /** Per team, how far the keeper was moved on from where the goals put him (MatchState.gkShift). Missing = 0. */
+  gkShift?: number[];
   /** v12: dominance hint dismissed on the runner's phone. */
   dismissed?: { team: number; atMatch: number } | null;
   /** Tonight's finished matches, oldest first. */
@@ -168,7 +170,7 @@ export function liveFromState({ result: r, match: m, players, settings, now }: L
   const noGK = new Set(players.filter((p) => p.noGK).map((p) => p.id));
   const teams: LiveTeam[] = Array.from({ length: r.numTeams }, (_, t) => {
     const ids = teamMembers(r, t);
-    return { bib: bibs[t], ids, keeper: keeperAt(ids, m?.conceded[t] ?? 0, settings.gkSwitchGoals, !!m && rotate, noGK).now };
+    return { bib: bibs[t], ids, keeper: keeperAt(ids, m?.conceded[t] ?? 0, settings.gkSwitchGoals, !!m && rotate, noGK, shiftOf(m, t)).now };
   });
   const tonight = new Set([...r.playerIds, ...r.subIds, ...(m?.borrow?.ids ?? [])]);
   const out: LiveData = {
@@ -203,6 +205,7 @@ export function liveFromState({ result: r, match: m, players, settings, now }: L
       streak: [...m.streak],
       pitchSince: [...m.pitchSince],
       conceded: [...m.conceded],
+      ...(m.gkShift?.some((x) => x) ? { gkShift: [...m.gkShift] } : {}),
       dismissed: m.dismissed ? { ...m.dismissed } : null,
       played: m.history.map((h) => ({
         a: h.a,
@@ -304,6 +307,7 @@ export function sanitizeLive(raw: unknown): LiveData | null {
       streak: ints(m.streak, 10000),
       ...(Array.isArray(m.pitchSince) ? { pitchSince: ints(m.pitchSince, 10000) } : {}),
       ...(Array.isArray(m.conceded) ? { conceded: ints(m.conceded, 100000) } : {}),
+      ...(Array.isArray(m.gkShift) ? { gkShift: teams.map((_, i) => int((m.gkShift as unknown[])[i], 0, 1000) ?? 0) } : {}),
       ...(m.dismissed === null || dis
         ? { dismissed: dis && int(dis.team, 0, k) !== null ? { team: dis.team as number, atMatch: int(dis.atMatch, 0, 10000) ?? 0 } : null }
         : {}),

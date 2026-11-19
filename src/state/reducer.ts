@@ -3,7 +3,7 @@ import { addTeam, startSession, swapKeepers, type MatchState } from '../match/ma
 import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, noGKIds, teamBibs, type AppState, type Player, type Settings } from './model';
 import { addEvening, buildEvening, eveningId, mergeHistory, nightOf, stampSides, teamMembers, type EveningRecord } from './history';
 import { addFromBench, lateJoin, type LateChoice } from './late';
-import { leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
+import { holdKeepers, leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
 export type Action =
@@ -120,6 +120,11 @@ export function reducer(state: AppState, action: Action): AppState {
   // The session was dropped (re-split, player deleted, sample loaded…): keep what was played.
   if (!match || match.history.length < prev.history.length) {
     return { ...next, history: archive(state, 'now' in action ? action.now : Date.now()) };
+  }
+  // The teams changed under a match session: whoever is in goal stays in goal (new teams: no).
+  if (next.result && next.result !== state.result && action.type !== 'shuffle' && action.type !== 'setResult') {
+    const held = holdKeepers(state.result, prev, next.result, match, leaveCtx(next));
+    if (held !== match) return { ...next, match: held };
   }
   return next;
 }
@@ -327,7 +332,7 @@ function baseReducer(state: AppState, action: Action): AppState {
     }
     case 'subIn': {
       if (!state.result) return state;
-      const result = subIn(state.result, state.match, action.subId, action.team, leaveCtx(state));
+      const result = subIn(state.result, action.subId, action.team);
       return result === state.result ? state : { ...state, result };
     }
     case 'addFromBench': {

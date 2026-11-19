@@ -7,7 +7,7 @@
  */
 import { suggestSwaps, type Constraints, type EngineOptions, type SwapSuggestion } from '../engine';
 import { buildProblem, cost } from '../engine/cost';
-import { keeperIndex, rotation, type MatchState } from '../match/match';
+import { keeperIndex, rotation, shiftFor, shiftOf, withShift, type MatchState } from '../match/match';
 import { stampSides, teamMembers } from './history';
 import type { GameResult, Player } from './model';
 
@@ -63,26 +63,43 @@ export function inProgress(m: MatchState | null): boolean {
 }
 
 /**
- * New keeper order for a team whose roster changed, keeping whoever is in goal now in goal
- * (if he left, the next one in the rotation takes over). The rotation index comes from goals
- * conceded, so the list is rotated to put that keeper where the index points.
+ * A team's roster changed from `prev` to `next` (both in keeper order): the keeper shift that keeps
+ * whoever is in goal now in goal (if he left, the next one in the rotation takes over). The order
+ * itself is never turned: newcomers stay last. Returns `shift` unchanged when nobody fits.
  */
-export function keepKeeper(prev: string[], next: string[], conceded: number, every: number, rotate: boolean, noGK?: ReadonlySet<string>): string[] {
-  if (!next.length) return next;
-  // Only those who take turns count (players marked "לא בשער" are skipped, and go last).
+export function keepKeeper(prev: string[], next: string[], conceded: number, every: number, rotate: boolean, noGK?: ReadonlySet<string>, shift = 0): number {
   const pr = rotation(prev, noGK);
   const nr = rotation(next, noGK);
-  const ci = rotate ? keeperIndex(conceded, every, pr.length) : 0;
-  let keeper: string | undefined;
-  for (let s = 0; s < pr.length && !keeper; s++) {
+  if (!pr.length || !nr.length) return shift;
+  const ci = keeperIndex(rotate ? conceded : 0, every, pr.length, shift);
+  for (let s = 0; s < pr.length; s++) {
     const id = pr[(ci + s) % pr.length];
-    if (nr.includes(id)) keeper = id;
+    if (nr.includes(id)) return shiftFor(next, id, conceded, every, rotate, noGK) ?? shift;
   }
-  if (!keeper) return next;
-  const ni = rotate ? keeperIndex(conceded, every, nr.length) : 0;
-  const shift = nr.indexOf(keeper) - ni;
-  const turned = nr.map((_, i) => nr[(((i + shift) % nr.length) + nr.length) % nr.length]);
-  return [...turned, ...next.filter((id) => !turned.includes(id))];
+  return shift;
+}
+
+/**
+ * After any roster change (late, left, sub, swap, keeper order): each team keeps its keeper in
+ * goal, by moving its shift (the orders stay as they are). No match session: nothing to keep.
+ */
+export function holdKeepers(
+  prev: GameResult,
+  prevM: MatchState | null,
+  next: GameResult,
+  m: MatchState | null,
+  ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'>,
+): MatchState | null {
+  if (!m || !prevM) return m;
+  let out = m;
+  for (let t = 0; t < Math.min(prev.numTeams, next.numTeams); t++) {
+    const a = teamMembers(prev, t);
+    const b = teamMembers(next, t);
+    if (a.length === b.length && a.every((id, i) => id === b[i]) && shiftOf(prevM, t) === shiftOf(m, t)) continue;
+    const s = keepKeeper(a, b, prevM.conceded[t] ?? 0, ctx.every, ctx.rotate, ctx.noGK, shiftOf(prevM, t));
+    out = withShift(out, t, s, rotation(b, ctx.noGK).length);
+  }
+  return out;
 }
 
 function engineRoster(ctx: LeaveCtx, ids: string[]) {
@@ -111,13 +128,12 @@ export function bestSub(r: GameResult, team: number, ctx: LeaveCtx): { subId: st
   return best;
 }
 
-/** A sub joins `team` (last in its keeper rotation, the keeper in goal stays). */
-export function subIn(r: GameResult, m: MatchState | null, subId: string, team: number, ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'>): GameResult {
+/** A sub joins `team`, last in its keeper order (`holdKeepers` keeps the keeper in goal). */
+export function subIn(r: GameResult, subId: string, team: number): GameResult {
   if (!r.subIds.includes(subId) || team < 0 || team >= r.numTeams) return r;
-  const prev = teamMembers(r, team);
   const gkOrder = [...r.gkOrder];
   while (gkOrder.length < r.numTeams) gkOrder.push([]);
-  gkOrder[team] = keepKeeper(prev, [...prev, subId], m?.conceded[team] ?? 0, ctx.every, ctx.rotate, ctx.noGK);
+  gkOrder[team] = [...teamMembers(r, team), subId];
   return {
     ...r,
     playerIds: [...r.playerIds, subId],
@@ -149,7 +165,7 @@ export function leaveEarly(r: GameResult, m: MatchState | null, id: string, ctx:
   const prev = teamMembers(r, t);
   const gkOrder = [...r.gkOrder];
   while (gkOrder.length < r.numTeams) gkOrder.push([]);
-  gkOrder[t] = keepKeeper(prev, prev.filter((x) => x !== id), m?.conceded[t] ?? 0, ctx.every, ctx.rotate, ctx.noGK);
+  gkOrder[t] = prev.filter((x) => x !== id);
   let result: GameResult = {
     ...r,
     playerIds: drop(r.playerIds),
@@ -192,18 +208,20 @@ export function leaveEarly(r: GameResult, m: MatchState | null, id: string, ctx:
         streak: match.streak.slice(0, k - 1),
         pitchSince: match.pitchSince.slice(0, k - 1),
         conceded: match.conceded.slice(0, k - 1),
+        ...(match.gkShift ? { gkShift: match.gkShift.slice(0, k - 1) } : {}),
         dismissed: match.dismissed?.team === t ? null : match.dismissed,
       };
     }
-    return { outcome: 'toBench', team: t, result, match };
+    return { outcome: 'toBench', team: t, result, match: holdKeepers(r, m, result, match, ctx) };
   }
 
   if (left < MIN_LEFT) {
     const best = bestSub(result, t, ctx);
     if (!best) return { outcome: 'blocked', team: t, result: r, match: m };
-    return { outcome: 'subIn', team: t, result: subIn(result, match, best.subId, t, ctx), match, subId: best.subId };
+    const joined = subIn(result, best.subId, t);
+    return { outcome: 'subIn', team: t, result: joined, match: holdKeepers(r, m, joined, match, ctx), subId: best.subId };
   }
-  return { outcome: 'short', team: t, result, match };
+  return { outcome: 'short', team: t, result, match: holdKeepers(r, m, result, match, ctx) };
 }
 
 /**

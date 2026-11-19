@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../engine';
-import { addGoal, endMatch, keeperIndex, setBorrow, startClock, startSession } from '../match/match';
+import { addGoal, endMatch, keeperAt, keeperIndex, setBorrow, shiftOf, startClock, startSession } from '../match/match';
 import { teamMembers } from './history';
 import { addFromBench, lateJoin, nowTarget, suggestAfterLate } from './late';
 import type { LeaveCtx } from './leave';
@@ -84,7 +84,8 @@ describe('late arrival: in now', () => {
     const j = lateJoin(r, m, 'x', now, ctx, 1);
     expect(j.team).toBe(1);
     expect(teamMembers(j.result, 1)).toContain('x');
-    expect(j.result.gkOrder[1][keeperIndex(1, 1, 4)]).toBe(keeper);
+    expect(j.result.gkOrder[1]).toEqual([...r.gkOrder[1], 'x']);
+    expect(keeperAt(j.result.gkOrder[1], 1, 1, true, undefined, shiftOf(j.match, 1)).now).toBe(keeper);
     expect(j.match!.onPitch).toEqual([0, 1]);
     expect(j.match!.goals).toEqual(m.goals);
   });
@@ -178,8 +179,8 @@ describe('bench: add a sub to a team on request', () => {
     m = addGoal(m, 0, 1); // team 1 conceded 1 → e in goal
     const a = addFromBench(r, m, 'x', 1, ctx);
     const order = a.result.gkOrder[1];
-    expect(order[keeperIndex(1, 1, order.length)]).toBe('e');
-    expect(order).toContain('x');
+    expect(keeperAt(order, 1, 1, true, undefined, shiftOf(a.match, 1)).now).toBe('e');
+    expect(order).toEqual(['d', 'e', 'f', 'x']);
     let s: AppState = { ...INITIAL_STATE, players: roster, teamSize: 4, presentIds: [...r.playerIds, 'x'], result: r, match: m };
     s = reducer(s, { type: 'addFromBench', subId: 'x', team: 1 });
     expect(isResultStale(s)).toBe(false);

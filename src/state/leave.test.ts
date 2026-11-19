@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../engine';
-import { addGoal, endMatch, keeperIndex, setBorrow, startClock, startSession, type MatchState } from '../match/match';
+import { addGoal, endMatch, keeperAt, setBorrow, shiftOf, startClock, startSession, type MatchState } from '../match/match';
 import { teamMembers } from './history';
 import { asLeave, keepKeeper, leaveCase, leaveEarly, leaveMany, lockedAfterLeave, suggestAfterLeave, type LeaveCtx } from './leave';
 import { INITIAL_STATE, defaultAttrs, type AppState, type GameResult, type Player } from './model';
@@ -60,14 +60,17 @@ describe('left early: removal', () => {
   });
 
   it('keeps whoever is in goal in goal; if the keeper left, the next one takes over', () => {
+    const now = (order: string[], conceded: number, shift: number, rotate = true) => keeperAt(order, conceded, 1, rotate, undefined, shift).now;
     // conceded 1, every 1 → index 1 of [a1,a2,a3] = a2 is in goal.
-    expect(keepKeeper(['a1', 'a2', 'a3'], ['a1', 'a2'], 1, 1, true)[keeperIndex(1, 1, 2)]).toBe('a2');
-    expect(keepKeeper(['a1', 'a2', 'a3'], ['a1', 'a3'], 1, 1, true)[keeperIndex(1, 1, 2)]).toBe('a3');
-    // conceded 5 → index 2 = a3; a1 leaves → a3 still in goal, order stays cyclic.
-    const o = keepKeeper(['a1', 'a2', 'a3'], ['a2', 'a3'], 5, 1, true);
-    expect(o[keeperIndex(5, 1, 2)]).toBe('a3');
-    // Fixed keepers: the first stays first.
-    expect(keepKeeper(['a1', 'a2', 'a3'], ['a1', 'a3'], 4, 1, false)).toEqual(['a1', 'a3']);
+    expect(now(['a1', 'a2'], 1, keepKeeper(['a1', 'a2', 'a3'], ['a1', 'a2'], 1, 1, true))).toBe('a2');
+    expect(now(['a1', 'a3'], 1, keepKeeper(['a1', 'a2', 'a3'], ['a1', 'a3'], 1, 1, true))).toBe('a3');
+    // conceded 5 → index 2 = a3; a1 leaves → a3 still in goal.
+    expect(now(['a2', 'a3'], 5, keepKeeper(['a1', 'a2', 'a3'], ['a2', 'a3'], 5, 1, true))).toBe('a3');
+    // With a shift already: conceded 1 + shift 1 → a3; a1 leaves → a3 stays.
+    expect(now(['a2', 'a3'], 1, keepKeeper(['a1', 'a2', 'a3'], ['a2', 'a3'], 1, 1, true, undefined, 1))).toBe('a3');
+    // Fixed keepers: the first stays; if he left, the next one.
+    expect(now(['a1', 'a3'], 4, keepKeeper(['a1', 'a2', 'a3'], ['a1', 'a3'], 4, 1, false), false)).toBe('a1');
+    expect(now(['a2', 'a3'], 4, keepKeeper(['a1', 'a2', 'a3'], ['a2', 'a3'], 4, 1, false), false)).toBe('a2');
   });
 
   it('during a match the team in goal keeps its keeper after the change', () => {
@@ -76,7 +79,11 @@ describe('left early: removal', () => {
     m = addGoal(m, 1, 1); // team 0 conceded 1 → a2 in goal
     const l = leaveEarly(r, m, 'a3', ctx)!;
     const order = l.result.gkOrder[0];
-    expect(order[keeperIndex(l.match!.conceded[0], 1, order.length)]).toBe('a2');
+    expect(order).toEqual(['a1', 'a2']);
+    expect(keeperAt(order, l.match!.conceded[0], 1, true, undefined, shiftOf(l.match, 0)).now).toBe('a2');
+    // The keeper himself leaves: the next one in the order goes in.
+    const l2 = leaveEarly(r, m, 'a2', ctx)!;
+    expect(keeperAt(l2.result.gkOrder[0], 1, 1, true, undefined, shiftOf(l2.match, 0)).now).toBe('a3');
   });
 
   it('a borrowed player who leaves is dropped from the borrow (the step asks again when nobody is left)', () => {

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../engine';
-import { keeperAt, rotation, startSession, swapKeepers } from '../match/match';
+import { keeperAt, rotation, shiftOf, startSession, swapKeepers } from '../match/match';
 import { liveFromState } from '../sync/live';
 import { parsePublic } from '../sync/players';
-import { keepKeeper, subIn } from './leave';
+import { addFromBench } from './late';
+import { keepKeeper } from './leave';
 import { DEFAULT_SETTINGS, INITIAL_STATE, defaultAttrs, noGKIds, sanitizePlayer, withNoGK, type AppState, type GameResult, type Player } from './model';
 import { reducer } from './reducer';
 import { keeperOrder } from './split';
@@ -81,16 +82,17 @@ describe('keeper order generation', () => {
 describe('roster changes keep the keeper, skipping "לא בשער"', () => {
   it('a sub who is "לא בשער" joins after the rotation; the keeper in goal stays', () => {
     const out = new Set(['x']);
-    const next = keepKeeper(['a', 'b', 'c'], ['a', 'b', 'c', 'x'], 1, 1, true, out);
-    expect(keeperAt(next, 1, 1, true, out).now).toBe('b');
-    expect(next.at(-1)).toBe('x');
+    const next = ['a', 'b', 'c', 'x'];
+    const shift = keepKeeper(['a', 'b', 'c'], next, 1, 1, true, out);
+    expect(keeperAt(next, 1, 1, true, out, shift).now).toBe('b');
   });
-  it('subIn passes "לא בשער" on', () => {
+  it('a sub joining passes "לא בשער" on', () => {
     const r = result([['a', 'b', 'n'], ['c', 'd', 'e']], ['s']);
     const m = { ...startSession(2), conceded: [1, 0] };
     const out = new Set(['n']);
-    const r2 = subIn(r, m, 's', 0, { rotate: true, every: 1, noGK: out });
-    expect(keeperAt(r2.gkOrder[0], 1, 1, true, out).now).toBe('b');
+    const j = addFromBench(r, m, 's', 0, { rotate: true, every: 1, noGK: out });
+    expect(j.result.gkOrder[0]).toEqual(['a', 'b', 'n', 's']);
+    expect(keeperAt(j.result.gkOrder[0], 1, 1, true, out, shiftOf(j.match, 0)).now).toBe('b');
   });
 });
 
