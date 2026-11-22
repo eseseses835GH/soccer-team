@@ -1,5 +1,5 @@
 /**
- * Everyone's cards, two per row: players with a photo first, then the rest (silhouette). A tap opens
+ * The regulars' cards (no guests), two per row: players with a photo first, then the rest (silhouette). A tap opens
  * the card large (CardSheet, with שיתוף). Scores as in CardViewer: players' phones only the public
  * copy's `score`, organizer phones from the level.
  */
@@ -22,7 +22,8 @@ export default function CardsSheet({ notify, onClose }: { notify: (m: string) =>
   const [open, setOpen] = useState<CardData | null>(null);
   const pub = pg.active ? (pg.pub ?? { players: [] }) : null;
   const list = useMemo(() => {
-    const ids = (pub ? pub.players : state.players).map((p) => p.id);
+    // Regulars only: guests ("מזדמנים") aren't in the cards.
+    const ids = (pub ? pub.players : state.players).filter((p) => !(p as { occasional?: boolean }).occasional).map((p) => p.id);
     const all = ids.map((id) => cardData(id, state.players, state.history, pub)).filter((c): c is CardData => !!c);
     const has = (c: CardData) => (photoVersion(current.id, c.id, c.photo) ? 0 : 1);
     return all.sort((a, b) => has(a) - has(b) || a.name.localeCompare(b.name, 'he'));
