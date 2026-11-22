@@ -48,6 +48,15 @@ const ok = (r: Awaited<ReturnType<typeof handleSplit>>): SplitReply => {
 };
 
 describe('split-teams handler', () => {
+  it('v37: the totals use level + form from the doc', async () => {
+    const data = { v: 1, players: roster().map((p, i) => (i < 5 ? { ...p, form: 1 } : p)), constraints: { together: [], apart: [] }, settings: {} };
+    const plain = ok(await handleSplit({ groupId: GID, present: TEN, teamSize: 5 }, deps({ data: { ...data, players: roster() } })));
+    const formed = ok(await handleSplit({ groupId: GID, present: TEN, teamSize: 5 }, deps({ data })));
+    const sum = (b: SplitReply) => b.totals.reduce((a, x) => a + x, 0);
+    expect(sum(formed) - sum(plain)).toBeGreaterThanOrEqual(4);
+    expect(JSON.stringify(formed)).not.toContain('form');
+  });
+
   it('a player gets teams with one total per team and nothing about any player but ids', async () => {
     const body = ok(await handleSplit({ groupId: GID, present: ALL.slice(0, 10), teamSize: 5 }, deps()));
     expect(body.sizes).toEqual([5, 5]);

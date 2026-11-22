@@ -161,13 +161,19 @@ export function mergePlayer(base: Player | undefined, local: Player, remote: Pla
 }
 
 /**
- * `photo` and `card` belong to the server (set_player_photo / set_my_card; a doc write never
- * changes them there), so a merged player always has the server's (a player only this phone has keeps his).
+ * `photo`, `card` and `form` belong to the server (set_player_photo / set_my_card / review_evening;
+ * a doc write never changes them there), so a merged player always has the server's (a player only
+ * this phone has keeps his).
  */
 function withServerFields(p: Player, remote: Player | undefined): Player {
-  if (!remote || (p.photo === remote.photo && same(p.card, remote.card))) return p;
-  const { photo: _p, card: _c, ...rest } = p;
-  return { ...rest, ...(remote.photo ? { photo: remote.photo } : {}), ...(remote.card ? { card: remote.card } : {}) } as Player;
+  if (!remote || (p.photo === remote.photo && same(p.card, remote.card) && p.form === remote.form)) return p;
+  const { photo: _p, card: _c, form: _f, ...rest } = p;
+  return {
+    ...rest,
+    ...(remote.photo ? { photo: remote.photo } : {}),
+    ...(remote.card ? { card: remote.card } : {}),
+    ...(remote.form !== undefined ? { form: remote.form } : {}),
+  } as Player;
 }
 
 const pairKey = (kind: string, [a, b]: Pair) => `${kind}:${a < b ? `${a}|${b}` : `${b}|${a}`}`;

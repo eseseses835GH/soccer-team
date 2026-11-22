@@ -10,6 +10,7 @@ import { SHARED_HASH } from '../state/whatsapp';
 import { loadJSON, saveJSON } from '../state/storage';
 import { useGroups, useStore } from '../state/store';
 import { isTuned, votesLine } from '../state/votes';
+import { effectiveLevel, formText } from '../state/form';
 import { useVoterId } from '../sync/SyncProvider';
 import { usePlayerVotes } from '../sync/OrganizerSync';
 import { mergePlayerVotes, playerAtLevel } from '../sync/players';
@@ -452,7 +453,7 @@ function PlayerSheet({
           <PhotoButton
             player={draft}
             groupId={current.id}
-            score={cardScore(draft.attrs.overall)}
+            score={cardScore(effectiveLevel(draft))}
             position={positionOf(draft)}
             notify={notify}
             onDone={(change) => {
@@ -480,6 +481,11 @@ function PlayerSheet({
         <span className="label">{voter ? 'הדירוג שלך' : 'רמה'}</span>
         <LevelPicker value={voter ? myVote ?? 0 : draft.attrs.overall} onChange={setLevel} label={voter ? 'הדירוג שלך' : 'רמה'} />
         {line && <p className="hint small votes-line">{line}</p>}
+        {formText(draft.form) && (
+          <p className="hint small form-line">
+            כושר אחרון: <bdi dir="ltr">{formText(draft.form)}</bdi>
+          </p>
+        )}
         {voter && <p className="hint small">הדירוג שלך הוא קול אחד. הוא לא מוחק את של אחרים.</p>}
         <p className="hint small level-hint">{LEVEL_HINT}</p>
         {POSITIONS_LABEL}

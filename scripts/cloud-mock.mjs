@@ -14,7 +14,7 @@ export const CLOUD_ME = '00000000-0000-4000-8000-0000000000dd';
  * `photos` = the player-photos bucket (path → { type, body }); set_player_photo / set_my_card change the roster.
  */
 export function cloudServer() {
-  return { groups: new Map(), calls: [], logins: 0, beforePush: null, mine: [], selfName: null, claims: new Map(), auto: new Map(), invites: {}, roles: new Map(), members: new Map(), photos: new Map() };
+  return { groups: new Map(), calls: [], logins: 0, beforePush: null, mine: [], selfName: null, claims: new Map(), auto: new Map(), invites: {}, roles: new Map(), members: new Map(), photos: new Map(), reviews: new Map() };
 }
 
 /** The file part of a multipart upload (storage-js sends a FormData). */
@@ -207,6 +207,14 @@ export async function cloudRoutes(ctxOrPage, s) {
       if (!ok) return json({ code: '22023', message: 'unknown player', details: null, hint: null }, 400);
       return rpc === 'set_my_card' ? json(body.p_card ?? null) : route.fulfill({ status: 204, body: '' });
     }
+    // v37: after-game review — my votes per evening (the form math is the server's; see the migration).
+    if (rpc === 'review_evening') {
+      const k = `${body.p_group_id}|${body.p_evening_id}`;
+      const v = Object.fromEntries((body.p_votes ?? []).filter((x) => x.value != null).map((x) => [x.player_id, x.value]));
+      s.reviews.set(k, v);
+      return json(v);
+    }
+    if (rpc === 'my_review') return json(s.reviews.get(`${body.p_group_id}|${body.p_evening_id}`) ?? {});
     if (rpc === 'live_get' || rpc === 'group_votes') return json([]);
     if (rpc === 'live_set') return json(s.calls.filter((c) => c.rpc === 'live_set').length);
     return json(null);

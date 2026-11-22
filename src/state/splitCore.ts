@@ -4,6 +4,7 @@
 import { ATTR_KEYS, createRng, planFormat, type Assignment, type Constraints, type FormatPlan, type Weights } from '../engine';
 import { engineOptions, type Player, type Settings } from './model';
 import { keeperOrders, orderBySize, pickSubs } from './split';
+import { withForm } from './form';
 
 export interface SplitSource {
   players: Player[];
@@ -30,7 +31,7 @@ export interface SplitTeams {
   gkOrder: string[][];
 }
 
-/** Who plays and who sits out (random subs, seeded); null when there aren't enough players. */
+/** Who plays and who sits out (random subs, seeded); null when there aren't enough players. The search gets each player's level + form (v37). */
 export function prepareSplit(src: SplitSource, seed: number): SplitPrep | null {
   const present = new Set(src.presentIds);
   const players = src.players.filter((p) => present.has(p.id));
@@ -43,7 +44,7 @@ export function prepareSplit(src: SplitSource, seed: number): SplitPrep | null {
     plan,
     subIds,
     onTeams,
-    req: { players: onTeams, k: plan.sizes.length, options: engineOptions(src.settings), constraints: src.constraints, seed, sizes: plan.sizes },
+    req: { players: onTeams.map(withForm), k: plan.sizes.length, options: engineOptions(src.settings), constraints: src.constraints, seed, sizes: plan.sizes },
   };
 }
 
@@ -75,7 +76,7 @@ export function playerStrength(p: Player, w: Weights): number {
 }
 
 /**
- * One number per team: the sum of its players' weighted levels, rounded ("40 מול 39"). The only
+ * One number per team: the sum of its players' weighted levels (with form), rounded ("40 מול 39"). The only
  * strength a player's phone ever sees — never anyone's own number.
  */
 export function teamTotals(playerIds: string[], assignment: Assignment, k: number, players: Player[], w: Weights): number[] {
@@ -83,7 +84,7 @@ export function teamTotals(playerIds: string[], assignment: Assignment, k: numbe
   const sums = new Array<number>(k).fill(0);
   playerIds.forEach((id, i) => {
     const p = byId.get(id);
-    if (p && assignment[i] >= 0 && assignment[i] < k) sums[assignment[i]] += playerStrength(p, w);
+    if (p && assignment[i] >= 0 && assignment[i] < k) sums[assignment[i]] += playerStrength(withForm(p), w);
   });
   return sums.map((s) => Math.round(s));
 }

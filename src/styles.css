@@ -3705,3 +3705,41 @@ thead th {
     animation: none;
   }
 }
+
+/* v37: after-game review */
+.review-card-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 4px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.review-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-end: 6px;
+  font-weight: 700;
+}
+.review-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.review-chips .card-chip {
+  min-block-size: 36px;
+  padding: 4px 11px;
+  font-size: 0.86rem;
+}
+.review-list + .btn {
+  position: sticky;
+  inset-block-end: 0;
+  box-shadow: 0 0 0 8px var(--bg);
+}

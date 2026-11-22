@@ -22,6 +22,7 @@ import { Avatar } from '../photos/Avatar';
 import { CardsButton } from '../card/CardsButton';
 import { eveningOf } from '../state/evening';
 import { Nudges } from './Nudges';
+import { ReviewCard } from './ReviewCard';
 import { positionOf } from '../card/cardData';
 import { withPhotoChange } from '../photos/style';
 
@@ -139,6 +140,7 @@ export function PlayerHome() {
           groups.setGroupState(current.id, (st) => ({ ...st, players: st.players.map((p) => (p.id === pid ? withPhotoChange(p, change) : p)) }))
         }
       />
+      {!live?.match && <ReviewCard groupId={current.id} history={pg.pub.history} me={myId} roster={pg.pub.players} />}
       {card !== 'none' && (
         <div className="rate-card" data-tour="rate">
           <p>

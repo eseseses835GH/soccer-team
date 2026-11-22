@@ -15,6 +15,7 @@ import { migrateCards, type CardId } from './cards';
 import { sanitizePositions } from './positions';
 import { sanitizeVotes, type LevelVotes } from './votes';
 import { sanitizeCard, sanitizePhoto, type CardStyle } from '../photos/style';
+import { sanitizeForm } from './form';
 import type { MatchState } from '../match/match';
 import { sanitizeMatch } from '../match/match';
 import { addEvening, buildEvening, sanitizeHistory, type EveningRecord } from './history';
@@ -33,6 +34,8 @@ export interface Player extends EnginePlayer {
   photo?: string;
   /** Cloud groups: the style he chose for his player card (server-owned, set_my_card). */
   card?: CardStyle;
+  /** Cloud groups (v37): "כושר אחרון", ±1.5 on top of the level when splitting (server-owned, review_evening; form.ts). */
+  form?: number;
 }
 
 /** Ids of players marked "לא בשער". */
@@ -286,6 +289,7 @@ export function sanitizePlayer(p: unknown): Player | null {
   const levelVotes = sanitizeVotes(r.levelVotes);
   const photo = sanitizePhoto(r.photo);
   const card = sanitizeCard(r.card);
+  const form = sanitizeForm(r.form);
   return {
     id: r.id,
     name: r.name.trim().slice(0, 24),
@@ -299,6 +303,7 @@ export function sanitizePlayer(p: unknown): Player | null {
     ...(r.noGK === true ? { noGK: true as const } : {}),
     ...(photo ? { photo } : {}),
     ...(card ? { card } : {}),
+    ...(form !== undefined ? { form } : {}),
   };
 }
 

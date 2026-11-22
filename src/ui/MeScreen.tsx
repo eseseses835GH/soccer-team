@@ -5,6 +5,7 @@ import { loadGroupState, meKey, type GroupMeta } from '../state/groups';
 import type { EveningRecord } from '../state/history';
 import { addStats, EMPTY_STATS, initialOf, myPct, myStats, recentEvenings, type MyStats, type Profile } from '../state/me';
 import { bibLook } from '../state/model';
+import { effectiveLevel } from '../state/form';
 import { localKV, useGroups, useStore } from '../state/store';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
 import { cleanName, isPlayerGroup, loadPublic, MAX_PLAYER_NAME, publicKey } from '../sync/playerGroup';
@@ -101,7 +102,7 @@ export function MeScreen() {
         const pub = player ? (open && pg.pub ? pg.pub : loadPublic(localKV, meta.id)) : null;
         // The card score: players' phones only from the public copy, organizer phones from the level.
         const roster = app.players.map((p) => {
-          const score = player ? pub?.players.find((x) => x.id === p.id)?.score : cardScore(p.attrs.overall);
+          const score = player ? pub?.players.find((x) => x.id === p.id)?.score : cardScore(effectiveLevel(p));
           return { id: p.id, name: p.name, photo: p.photo, card: p.card, positions: p.positions, canGK: p.canGK, ...(score !== undefined ? { score } : {}) };
         });
         if (player) return { meta, player, history: app.history, roster, playerId: pub?.me.playerId ?? null, taken: pub?.claimed ?? [] };

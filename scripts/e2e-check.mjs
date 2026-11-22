@@ -2595,6 +2595,79 @@ if (SB_URL) {
   await hctx.close();
 }
 
+// v37: after-game review on a player's phone. No card before a recent evening → he runs one (8
+// players) and ends it → "איך שיחקו הערב?" on his home → the sheet lists the 7 others with avatars →
+// three chips → "שליחה" → review_evening with exactly those votes → reopened, his votes are back
+// (my_review) → "אחר כך" hides the card for that evening, also after a reload.
+if (SB_URL) {
+  const { ctx: rctx, page: rp, db } = await playerContext(browser, { me: 'p3', canRate: false, live: false, reviews: true });
+  rp.on('pageerror', (e) => errors.push(`review: ${e.message}`));
+  const waitFor = async (fn, what) => {
+    for (let i = 0; i < 50 && !fn(); i++) await rp.waitForTimeout(100);
+    assert(fn(), `review: ${what}`);
+  };
+  const card = rp.locator('.review-card');
+  await rp.goto(base);
+  await rp.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  assert(!(await card.count()), 'review: a card before any recent evening');
+  await rp.getByRole('button', { name: 'ערב חדש' }).click();
+  await rp.getByRole('button', { name: 'כולם' }).click();
+  for (const n of ['טל', 'יוסי', 'כפיר', 'ליאור', 'מתן']) await rp.locator('.attend label', { hasText: n }).click();
+  await rp.getByRole('radio', { name: '4' }).click();
+  await rp.getByRole('button', { name: 'עושים כוחות' }).click();
+  await rp.locator('.team-grid .team').first().waitFor({ timeout: 5000 }).catch(() => errors.push('review: no teams'));
+  await rp.getByRole('button', { name: 'התחלת משחק' }).click();
+  await rp.locator('.clock-ctrl').waitFor({ timeout: 5000 }).catch(() => errors.push('review: no match controls'));
+  await rp.getByRole('button', { name: /התחלה/ }).click();
+  await rp.getByRole('button', { name: '+ גול' }).first().click();
+  await rp.locator('.sheet .pick-list button').first().click();
+  await rp.getByRole('button', { name: 'סיום משחק' }).click();
+  await rp.getByRole('button', { name: 'סיום הערב' }).click();
+  await rp.getByRole('dialog').getByRole('button', { name: 'סיום הערב' }).click();
+  await waitFor(() => db.ended.length === 1, 'end_evening not called');
+  const eid = db.ended[0]?.id;
+  await rp.waitForURL(/#evening\//, { timeout: 5000 }).catch(() => {});
+  await rp.goto(base);
+  await card.waitFor({ timeout: 5000 }).catch(() => errors.push('review: no card after the evening'));
+  assert((await card.innerText()).includes('איך שיחקו הערב?'), 'review: card text');
+  await card.getByRole('button', { name: 'לדרג' }).click();
+  const sheet = rp.getByRole('dialog', { name: 'איך שיחקו הערב?' });
+  await sheet.waitFor();
+  const rows = sheet.locator('.review-list li');
+  assert((await rows.count()) === 7, `review: ${await rows.count()} players in the sheet`);
+  assert((await sheet.locator('.review-list .p-avatar').count()) === 7, 'review: avatars');
+  assert(!(await sheet.getByRole('radiogroup', { name: 'גיל', exact: true }).count()), 'review: himself in the list');
+  const group = (n) => sheet.getByRole('radiogroup', { name: n, exact: true });
+  assert((await group('אבי').getByRole('radio', { name: 'לא יודע' }).getAttribute('aria-checked')) === 'true', 'review: "לא יודע" is the default');
+  await group('אבי').getByRole('radio', { name: 'יותר טוב' }).click();
+  await group('בני').getByRole('radio', { name: 'פחות טוב' }).click();
+  await group('דני').getByRole('radio', { name: 'כרגיל' }).click();
+  await group('הדר').getByRole('radio', { name: 'יותר טוב' }).click();
+  await group('הדר').getByRole('radio', { name: 'לא יודע' }).click();
+  if (process.env.SHOT_DIR) await rp.screenshot({ path: `${process.env.SHOT_DIR}/review-sheet.png` });
+  await sheet.getByRole('button', { name: 'שליחה' }).click();
+  await waitFor(() => db.reviewCalls.length === 1, 'review_evening not called');
+  const call = db.reviewCalls[0];
+  const votes = [...(call?.p_votes ?? [])].sort((a, b) => a.player_id.localeCompare(b.player_id));
+  assert(call?.p_group_id === GID && call?.p_evening_id === eid, `review: call ${JSON.stringify(call)}`);
+  assert(JSON.stringify(votes) === JSON.stringify([{ player_id: 'p1', value: 1 }, { player_id: 'p2', value: -1 }, { player_id: 'p4', value: 0 }]), `review: votes ${JSON.stringify(votes)}`);
+  await sheet.waitFor({ state: 'detached', timeout: 3000 }).catch(() => errors.push('review: the sheet stays open after sending'));
+  await card.getByRole('button', { name: 'לעדכן' }).click();
+  await sheet.waitFor();
+  await rp.waitForTimeout(300);
+  assert((await group('אבי').getByRole('radio', { name: 'יותר טוב' }).getAttribute('aria-checked')) === 'true', 'review: my votes are not back in the sheet');
+  if (process.env.SHOT_DIR) await rp.screenshot({ path: `${process.env.SHOT_DIR}/review-sheet-again.png` });
+  await rp.keyboard.press('Escape');
+  if (process.env.SHOT_DIR) await rp.screenshot({ path: `${process.env.SHOT_DIR}/review-card.png` });
+  await card.getByRole('button', { name: 'אחר כך' }).click();
+  assert(!(await card.count()), 'review: "אחר כך" kept the card');
+  await rp.reload();
+  await rp.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  assert(!(await card.count()), 'review: the card is back after a reload');
+  console.log(`review: card after the evening, ${votes.length} votes sent, "אחר כך" hides it`);
+  await rctx.close();
+}
+
 // 24. The same login on a second phone, and an organizer is "me" in his group (v21). A fresh phone
 // logs in → its organizer group (with him already in the roster) and its player group appear, the
 // open group stays; a group created while logged in has him in the roster and "הדף שלי" doesn't ask

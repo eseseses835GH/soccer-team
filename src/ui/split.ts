@@ -5,6 +5,7 @@ import { keeperOrders, orderBySize } from '../state/split';
 import { finishSplit, prepareSplit } from '../state/splitCore';
 import { avoidAssignment, currentTeams, pickShuffle } from '../state/shuffle';
 import { balance } from '../worker/balancer';
+import { withForm } from '../state/form';
 
 /** Make teams from today's attendance. Returns false if there aren't enough players. */
 export async function splitTeams(state: AppState, dispatch: (a: Action) => void): Promise<boolean> {
@@ -49,7 +50,7 @@ export async function rerollTeams(state: AppState, dispatch: (a: Action) => void
   if (pool.length < 2 || pool[0].assignment.length !== r.playerIds.length) {
     // Pool is gone (late arrival, sub swapped in): search again for these exact teams.
     const map = byId(state.players);
-    const players = r.playerIds.map((id) => map.get(id)!).filter(Boolean);
+    const players = r.playerIds.map((id) => map.get(id)!).filter(Boolean).map(withForm);
     const counts = new Array<number>(k).fill(0);
     r.assignment.forEach((t) => counts[t]++);
     const res = await balance({

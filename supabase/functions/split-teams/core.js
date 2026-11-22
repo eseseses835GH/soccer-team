@@ -570,6 +570,22 @@ function sanitizeCard(raw) {
   return Object.keys(out).length ? out : void 0;
 }
 
+// src/state/form.ts
+var FORM_MAX = 1.5;
+var clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+var round2 = (v) => Math.sign(v) * Math.round(Math.abs(v) * 100 + 1e-9) / 100 || 0;
+function sanitizeForm(v) {
+  if (typeof v !== "number" || !Number.isFinite(v)) return void 0;
+  const f = round2(clamp(v, -FORM_MAX, FORM_MAX));
+  return f === 0 ? void 0 : f;
+}
+function withForm(p) {
+  if (!p.form) return p;
+  const attrs = { ...p.attrs };
+  for (const k of ATTR_KEYS) attrs[k] = clamp(p.attrs[k] + p.form, 1, 10);
+  return { ...p, attrs };
+}
+
 // src/match/match.ts
 var kick = (v) => Number.isInteger(v) && v >= 0 && v <= 99 ? v : void 0;
 function cleanPens(raw, a, b, ga, gb) {
@@ -733,6 +749,7 @@ function sanitizePlayer(p) {
   const levelVotes = sanitizeVotes(r.levelVotes);
   const photo = sanitizePhoto(r.photo);
   const card = sanitizeCard(r.card);
+  const form = sanitizeForm(r.form);
   return {
     id: r.id,
     name: r.name.trim().slice(0, 24),
@@ -745,7 +762,8 @@ function sanitizePlayer(p) {
     ...r.occasional === true && r.pendingRegular === true ? { pendingRegular: true } : {},
     ...r.noGK === true ? { noGK: true } : {},
     ...photo ? { photo } : {},
-    ...card ? { card } : {}
+    ...card ? { card } : {},
+    ...form !== void 0 ? { form } : {}
   };
 }
 function sanitizeSettings(raw) {
@@ -866,7 +884,7 @@ function prepareSplit(src, seed) {
     plan,
     subIds,
     onTeams,
-    req: { players: onTeams, k: plan.sizes.length, options: engineOptions(src.settings), constraints: src.constraints, seed, sizes: plan.sizes }
+    req: { players: onTeams.map(withForm), k: plan.sizes.length, options: engineOptions(src.settings), constraints: src.constraints, seed, sizes: plan.sizes }
   };
 }
 function finishSplit(src, prep, asg, seed) {
@@ -897,7 +915,7 @@ function teamTotals(playerIds, assignment, k, players, w) {
   const sums = new Array(k).fill(0);
   playerIds.forEach((id, i) => {
     const p = byId.get(id);
-    if (p && assignment[i] >= 0 && assignment[i] < k) sums[assignment[i]] += playerStrength(p, w);
+    if (p && assignment[i] >= 0 && assignment[i] < k) sums[assignment[i]] += playerStrength(withForm(p), w);
   });
   return sums.map((s) => Math.round(s));
 }

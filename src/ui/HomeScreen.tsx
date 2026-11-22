@@ -22,6 +22,9 @@ import { Nudges, useMyOrgPlayer } from './Nudges';
 import { cardInviteAnswered } from './onboarding';
 import { cardScore, withPhotoChange } from '../photos/style';
 import { positionOf } from '../card/cardData';
+import { effectiveLevel } from '../state/form';
+import { ReviewCard } from './ReviewCard';
+import { REVIEW_WINDOW_MS } from '../sync/reviews';
 
 export const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
 
@@ -47,7 +50,9 @@ export function HomeScreen() {
   const groups = useGroups();
   const { current } = groups;
   const { viewer } = useLiveControl();
-  const myId = useMyOrgPlayer(current.id, current.synced && !cardInviteAnswered(current.id));
+  // Who I am in the roster: for the card invite, and for the after-game review (v37) after a recent evening.
+  const recent = state.history.some((h) => h.endedAt > Date.now() - REVIEW_WINDOW_MS);
+  const myId = useMyOrgPlayer(current.id, current.synced && (!cardInviteAnswered(current.id) || recent));
   const [welcome, setWelcome] = useState(() => shouldWelcome(state.players.length));
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
@@ -160,7 +165,7 @@ export function HomeScreen() {
           tour={{ kind: 'org', players: state.players.length, uses: install.flags.uses, groupAge: 0 }}
           groupId={current.id}
           synced={current.synced}
-          me={mine ? { player: mine, score: cardScore(mine.attrs.overall), position: positionOf(mine) } : null}
+          me={mine ? { player: mine, score: cardScore(effectiveLevel(mine)), position: positionOf(mine) } : null}
           matchOn={!!live || !!viewer}
           notify={notify}
           onPhoto={(pid, change) =>
@@ -168,6 +173,7 @@ export function HomeScreen() {
           }
         />
       )}
+      {current.synced && !live && !viewer && <ReviewCard groupId={current.id} history={state.history} me={myId} roster={state.players} />}
       <div className="hero">
         <h1 id="home-h">מי הגיע היום?</h1>
         {current.synced && <CardsButton notify={notify} icon />}

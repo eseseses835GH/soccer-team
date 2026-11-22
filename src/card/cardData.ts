@@ -2,6 +2,7 @@
 import type { Position } from '../engine';
 import { nightOf, sideIds, type EveningRecord } from '../state/history';
 import { matchWinner } from '../match/match';
+import { effectiveLevel } from '../state/form';
 import { cardScore, type CardStyle as SavedStyle } from '../photos/style';
 import type { CardStat } from './PlayerCard';
 import { sanitizeStyle, type CardPosition, type CardStyle } from './style';
@@ -68,6 +69,8 @@ interface RosterPlayer {
   card?: SavedStyle;
   /** Organizer phones only. */
   attrs?: { overall: number };
+  /** Organizer phones only (v37). */
+  form?: number;
 }
 
 /**
@@ -84,7 +87,7 @@ export function cardData(
   const pp = pub?.players.find((p) => p.id === id);
   const p = pp ?? r;
   if (!p) return null;
-  const score = pub ? pp?.score : r?.attrs ? cardScore(r.attrs.overall) : undefined;
+  const score = pub ? pp?.score : r?.attrs ? cardScore(effectiveLevel({ attrs: r.attrs, form: r.form })) : undefined;
   const photo = r?.photo ?? pp?.photo;
   const card = r?.card ?? pp?.card;
   return {

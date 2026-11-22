@@ -150,7 +150,7 @@ export function orgHistory(now) {
  * appends to it (same name ignoring case/spaces → 23505 name_taken) and calls `onJoin(id, name)`,
  * so a test can put the same player on an organizer's mocked server.
  */
-export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true, google = false, avatar = TEST_AVATAR, org = false, orgMe = null, roster = null, onJoin = null, nudges = false } = {}) {
+export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true, google = false, avatar = TEST_AVATAR, org = false, orgMe = null, roster = null, onJoin = null, nudges = false, reviews = false } = {}) {
   const now = Date.now();
   const db = {
     me,
@@ -171,6 +171,9 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     splits: [],
     ended: [],
     history: history(now),
+    // v37: after-game review — my votes per evening id, and every review_evening call's args.
+    reviews: {},
+    reviewCalls: [],
   };
   const liveRow = () => ({
     data: db.data,
@@ -191,6 +194,7 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     locale: 'he-IL',
     reducedMotion: 'reduce',
     nudges,
+    reviews,
   });
   const exp = Math.floor(now / 1000) + 3600 * 24;
   const session = {
@@ -325,6 +329,13 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
       return json(route, db.rev);
     }
     if (path.endsWith('/rpc/my_votes')) return json(route, db.votes);
+    if (path.endsWith('/rpc/my_review')) return json(route, db.reviews[args.p_evening_id] ?? {});
+    if (path.endsWith('/rpc/review_evening')) {
+      db.reviewCalls.push(args);
+      if (!db.history.some((h) => h.id === args.p_evening_id)) return json(route, { code: '22023', message: 'unknown evening' }, 400);
+      db.reviews[args.p_evening_id] = Object.fromEntries((args.p_votes ?? []).filter((x) => x.value != null).map((x) => [x.player_id, x.value]));
+      return json(route, db.reviews[args.p_evening_id]);
+    }
     if (path.endsWith('/rpc/join_as_new_player')) {
       const name = String(args.p_name ?? '').replace(/\s+/g, ' ').trim();
       const key = (n) => n.replace(/\s/g, '').toLowerCase();
