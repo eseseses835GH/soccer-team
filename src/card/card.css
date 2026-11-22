@@ -1,0 +1,132 @@
+/* Player card (loaded with the card code only). */
+.player-card {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.28)) drop-shadow(0 2px 3px rgb(0 0 0 / 0.2));
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.card-maker {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: center;
+}
+.card-maker .stack {
+  inline-size: 100%;
+  max-inline-size: 360px;
+}
+.card-maker-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.card-maker-card {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.card-maker-stage.is-busy .player-card {
+  opacity: 0.35;
+  filter: grayscale(0.6) blur(1px);
+  transition: opacity var(--dur-2, 200ms), filter var(--dur-2, 200ms);
+}
+.card-maker-busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  font-weight: 700;
+  color: var(--ink);
+}
+.card-spinner {
+  inline-size: 34px;
+  block-size: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-block-start-color: var(--accent);
+  animation: card-spin 0.8s linear infinite;
+}
+@keyframes card-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.card-maker-error {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+.card-maker-links {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-6);
+}
+
+.card-style {
+  display: grid;
+  gap: var(--space-4);
+}
+.card-style-preview {
+  display: grid;
+  place-items: center;
+}
+.shirt-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-3);
+  justify-items: center;
+}
+.shirt-swatch {
+  inline-size: 40px;
+  block-size: 40px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  background: linear-gradient(135deg, var(--c1) 0 50%, var(--c2) 50% 100%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
+  cursor: pointer;
+}
+.shirt-swatch.on {
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.18),
+    0 0 0 3px var(--bg),
+    0 0 0 5px var(--accent);
+}
+.shirt-number {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-weight: 600;
+}
+.shirt-number input {
+  inline-size: 88px;
+  min-block-size: 44px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.card-lab {
+  display: grid;
+  gap: var(--space-8);
+  padding: var(--space-4);
+  max-inline-size: 900px;
+  margin-inline: auto;
+}
+.card-lab-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-4);
+}

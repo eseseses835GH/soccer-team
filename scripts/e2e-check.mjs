@@ -2707,6 +2707,49 @@ if (SB_URL) {
   console.log('handoff: last organizer picks a successor; delete for everyone');
 }
 
+// Player card lab (#card-lab): offline (the models can't load) → enhanced centre crop, no cutout, card preview, save, PNG.
+{
+  const cctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cctx.route(/cdn\.jsdelivr\.net|storage\.googleapis\.com/, (r) => r.abort());
+  const cp = await cctx.newPage();
+  cp.on('pageerror', (e) => errors.push(`card lab: ${e.message}`));
+  await cp.goto(`${base}#card-lab`);
+  const photo = await cp.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 900;
+    c.height = 1200;
+    const g = c.getContext('2d');
+    g.fillStyle = '#3a3128';
+    g.fillRect(0, 0, 900, 1200);
+    g.fillStyle = '#6b4f3c';
+    g.beginPath();
+    g.ellipse(450, 420, 150, 190, 0, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#1d2d5c';
+    g.fillRect(150, 700, 600, 500);
+    return c.toDataURL('image/png').split(',')[1];
+  });
+  await cp.locator('input[type=file]:not([capture])').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: Buffer.from(photo, 'base64') });
+  await cp.getByRole('button', { name: 'שמירה' }).waitFor({ timeout: 40000 }).catch(() => errors.push('card lab: no preview after the photo'));
+  assert(await cp.locator('.card-maker .player-card image').count() === 1, 'card lab: the preview card shows the photo');
+  await cp.getByRole('button', { name: 'שמירה' }).click();
+  const saved = await cp.evaluate(() => window.__cardLab?.saved);
+  assert(saved && saved.portrait > 1000 && saved.portrait <= 125000 && saved.cutout === null, `card lab: saved ${JSON.stringify(saved)}`);
+  await cp.getByRole('button', { name: 'החולצה' }).click();
+  await cp.getByRole('radio', { name: 'תכלת', exact: true }).click();
+  await cp.getByRole('radio', { name: 'פסים', exact: true }).click();
+  await cp.getByRole('dialog', { name: 'החולצה' }).getByRole('button', { name: 'שמירה' }).click();
+  await cp.getByRole('button', { name: 'שמירה' }).click();
+  const st = await cp.evaluate(() => window.__cardLab?.saved?.style);
+  assert(st?.shirt === 'sky' && st?.pattern === 'stripes' && st?.number === 10, `card lab: style ${JSON.stringify(st)}`);
+  await cp.getByRole('button', { name: 'PNG' }).click();
+  await cp.waitForFunction(() => window.__cardLab?.png, null, { timeout: 15000 }).catch(() => errors.push('card lab: no PNG'));
+  const png = await cp.evaluate(() => window.__cardLab?.png);
+  assert(png?.width === 900 && png?.height === 1260, `card lab: PNG ${JSON.stringify(png)}`);
+  await cctx.close();
+  console.log('card lab: offline photo → card, style, save, PNG');
+}
+
 console.log(`split 22 players in ${dt}ms`);
 await browser.close();
 if (errors.length) {
