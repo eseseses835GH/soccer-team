@@ -2000,8 +2000,9 @@ if (SB_URL) {
   assert(!(await rating.count()) && (await roster()).find((p) => p.name === 'רונן')?.attrs.overall === 6, 'wa: contact added and rated, round over');
 
   // Nothing with a phone number, anywhere this phone keeps data.
-  // (13-digit runs are millisecond timestamps, e.g. createdAt 1794567924719, not phones.)
-  const kept = (await wp.evaluate(async () => JSON.stringify(localStorage) + JSON.stringify(await caches.keys()))).replace(/\b\d{13}\b/g, '');
+  // (13-digit runs are millisecond timestamps, e.g. createdAt 1794567924719, and random uuids can hold
+  // "4567" — neither is a phone.)
+  const kept = (await wp.evaluate(async () => JSON.stringify(localStorage) + JSON.stringify(await caches.keys()))).replace(/\b\d{13}\b/g, '').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '');
   assert(!/4567|4321|0134/.test(kept), `wa: a phone number was stored (${(kept.match(/.{0,60}(4567|4321|0134).{0,20}/) ?? [''])[0]})`);
   assert(!/4567|4321/.test(JSON.stringify(ws.calls)), 'wa: a phone number was sent to the server');
   console.log(`whatsapp: ${(await roster()).length} players (zip, share target, contacts)`);
@@ -2949,6 +2950,31 @@ if (SB_URL) {
   assert(png?.width === 900 && png?.height === 1260, `card lab: PNG ${JSON.stringify(png)}`);
   await cctx.close();
   console.log('card lab: offline photo → card, style, save, PNG');
+}
+
+// The big card turns with a finger (real touch events, as on a phone — the mouse path missed a touch-only bug).
+{
+  const tctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const tp = await tctx.newPage();
+  tp.on('pageerror', (e) => errors.push(e.message));
+  await tp.goto(base + '#card-lab');
+  const spin = tp.locator('.spin-lab .card-spin');
+  await spin.waitFor();
+  await tp.waitForTimeout(1500); // after the one-time nudge
+  const box = await spin.boundingBox();
+  const cdp = await tctx.newCDPSession(tp);
+  const y = box.y + box.height / 2;
+  const x0 = box.x + box.width * 0.8;
+  const touch = (type, x) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y: y + (x0 - x) * 0.15 }] });
+  await touch('touchStart', x0);
+  for (let i = 1; i <= 12; i++) {
+    await touch('touchMove', x0 - i * 15);
+    await tp.waitForTimeout(16);
+  }
+  await touch('touchEnd');
+  await tp.waitForFunction(() => document.querySelector('.spin-lab .card-spin')?.getAttribute('data-side') === 'back', null, { timeout: 3000 }).catch(() => errors.push('spin: a finger swipe does not turn the card'));
+  await tctx.close();
+  console.log('spin: a finger swipe turns the card');
 }
 
 console.log(`split 22 players in ${dt}ms`);

@@ -245,7 +245,8 @@ export function SpinCard({ front, back, width, foil }: { front: ReactNode; back:
       onPointerUp={(e) => release(e, false)}
       onPointerCancel={(e) => release(e, true)}
       onPointerLeave={onLeave}
-      onLostPointerCapture={(e) => release(e, false)}
+      // No release on lostpointercapture: on touch the browser's implicit capture moves to the card
+      // when it takes the pointer, which fired a release mid-drag and the card never turned.
       onDragStart={(e) => e.preventDefault()}
     >
       <div ref={body} className="card-spin-body">

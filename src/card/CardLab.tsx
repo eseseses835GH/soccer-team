@@ -1,3 +1,4 @@
+import { SpinCard } from './SpinCard';
 /** `#card-lab`: a dev page (not linked anywhere) to try the card maker and see sample cards. */
 import { useState } from 'react';
 import { CardMaker, useObjectUrl, type CardSave } from './CardMaker';
@@ -28,6 +29,14 @@ export default function CardLab() {
 
   return (
     <div className="card-lab" dir="rtl">
+      <div className="spin-lab" style={{ display: 'grid', placeItems: 'center', padding: 16 }}>
+        <SpinCard
+          width={260}
+          foil
+          front={<PlayerCard name="סיבוב" position="att" score={90} style={{ shirt: 'red-blue', pattern: 'stripes', number: 7 }} size={260} />}
+          back={<PlayerCard name="גב" position="def" score={90} style={{ shirt: 'black-white', pattern: 'plain', number: 7 }} size={260} />}
+        />
+      </div>
       <CardMaker
         name="אבי כהן"
         position="att"
