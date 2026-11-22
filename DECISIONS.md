@@ -986,3 +986,14 @@ The card maker replaces the simple photo step; tapping a round photo shows the c
 - **No photo yet:** "צילום" is the main button; a changed shirt alone is a quiet "שמירת החולצה" (a user saved only a shirt and thought he had a card).
 - **"הקלפים"** (user approved): a quiet link on a player's home and under the organizer's roster (cloud groups) opens everyone's cards, two per row, photos first then the silhouettes (`CardsSheet`, lazy); a tap opens the card large (`CardSheet`, שיתוף). Scores as in v33: players' phones only the public `score`.
 - **Tests:** `crop.test.ts`; e2e: slider + drag change the frame and save still uploads; photos in the rating survey and "מי אתה?"; the cards grid (player: order, photo, tap → big card; organizer: grid with the score).
+
+## v35: spin the card
+*User: like in the football games, you can spin the card: swipe and it reacts.* The big card only (`CardSheet`, also from the cards grid); the grid and avatars stay still.
+- **Tilt** (`SpinCard`): finger down (or mouse hover) leans the card toward the pointer, up to 18°, with a shine that moves with the angle (radial glare, overlay blend, masked to the shield); gold cards add a faint rainbow foil. Let go → springs back (small rAF spring, slightly bouncy).
+- **Spin:** a sideways drag turns it around (a card width = half a turn); released past halfway or on a flick it flips to the back, a fast flick adds one whole turn first; swipe again for the front. The first 8 px pick the axis: up/down stays the sheet's scroll (`touch-action: pan-y`). Tap does nothing.
+- **Back** (`CardBack`): same shield, metal and corners (score only when the front has it, position, the little shirt), name, then משחקים / שערים / ניצחונות / ערבים (zeros kept, `cardRecord`), the group name small at the bottom.
+- **Hint:** the first card opened (once per load, until he has spun one) gives a small wiggle; no text, no button.
+- **Phones:** a gentle lean (±6°) with the device on Android; iOS needs a permission prompt for that, so not there.
+- **Reduced motion:** no tilt or spin animation; a quiet "↻" next to the card turns it over (a swipe still does, instantly).
+- **Share** still shares the front. Motion is transform/opacity in a rAF loop on refs; the SVGs re-render only when the side changes.
+- **Tests:** `tilt.test.ts` (tilt from the pointer, axis lock, settle target from distance/velocity, extra turn, spring settles); e2e: drag the big card in the cards grid → back with the record → drag → front.

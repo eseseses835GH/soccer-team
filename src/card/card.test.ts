@@ -4,7 +4,7 @@ import { FACE_SHARE, FACE_TOP, cropBox, mapBox } from './crop';
 import { applyEnhance, enhanceParams, featherMask, measure, type Stats } from './enhance';
 import { SHIRTS, sanitizeStyle, tierOf } from './style';
 import { FACE_MODEL, SEGMENT_MODEL, TASKS_VISION_VERSION, WASM_BASE } from './vision';
-import { cardData, cardStats, positionOf } from './cardData';
+import { cardData, cardRecord, cardStats, positionOf } from './cardData';
 
 /** Stats of a flat patch: every pixel `rgb` (plus a spread of ±`spread` in luminance). */
 function stats(rgb: [number, number, number], spread = 20): Stats {
@@ -168,6 +168,11 @@ describe('cardData', () => {
     expect(cardStats(history, 'x')).toEqual([{ label: 'שערים', value: 2 }, { label: 'ניצחונות', value: 1 }, { label: 'ערבים', value: 2 }]);
     expect(cardStats(history, 'y')).toEqual([{ label: 'שערים', value: 1 }, { label: 'ניצחונות', value: 1 }, { label: 'ערבים', value: 2 }]);
     expect(cardStats([], 'x')).toEqual([]);
+  });
+
+  it('back of the card: games, goals, wins, evenings, zeros kept', () => {
+    expect(cardRecord(history, 'x').map((s) => s.value)).toEqual([3, 2, 1, 2]);
+    expect(cardRecord([], 'x').map((s) => [s.label, s.value])).toEqual([['משחקים', 0], ['שערים', 0], ['ניצחונות', 0], ['ערבים', 0]]);
   });
 
   it('position: first field position, else keeper when good in goal', () => {
