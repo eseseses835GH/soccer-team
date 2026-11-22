@@ -401,7 +401,7 @@ export function LiveView({
                   <li key={id}>
                     <span className={`member ${id === me ? 'me' : ''} ${borrowed.has(id) ? 'away' : ''}`} aria-current={id === me ? 'true' : undefined}>
                       <span className="slot">{showKeeper && id === team.keeper ? '🧤' : ''}</span>
-                      <Avatar player={{ id, name: name(id), photo: roster.find((x) => x.id === id)?.photo }} size={24} />
+                      <Avatar player={{ id, name: name(id), photo: roster.find((x) => x.id === id)?.photo }} size={24} card />
                       <span className="name">{name(id)}</span>
                       {badges(id)}
                     </span>

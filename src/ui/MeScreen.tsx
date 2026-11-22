@@ -16,6 +16,9 @@ import { Sheet } from './components';
 import { dateLabel } from './HistoryScreen';
 import { Icon } from './icons';
 import { PhotoButton } from '../photos/Avatar';
+import { cardScore, withPhotoChange, type CardStyle, type PhotoChange } from '../photos/style';
+import type { Position } from '../engine';
+import { positionOf } from '../card/cardData';
 
 /** The round picture (Google) or the first letter. */
 export function Avatar({ profile, size = 30 }: { profile: Profile; size?: number }) {
@@ -46,7 +49,7 @@ interface Row {
   meta: GroupMeta;
   player: boolean;
   history: EveningRecord[];
-  roster: { id: string; name: string; photo?: string }[];
+  roster: { id: string; name: string; photo?: string; card?: CardStyle; positions?: Position[]; canGK?: boolean; score?: number }[];
   /** undefined = don't know yet (organizer group, not fetched). */
   playerId: string | null | undefined;
   taken: string[];
@@ -95,11 +98,13 @@ export function MeScreen() {
         const open = meta.id === groups.current.id;
         const app = open ? state : loadGroupState(localKV, meta.id);
         const player = isPlayerGroup(meta);
-        const roster = app.players.map((p) => ({ id: p.id, name: p.name, ...(p.photo ? { photo: p.photo } : {}) }));
-        if (player) {
-          const pub = open && pg.pub ? pg.pub : loadPublic(localKV, meta.id);
-          return { meta, player, history: app.history, roster, playerId: pub?.me.playerId ?? null, taken: pub?.claimed ?? [] };
-        }
+        const pub = player ? (open && pg.pub ? pg.pub : loadPublic(localKV, meta.id)) : null;
+        // The card score: players' phones only from the public copy, organizer phones from the level.
+        const roster = app.players.map((p) => {
+          const score = player ? pub?.players.find((x) => x.id === p.id)?.score : cardScore(p.attrs.overall);
+          return { id: p.id, name: p.name, photo: p.photo, card: p.card, positions: p.positions, canGK: p.canGK, ...(score !== undefined ? { score } : {}) };
+        });
+        if (player) return { meta, player, history: app.history, roster, playerId: pub?.me.playerId ?? null, taken: pub?.claimed ?? [] };
         const o = orgMe[meta.id] ?? loadOrgMe(meta.id, user);
         return { meta, player, history: app.history, roster, playerId: o ? o.playerId : undefined, taken: o?.taken ?? [] };
       }),
@@ -235,15 +240,11 @@ export function MeScreen() {
           <MyName
             row={nameFor}
             notify={notify}
-            onPhoto={(v) => {
+            onPhoto={(change) => {
               const pid = nameFor.playerId!;
               groups.setGroupState(nameFor.meta.id, (st) => ({
                 ...st,
-                players: st.players.map((p) => {
-                  if (p.id !== pid) return p;
-                  const { photo: _, ...rest } = p;
-                  return v ? { ...rest, photo: v } : rest;
-                }),
+                players: st.players.map((p) => (p.id === pid ? withPhotoChange(p, change) : p)),
               }));
             }}
             onDone={(change) => {
@@ -349,7 +350,7 @@ function OrgClaim({ row, onDone, notify }: { row: Row; onDone: (playerId: string
 type NameChange = { kind: 'rename'; name: string } | { kind: 'switch'; playerId: string; removed: boolean };
 
 /** "השם שלי בקבוצה" (v21): rename my roster player, or say I'm another (unclaimed) name in the list. */
-function MyName({ row, onDone, onPhoto, notify }: { row: Row; onDone: (c: NameChange) => void; onPhoto: (v: string | null) => void; notify: (m: string) => void }) {
+function MyName({ row, onDone, onPhoto, notify }: { row: Row; onDone: (c: NameChange) => void; onPhoto: (change: PhotoChange) => void; notify: (m: string) => void }) {
   const sync = useSync();
   const current = row.roster.find((p) => p.id === row.playerId)?.name ?? '';
   const [name, setName] = useState(current);
@@ -381,7 +382,7 @@ function MyName({ row, onDone, onPhoto, notify }: { row: Row; onDone: (c: NameCh
   const me = row.roster.find((p) => p.id === row.playerId);
   return (
     <div className="stack">
-      {me && <PhotoButton player={me} groupId={row.meta.id} notify={notify} onDone={onPhoto} />}
+      {me && <PhotoButton player={me} groupId={row.meta.id} score={me.score} position={positionOf(me)} notify={notify} onDone={onPhoto} />}
       <form className="stack" onSubmit={save}>
         <input className="input input-big" aria-label="השם שלי" maxLength={MAX_PLAYER_NAME} value={name} onChange={(e) => setName(e.target.value)} />
         <button type="submit" className="btn btn-primary btn-block" disabled={busy || !cleanName(name) || cleanName(name) === current}>

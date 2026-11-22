@@ -22,6 +22,8 @@ import { InviteFriends } from './InviteFriends';
 import { SwipeRow, closeSwipeRows } from './SwipeRow';
 import { usePlayerGate } from './useGate';
 import { Avatar, PhotoButton } from '../photos/Avatar';
+import { cardScore, withPhotoChange, type PhotoChange } from '../photos/style';
+import { positionOf } from '../card/cardData';
 
 const MAX_NAME = 24;
 /** Per phone: the "swipe to delete" tip was dismissed (or the user already swiped). */
@@ -296,7 +298,7 @@ export function PlayersScreen() {
                   onClick={() => (selecting ? toggleSelected(p.id) : setEditing(p))}
                 >
                   {selecting && <span className="select-tick" aria-hidden="true" />}
-                  <Avatar player={p} />
+                  <Avatar player={p} card />
                   <span className="name">{p.name}</span>
                   <PositionBadges player={p} />
                   <CardBadges cards={p.cards} all />
@@ -318,7 +320,7 @@ export function PlayersScreen() {
               <SwipeRow key={p.id} actionLabel={`מחיקת ${p.name}`} className={p.id === fresh ? 'is-new' : undefined} onDelete={() => setDeleting([p])}>
                 <div className="guest-row">
                   <button type="button" onClick={() => setEditing(p)}>
-                    <Avatar player={p} />
+                    <Avatar player={p} card />
                     <span className="name">{p.name}</span>
                     <span className="level" aria-label={`רמה ${p.attrs.overall}`}>
                       {p.attrs.overall}
@@ -358,11 +360,9 @@ export function PlayersScreen() {
           nameTaken={nameTaken}
           fixedKeepers={fixedKeepers}
           onClose={() => setEditing(null)}
-          onPhoto={(id, photo) => {
+          onPhoto={(id, change) => {
             const cur = state.players.find((x) => x.id === id);
-            if (!cur) return;
-            const { photo: _, ...rest } = cur;
-            dispatch({ type: 'updatePlayer', player: photo ? { ...rest, photo } : rest });
+            if (cur) dispatch({ type: 'updatePlayer', player: withPhotoChange(cur, change) });
           }}
           onSave={(p) => {
             dispatch({ type: 'updatePlayer', player: p });
@@ -409,7 +409,7 @@ function PlayerSheet({
   nameTaken: (n: string, exceptId?: string) => boolean;
   fixedKeepers: boolean;
   onClose: () => void;
-  onPhoto: (id: string, photo: string | null) => void;
+  onPhoto: (id: string, change: PhotoChange) => void;
   onSave: (p: Player) => void;
   onDelete: (p: Player) => void;
 }) {
@@ -443,13 +443,12 @@ function PlayerSheet({
           <PhotoButton
             player={draft}
             groupId={current.id}
+            score={cardScore(draft.attrs.overall)}
+            position={positionOf(draft)}
             notify={notify}
-            onDone={(v) => {
-              setDraft((d) => {
-                const { photo: _, ...rest } = d;
-                return v ? { ...rest, photo: v } : rest;
-              });
-              onPhoto(draft.id, v);
+            onDone={(change) => {
+              setDraft((d) => withPhotoChange(d, change));
+              onPhoto(draft.id, change);
             }}
           />
         )}

@@ -3560,3 +3560,15 @@ thead th {
   border-radius: 50%;
   background: var(--accent);
 }
+/* A tappable round photo (opens the player's card). */
+.avatar-tap {
+  display: inline-grid;
+  flex: none;
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.avatar-tap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

@@ -7,6 +7,8 @@ export interface CardStyle {
 }
 
 export const photoPath = (groupId: string, playerId: string) => `${groupId}/${playerId}.webp`;
+/** The card cutout (transparent; WebP, or PNG where the browser can't write WebP — the name stays). */
+export const cutoutPath = (groupId: string, playerId: string) => `${groupId}/${playerId}-cut.webp`;
 
 const VERSION_RE = /^[0-9a-z]{1,20}$/;
 const STYLE_RE = /^[A-Za-z0-9#_-]{1,20}$/;
@@ -34,3 +36,17 @@ export function cardScore(overall: number): number {
 /** A new version string: base-36 time (short, sortable). */
 export const newPhotoVersion = (now = Date.now()) => Math.floor(now).toString(36);
 
+/** What saving / removing a card changed (`photo`: new version, null = removed, absent = kept). */
+export interface PhotoChange {
+  photo?: string | null;
+  /** null = none. */
+  card?: CardStyle | null;
+}
+
+/** A player with the change applied (the roster copy on this phone). */
+export function withPhotoChange<T extends { photo?: string; card?: CardStyle }>(p: T, c: PhotoChange): T {
+  const { photo, card, ...rest } = p;
+  const nextPhoto = c.photo === undefined ? photo : (c.photo ?? undefined);
+  const nextCard = c.card === undefined ? card : (c.card ?? undefined);
+  return { ...rest, ...(nextPhoto ? { photo: nextPhoto } : {}), ...(nextCard ? { card: nextCard } : {}) } as T;
+}

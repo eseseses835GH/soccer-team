@@ -4,6 +4,7 @@ import { FACE_SHARE, FACE_TOP, cropBox, mapBox } from './crop';
 import { applyEnhance, enhanceParams, featherMask, measure, type Stats } from './enhance';
 import { SHIRTS, sanitizeStyle, tierOf } from './style';
 import { FACE_MODEL, SEGMENT_MODEL, TASKS_VISION_VERSION, WASM_BASE } from './vision';
+import { cardData, cardStats, positionOf } from './cardData';
 
 /** Stats of a flat patch: every pixel `rgb` (plus a spread of ±`spread` in luminance). */
 function stats(rgb: [number, number, number], spread = 20): Stats {
@@ -142,5 +143,46 @@ describe('model URLs', () => {
       expect(u).toMatch(/^https:\/\/storage\.googleapis\.com\/mediapipe-models\/.+\/\d+\/[^/]+\.tflite$/);
       expect(u).not.toContain('latest');
     }
+  });
+});
+
+describe('cardData', () => {
+  const rec = (id: string, matches: { a: number; b: number; goalsA: number; goalsB: number; goals: { team: number; by?: string }[] }[]) => ({
+    id,
+    v: 1 as const,
+    startedAt: 0,
+    endedAt: 0,
+    teamSize: 2,
+    players: [{ id: 'x', name: 'X' }, { id: 'y', name: 'Y' }],
+    teams: [{ bib: 'red', ids: ['x'] }, { bib: 'blue', ids: ['y'] }],
+    subIds: [],
+    matches: matches.map((m) => ({ ...m, endedAt: 0 })),
+  });
+  const history = [
+    rec('n1', [{ a: 0, b: 1, goalsA: 2, goalsB: 1, goals: [{ team: 0, by: 'x' }, { team: 0, by: 'x' }, { team: 1 }] }]),
+    rec('n1~2', [{ a: 0, b: 1, goalsA: 0, goalsB: 0, goals: [] }]),
+    rec('n2', [{ a: 0, b: 1, goalsA: 0, goalsB: 1, goals: [{ team: 1, by: 'y' }] }]),
+  ];
+
+  it('stats: goals, wins, evenings (a shuffle counts once); zeros left out', () => {
+    expect(cardStats(history, 'x')).toEqual([{ label: 'שערים', value: 2 }, { label: 'ניצחונות', value: 1 }, { label: 'ערבים', value: 2 }]);
+    expect(cardStats(history, 'y')).toEqual([{ label: 'שערים', value: 1 }, { label: 'ניצחונות', value: 1 }, { label: 'ערבים', value: 2 }]);
+    expect(cardStats([], 'x')).toEqual([]);
+  });
+
+  it('position: first field position, else keeper when good in goal', () => {
+    expect(positionOf({ positions: ['mid', 'att'], canGK: true })).toBe('mid');
+    expect(positionOf({ canGK: true })).toBe('gk');
+    expect(positionOf({})).toBeUndefined();
+  });
+
+  it('organizer phones score from the level; players phones only from the public score', () => {
+    const roster = [{ id: 'x', name: 'X', attrs: { overall: 10 }, card: { shirt: 'sky', pattern: 'halves', number: 7 } }];
+    expect(cardData('x', roster, [], null)).toMatchObject({ name: 'X', score: 99, style: { shirt: 'sky', pattern: 'halves', number: 7 } });
+    // A player's phone has default levels in its roster copy: never used.
+    expect(cardData('x', roster, [], { players: [{ id: 'x', name: 'X' }] })?.score).toBeUndefined();
+    expect(cardData('x', roster, [], { players: [{ id: 'x', name: 'X', score: 81 }] })?.score).toBe(81);
+    expect(cardData('nobody', roster, [], null)).toBeNull();
+    expect(cardData('x', [{ id: 'x', name: 'X' }], [], null)?.style).toEqual({ shirt: 'red', pattern: 'plain' });
   });
 });

@@ -27,6 +27,7 @@ import { useLiveControl } from '../sync/OrganizerSync';
 import { ViewerScreen } from './LiveControl';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
+import { CardViewer } from '../card/CardViewer';
 
 export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help' | 'rate' | 'claim' | 'me';
 const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening', 'help', 'rate', 'claim', 'me'];
@@ -253,6 +254,7 @@ export function App() {
 
   return (
     <UiCtx.Provider value={{ go, notify }}>
+      <CardViewer notify={notify}>
       <header className={`topbar ${safeRoute === 'home' ? 'is-home' : ''}`}>
         {safeRoute === 'home' ? (
           <>
@@ -363,6 +365,7 @@ export function App() {
         </div>
       )}
       <Toast message={toast} />
+      </CardViewer>
     </UiCtx.Provider>
   );
 }

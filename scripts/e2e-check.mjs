@@ -2637,38 +2637,102 @@ if (SB_URL) {
   console.log('v21: second phone gets its groups; a new group has me; an old group gets me; a link puts me straight in; rename; switch');
 }
 
-// Player photos: an organizer sets a photo in the player's sheet → uploaded to the bucket, the
-// roster points at it (set_player_photo), the round photo shows in the roster.
+// Player card in the app (v33): an organizer opens "הקלף" in the player's sheet → card maker (models
+// blocked → enhanced crop, no cutout) → save → portrait uploaded, stale cutout removed, one version,
+// the style saved; the round photo in the roster; a tap on it opens the card with the score.
 if (SB_URL) {
   const attrs = { overall: 6, stamina: 6, passing: 6, dribbling: 6, shooting: 6, defense: 6, teamwork: 6, leadership: 6 };
   const ps = cloudServer();
   const pctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await cloudRoutes(pctx, ps);
+  await pctx.route(/cdn\.jsdelivr\.net|storage\.googleapis\.com/, (r) => r.abort());
   const pp = await pctx.newPage();
   pp.on('pageerror', (e) => errors.push(`photos: ${e.message}`));
   await pp.goto(base);
   await signInOrganizer(pp);
   const { gid } = await groupState(pp);
-  ps.groups.set(gid, { name: 'שישי בשכונה', data: { v: 1, players: [{ id: 'a1', name: 'אבי', attrs, canGK: false, cards: [] }, { id: 'b1', name: 'בני', attrs, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 2 });
+  ps.groups.set(gid, { name: 'שישי בשכונה', data: { v: 1, players: [{ id: 'a1', name: 'אבי', attrs, canGK: false, cards: [], positions: ['att'] }, { id: 'b1', name: 'בני', attrs, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 2 });
   await pp.goto(base + '#players');
   await pp.reload();
   const row = pp.locator('.roster li', { hasText: 'אבי' });
   await row.waitFor({ timeout: 5000 }).catch(() => errors.push('photos: roster not loaded'));
   assert(!(await pp.locator('.roster img.p-avatar').count()), 'photos: a photo before any was set');
-  await row.getByRole('button').first().click();
+  await row.locator('.name').click();
   const sheet = pp.getByRole('dialog', { name: 'אבי' });
-  await sheet.locator('input[type=file]').setInputFiles(new URL('../public/icon-192.png', import.meta.url).pathname);
+  await sheet.getByRole('button', { name: 'הקלף' }).click();
+  const maker = pp.locator('.sheet', { has: pp.locator('.card-maker') });
+  await maker.locator('.card-maker').waitFor({ timeout: 8000 }).catch(() => errors.push('photos: no card maker'));
+  assert(await maker.locator('input[type=file][capture]').count() === 1 && await maker.locator('input[type=file]:not([capture])').count() === 1, 'photos: camera + gallery inputs');
+  await maker.locator('input[type=file]:not([capture])').setInputFiles(new URL('../public/icon-512.png', import.meta.url).pathname);
+  await maker.getByRole('button', { name: 'שמירה' }).waitFor({ timeout: 40000 }).catch(() => errors.push('photos: no card preview'));
+  if (process.env.SHOTS) await pp.screenshot({ path: `${process.env.SHOTS}/wire-organizer-maker.png` });
+  await maker.getByRole('button', { name: 'שמירה' }).click();
+  await maker.locator('.card-maker').waitFor({ state: 'detached', timeout: 8000 }).catch(() => errors.push('photos: card maker stays open'));
+  await pp.keyboard.press('Escape');
   await row.locator('img.p-avatar').waitFor({ timeout: 8000 }).catch(() => errors.push('photos: no photo in the roster'));
   const set = ps.calls.filter((c) => c.rpc === 'set_player_photo');
+  const card = ps.calls.filter((c) => c.rpc === 'set_my_card');
   const file = ps.photos.get(`${gid}/a1.webp`);
   assert(set.length === 1 && set[0].body.p_player_id === 'a1' && /^[0-9a-z]+$/.test(set[0].body.p_version ?? ''), `photos: set_player_photo ${JSON.stringify(set)}`);
-  assert(file && /^image\/(webp|jpeg)$/.test(file.type) && file.body.length > 100 && file.body.length <= 300 * 1024, `photos: uploaded file ${file?.type} ${file?.body.length}`);
+  assert(card.length === 1 && card[0].body.p_card?.shirt === 'red', `photos: set_my_card ${JSON.stringify(card)}`);
+  assert(file && /^image\/(webp|jpeg)$/.test(file.type) && file.body.length > 100 && file.body.length <= 125000, `photos: uploaded file ${file?.type} ${file?.body.length}`);
+  assert(ps.calls.some((c) => c.storage === 'DELETE') && !ps.photos.has(`${gid}/a1-cut.webp`), 'photos: no cutout → the stale one removed');
   assert(ps.groups.get(gid).data.players[0].photo === set[0]?.body.p_version, 'photos: roster points at the photo');
   const src = await row.locator('img.p-avatar').getAttribute('src').catch(() => '');
   assert(src?.startsWith('blob:'), `photos: img src ${src}`);
   assert((await pp.locator('.roster li', { hasText: 'בני' }).locator('img').count()) === 0, 'photos: another player got a photo');
+  await row.getByRole('button', { name: 'הקלף של אבי', exact: true }).click();
+  const view = pp.getByRole('dialog', { name: 'אבי' });
+  await view.locator('.card-view .player-card').waitFor({ timeout: 8000 }).catch(() => errors.push('photos: card sheet not shown'));
+  const cardText = await view.locator('.card-view').textContent().catch(() => '');
+  assert(cardText.includes('86') && cardText.includes('התקפה'), `photos: card score/position (${cardText})`);
+  assert(await view.locator('.card-view image').count() === 1, 'photos: the card shows his photo');
+  assert(!(await pp.locator('.player-form').count()), 'photos: the avatar tap opened the edit sheet');
+  if (process.env.SHOTS) await pp.screenshot({ path: `${process.env.SHOTS}/wire-organizer-card.png` });
+  await view.getByRole('button', { name: 'שיתוף' }).waitFor({ timeout: 3000 }).catch(() => errors.push('photos: no share'));
   await pctx.close();
-  console.log('photos: organizer sets a player photo, the roster shows it');
+  console.log('photos: organizer makes a card (fallback path), the roster shows the photo, a tap opens the card');
+}
+
+// A player's phone: tapping a teammate's round photo in tonight's teams opens his card with the score
+// from the public copy (never a level); "שיתוף" makes a ≤720-wide picture.
+if (SB_URL) {
+  const roster = [
+    { id: 'p1', name: 'אבי', positions: ['att'], photo: 'v1', card: { shirt: 'yellow-blue', pattern: 'stripes', number: 9 }, score: 91 },
+    ...['בני', 'גיל', 'דני', 'הדר', 'ורד', 'זיו', 'חן', 'טל', 'יוסי', 'כפיר', 'ליאור', 'מתן'].map((name, i) => ({ id: `p${i + 2}`, name, score: 75 })),
+  ];
+  const { ctx: kctx, page: kp } = await playerContext(browser, { me: 'p3', canRate: false, roster });
+  const pic = readFileSync(new URL('../public/icon-512.png', import.meta.url));
+  await kctx.route(/\/storage\/v1\/object\/player-photos\//, (r) =>
+    /p1\.webp/.test(r.request().url()) ? r.fulfill({ status: 200, contentType: 'image/png', body: pic }) : r.fulfill({ status: 400, contentType: 'application/json', body: '{"statusCode":"404","error":"not_found","message":"Object not found"}' }),
+  );
+  kp.on('pageerror', (e) => errors.push(`player card: ${e.message}`));
+  await kp.goto(base);
+  const tap = kp.getByRole('button', { name: 'הקלף של אבי', exact: true });
+  await tap.waitFor({ timeout: 10000 }).catch(() => errors.push('player card: no tappable photo in the teams'));
+  await tap.click();
+  const view = kp.getByRole('dialog', { name: 'אבי' });
+  await view.locator('.card-view image').waitFor({ timeout: 8000 }).catch(() => errors.push('player card: no photo on the card'));
+  const t = await view.locator('.card-view').textContent().catch(() => '');
+  assert(t.includes('91') && t.includes('התקפה') && !/\b9\.|רמה/.test(t), `player card: text ${t}`);
+  if (process.env.SHOTS) await kp.screenshot({ path: `${process.env.SHOTS}/wire-player-card.png` });
+  await kp.evaluate(() => {
+    window.__shared = null;
+    navigator.canShare = () => true;
+    navigator.share = async ({ files }) => {
+      const f = files[0];
+      const im = new Image();
+      im.src = URL.createObjectURL(f);
+      await im.decode();
+      window.__shared = { type: f.type, size: f.size, w: im.naturalWidth, h: im.naturalHeight };
+    };
+  });
+  await view.getByRole('button', { name: 'שיתוף' }).click();
+  await kp.waitForFunction(() => window.__shared, null, { timeout: 15000 }).catch(() => errors.push('player card: nothing shared'));
+  const sh = await kp.evaluate(() => window.__shared);
+  assert(sh && sh.w === 720 && sh.h === 1008 && sh.size <= 700000 && /image\/(png|jpeg)/.test(sh.type), `player card: shared ${JSON.stringify(sh)}`);
+  await kctx.close();
+  console.log('player card: tap a photo in the teams → his card with the public score; share 720 px');
 }
 
 // Rating survey: "הקודם" goes back, "כל השחקנים" lists my votes and jumps.

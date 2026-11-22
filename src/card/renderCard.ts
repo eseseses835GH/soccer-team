@@ -4,8 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { FONT, PlayerCard, VIEW_H, VIEW_W, cardTexts, type PlayerCardProps } from './PlayerCard';
 
-/** `width` px wide (default 900). */
-export async function renderCardPng(props: PlayerCardProps, width = 900): Promise<Blob> {
+/** `width` px wide (default 900). `type` 'image/jpeg' draws on a dark background (no transparency). */
+export async function renderCardPng(props: PlayerCardProps, width = 900, type: 'image/png' | 'image/jpeg' = 'image/png'): Promise<Blob> {
   const [cutout, portrait] = await Promise.all([inline(props.cutout), inline(props.portrait)]);
   const p = { ...props, cutout, portrait };
   const host = document.createElement('div');
@@ -20,6 +20,10 @@ export async function renderCardPng(props: PlayerCardProps, width = 900): Promis
   canvas.height = Math.round(VIEW_H * k);
   const ctx = canvas.getContext('2d')!;
   const img = await loadSvg(svg);
+  if (type === 'image/jpeg') {
+    ctx.fillStyle = '#16181d';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
   const texts = cardTexts(p);
@@ -41,7 +45,15 @@ export async function renderCardPng(props: PlayerCardProps, width = 900): Promis
     ctx.fillText(t.text, t.x * k, t.y * k);
     ctx.restore();
   }
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('encode'))), 'image/png'));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('encode'))), type, 0.88));
+}
+
+/** The card to share: 720 px wide, PNG, or JPEG when the PNG is over 700 KB. */
+export async function renderCardShare(props: PlayerCardProps): Promise<File> {
+  const png = await renderCardPng(props, 720);
+  if (png.size <= 700_000) return new File([png], 'card.png', { type: 'image/png' });
+  const jpg = await renderCardPng(props, 720, 'image/jpeg');
+  return new File([jpg], 'card.jpg', { type: 'image/jpeg' });
 }
 
 /** blob:/http URLs → data URLs (an SVG drawn as an image can't load anything). */

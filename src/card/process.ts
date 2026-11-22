@@ -10,6 +10,7 @@ export const OUT = 512;
 /** Work on at most this many pixels per side (memory on phones, model speed). */
 const WORK = 1600;
 const MAX_PORTRAIT = 120_000;
+const MAX_CUTOUT = 450_000;
 /** Give up on the models after this long (slow network): the enhanced crop is used alone. */
 const MODEL_TIMEOUT = 25_000;
 
@@ -66,7 +67,16 @@ async function cutoutOf(vision: Vision, canvas: HTMLCanvasElement, img: ImageDat
   const c = makeCanvas(OUT);
   c.getContext('2d')!.putImageData(out, 0, 0);
   const webp = await toBlob(c, 'image/webp', 0.86);
-  return webp?.type === 'image/webp' ? webp : toBlob(c, 'image/png');
+  if (webp?.type === 'image/webp') return webp;
+  // Safari writes no WebP: PNG, smaller when it would pass the bucket's 500 KB.
+  const png = await toBlob(c, 'image/png');
+  if (!png || png.size <= MAX_CUTOUT) return png;
+  const s = makeCanvas(384);
+  const sx = s.getContext('2d')!;
+  sx.imageSmoothingQuality = 'high';
+  sx.drawImage(c, 0, 0, 384, 384);
+  const small = await toBlob(s, 'image/png');
+  return small && small.size <= MAX_CUTOUT ? small : null;
 }
 
 /** WebP under ~120KB (lower quality until it fits); JPEG where the browser can't write WebP. */

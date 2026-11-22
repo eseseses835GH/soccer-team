@@ -19,6 +19,8 @@ export function CardMaker({
   stats,
   initialStyle,
   onSave,
+  existing,
+  onSaveStyle,
   options,
 }: {
   name: string;
@@ -27,6 +29,10 @@ export function CardMaker({
   stats?: CardStat[];
   initialStyle?: CardStyle;
   onSave: (card: CardSave) => void | Promise<void>;
+  /** The card he has now (shown until a new photo is taken). */
+  existing?: { cutout: string | null; portrait: string | null };
+  /** With `existing`: save a new shirt alone, keeping the photo. */
+  onSaveStyle?: (style: CardStyle) => void | Promise<void>;
   /** Processing options (tests force the no-models path). */
   options?: ProcessOptions;
 }) {
@@ -55,6 +61,18 @@ export function CardMaker({
   };
 
   const card = { name, position, score, stats, style };
+  const shown = result
+    ? { cutout: result.cutout ? url : null, portrait: !result.cutout ? url : null }
+    : (existing ?? { cutout: null, portrait: null });
+  const styleChanged = JSON.stringify(style) !== JSON.stringify(sanitizeStyle(initialStyle));
+  const save = async (f: () => void | Promise<void>) => {
+    setSaving(true);
+    try {
+      await f();
+    } finally {
+      setSaving(false);
+    }
+  };
   const pick = (input: HTMLInputElement | null) => {
     if (!input) return;
     input.value = '';
@@ -65,7 +83,7 @@ export function CardMaker({
     <div className="card-maker">
       <div className={`card-maker-stage ${state === 'busy' ? 'is-busy' : ''}`}>
         <button type="button" className="card-maker-card" tabIndex={-1} aria-hidden="true" onClick={() => setStyling(true)}>
-          <PlayerCard {...card} cutout={result?.cutout ? url : null} portrait={result && !result.cutout ? url : null} size={240} />
+          <PlayerCard {...card} {...shown} size={240} />
         </button>
         {state === 'busy' && (
           <div className="card-maker-busy" role="status">
@@ -82,23 +100,20 @@ export function CardMaker({
       <div className="stack">
         {state === 'done' && result ? (
           <>
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              disabled={saving}
-              onClick={async () => {
-                setSaving(true);
-                try {
-                  await onSave({ portrait: result.portrait, cutout: result.cutout, style });
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
+            <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={() => save(() => onSave({ portrait: result.portrait, cutout: result.cutout, style }))}>
               שמירה
             </button>
             <button type="button" className="btn btn-quiet btn-block" onClick={() => pick(camera.current)}>
               צילום מחדש
+            </button>
+          </>
+        ) : existing && onSaveStyle && styleChanged && state !== 'busy' ? (
+          <>
+            <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={() => save(() => onSaveStyle(style))}>
+              שמירה
+            </button>
+            <button type="button" className="btn btn-quiet btn-block" onClick={() => pick(camera.current)}>
+              צילום
             </button>
           </>
         ) : (
@@ -118,7 +133,7 @@ export function CardMaker({
 
       {styling && (
         <CardStyleSheet
-          card={{ ...card, cutout: result?.cutout ? url : null, portrait: result && !result.cutout ? url : null }}
+          card={{ ...card, ...shown }}
           onClose={() => setStyling(false)}
           onDone={(s) => {
             setStyle(s);
