@@ -160,6 +160,16 @@ export function mergePlayer(base: Player | undefined, local: Player, remote: Pla
   return out as unknown as Player;
 }
 
+/**
+ * `photo` and `card` belong to the server (set_player_photo / set_my_card; a doc write never
+ * changes them there), so a merged player always has the server's (a player only this phone has keeps his).
+ */
+function withServerFields(p: Player, remote: Player | undefined): Player {
+  if (!remote || (p.photo === remote.photo && same(p.card, remote.card))) return p;
+  const { photo: _p, card: _c, ...rest } = p;
+  return { ...rest, ...(remote.photo ? { photo: remote.photo } : {}), ...(remote.card ? { card: remote.card } : {}) } as Player;
+}
+
 const pairKey = (kind: string, [a, b]: Pair) => `${kind}:${a < b ? `${a}|${b}` : `${b}|${a}`}`;
 
 function mergePairs(base: Constraints, local: Constraints, remote: Constraints, ids: Set<string>): Constraints {
@@ -198,7 +208,8 @@ function mergeFields<T extends object>(base: T, local: T, remote: T): T {
  */
 export function mergeDocs(base: SyncDoc | null, local: SyncDoc, remote: SyncDoc): SyncDoc {
   const b: SyncDoc = base ?? { v: 1, players: [], constraints: { together: [], apart: [] }, settings: remote.settings };
-  const players = mergeById(b.players, local.players, remote.players, mergePlayer);
+  const fromServer = new Map(remote.players.map((p) => [p.id, p]));
+  const players = mergeById(b.players, local.players, remote.players, mergePlayer).map((p) => withServerFields(p, fromServer.get(p.id)));
   const ids = new Set(players.map((p) => p.id));
   const doc: SyncDoc = {
     v: 1,

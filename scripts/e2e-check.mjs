@@ -2637,6 +2637,40 @@ if (SB_URL) {
   console.log('v21: second phone gets its groups; a new group has me; an old group gets me; a link puts me straight in; rename; switch');
 }
 
+// Player photos: an organizer sets a photo in the player's sheet → uploaded to the bucket, the
+// roster points at it (set_player_photo), the round photo shows in the roster.
+if (SB_URL) {
+  const attrs = { overall: 6, stamina: 6, passing: 6, dribbling: 6, shooting: 6, defense: 6, teamwork: 6, leadership: 6 };
+  const ps = cloudServer();
+  const pctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await cloudRoutes(pctx, ps);
+  const pp = await pctx.newPage();
+  pp.on('pageerror', (e) => errors.push(`photos: ${e.message}`));
+  await pp.goto(base);
+  await signInOrganizer(pp);
+  const { gid } = await groupState(pp);
+  ps.groups.set(gid, { name: 'שישי בשכונה', data: { v: 1, players: [{ id: 'a1', name: 'אבי', attrs, canGK: false, cards: [] }, { id: 'b1', name: 'בני', attrs, canGK: false, cards: [] }], constraints: { together: [], apart: [] } }, version: 2 });
+  await pp.goto(base + '#players');
+  await pp.reload();
+  const row = pp.locator('.roster li', { hasText: 'אבי' });
+  await row.waitFor({ timeout: 5000 }).catch(() => errors.push('photos: roster not loaded'));
+  assert(!(await pp.locator('.roster img.p-avatar').count()), 'photos: a photo before any was set');
+  await row.getByRole('button').first().click();
+  const sheet = pp.getByRole('dialog', { name: 'אבי' });
+  await sheet.locator('input[type=file]').setInputFiles(new URL('../public/icon-192.png', import.meta.url).pathname);
+  await row.locator('img.p-avatar').waitFor({ timeout: 8000 }).catch(() => errors.push('photos: no photo in the roster'));
+  const set = ps.calls.filter((c) => c.rpc === 'set_player_photo');
+  const file = ps.photos.get(`${gid}/a1.webp`);
+  assert(set.length === 1 && set[0].body.p_player_id === 'a1' && /^[0-9a-z]+$/.test(set[0].body.p_version ?? ''), `photos: set_player_photo ${JSON.stringify(set)}`);
+  assert(file && /^image\/(webp|jpeg)$/.test(file.type) && file.body.length > 100 && file.body.length <= 300 * 1024, `photos: uploaded file ${file?.type} ${file?.body.length}`);
+  assert(ps.groups.get(gid).data.players[0].photo === set[0]?.body.p_version, 'photos: roster points at the photo');
+  const src = await row.locator('img.p-avatar').getAttribute('src').catch(() => '');
+  assert(src?.startsWith('blob:'), `photos: img src ${src}`);
+  assert((await pp.locator('.roster li', { hasText: 'בני' }).locator('img').count()) === 0, 'photos: another player got a photo');
+  await pctx.close();
+  console.log('photos: organizer sets a player photo, the roster shows it');
+}
+
 // Rating survey: "הקודם" goes back, "כל השחקנים" lists my votes and jumps.
 {
   const { ctx: vctx, page: vp, db } = await playerContext(browser, { me: 'p3', canRate: true, live: false });

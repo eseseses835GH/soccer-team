@@ -10,6 +10,7 @@ import { sanitizePositions } from '../state/positions';
 import { parseEvening, type EveningRules } from '../state/evening';
 import { isLevel, parseRatingMode, parseVoteRows, type MemberRole, type RatingMode, type VoteRow } from '../state/playerVotes';
 import { SyncError, fail } from './supabase';
+import { sanitizeCard, sanitizePhoto, type CardStyle } from '../photos/style';
 
 // The vote math is pure and shared with the split-teams edge function (src/server).
 export * from '../state/playerVotes';
@@ -36,6 +37,12 @@ export interface PublicPlayer {
   occasional?: true;
   /** "לא בשער": skipped by the keeper rotation. */
   noGK?: boolean;
+  /** Version of his photo (player-photos bucket). */
+  photo?: string;
+  /** The style he chose for his card. */
+  card?: CardStyle;
+  /** The card score, 70–99 (derived from the level by the server; never the level itself). */
+  score?: number;
 }
 
 /** What a player may see of a group (group_public_get). Never any rating. */
@@ -83,7 +90,20 @@ export function parsePublic(raw: unknown): PublicGroup | null {
     .filter((p) => typeof p.id === 'string' && typeof p.name === 'string' && (p.name as string).trim())
     .map((p) => {
       const positions = sanitizePositions(p.positions);
-      return { id: p.id as string, name: p.name as string, ...(positions.length ? { positions } : {}), ...(p.canGK === true ? { canGK: true } : {}), ...(p.occasional === true ? { occasional: true as const } : {}), ...(p.noGK === true ? { noGK: true } : {}) };
+      const photo = sanitizePhoto(p.photo);
+      const card = sanitizeCard(p.card);
+      const score = typeof p.score === 'number' && Number.isInteger(p.score) && p.score >= 70 && p.score <= 99 ? p.score : undefined;
+      return {
+        id: p.id as string,
+        name: p.name as string,
+        ...(positions.length ? { positions } : {}),
+        ...(p.canGK === true ? { canGK: true } : {}),
+        ...(p.occasional === true ? { occasional: true as const } : {}),
+        ...(p.noGK === true ? { noGK: true } : {}),
+        ...(photo ? { photo } : {}),
+        ...(card ? { card } : {}),
+        ...(score !== undefined ? { score } : {}),
+      };
     });
   return {
     groupId: r.groupId,

@@ -14,6 +14,7 @@ import {
 import { migrateCards, type CardId } from './cards';
 import { sanitizePositions } from './positions';
 import { sanitizeVotes, type LevelVotes } from './votes';
+import { sanitizeCard, sanitizePhoto, type CardStyle } from '../photos/style';
 import type { MatchState } from '../match/match';
 import { sanitizeMatch } from '../match/match';
 import { addEvening, buildEvening, sanitizeHistory, type EveningRecord } from './history';
@@ -28,6 +29,10 @@ export interface Player extends EnginePlayer {
   pendingRegular?: true;
   /** "לא בשער": never in the keeper rotation (left out of the field when false). */
   noGK?: true;
+  /** Cloud groups: version of his photo in the `player-photos` bucket (server-owned, set_player_photo). */
+  photo?: string;
+  /** Cloud groups: the style he chose for his player card (server-owned, set_my_card). */
+  card?: CardStyle;
 }
 
 /** Ids of players marked "לא בשער". */
@@ -279,6 +284,8 @@ export function sanitizePlayer(p: unknown): Player | null {
   const positions = sanitizePositions([...(Array.isArray(r.positions) ? r.positions : []), ...(m.addDef ? ['def'] : [])]);
   // Same for votes: players nobody voted on (local groups, logged out) have no field.
   const levelVotes = sanitizeVotes(r.levelVotes);
+  const photo = sanitizePhoto(r.photo);
+  const card = sanitizeCard(r.card);
   return {
     id: r.id,
     name: r.name.trim().slice(0, 24),
@@ -290,6 +297,8 @@ export function sanitizePlayer(p: unknown): Player | null {
     ...(r.occasional === true ? { occasional: true as const } : {}),
     ...(r.occasional === true && r.pendingRegular === true ? { pendingRegular: true as const } : {}),
     ...(r.noGK === true ? { noGK: true as const } : {}),
+    ...(photo ? { photo } : {}),
+    ...(card ? { card } : {}),
   };
 }
 

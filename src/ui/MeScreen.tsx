@@ -15,6 +15,7 @@ import { useUi } from './App';
 import { Sheet } from './components';
 import { dateLabel } from './HistoryScreen';
 import { Icon } from './icons';
+import { PhotoButton } from '../photos/Avatar';
 
 /** The round picture (Google) or the first letter. */
 export function Avatar({ profile, size = 30 }: { profile: Profile; size?: number }) {
@@ -45,7 +46,7 @@ interface Row {
   meta: GroupMeta;
   player: boolean;
   history: EveningRecord[];
-  roster: { id: string; name: string }[];
+  roster: { id: string; name: string; photo?: string }[];
   /** undefined = don't know yet (organizer group, not fetched). */
   playerId: string | null | undefined;
   taken: string[];
@@ -94,7 +95,7 @@ export function MeScreen() {
         const open = meta.id === groups.current.id;
         const app = open ? state : loadGroupState(localKV, meta.id);
         const player = isPlayerGroup(meta);
-        const roster = app.players.map((p) => ({ id: p.id, name: p.name }));
+        const roster = app.players.map((p) => ({ id: p.id, name: p.name, ...(p.photo ? { photo: p.photo } : {}) }));
         if (player) {
           const pub = open && pg.pub ? pg.pub : loadPublic(localKV, meta.id);
           return { meta, player, history: app.history, roster, playerId: pub?.me.playerId ?? null, taken: pub?.claimed ?? [] };
@@ -234,6 +235,17 @@ export function MeScreen() {
           <MyName
             row={nameFor}
             notify={notify}
+            onPhoto={(v) => {
+              const pid = nameFor.playerId!;
+              groups.setGroupState(nameFor.meta.id, (st) => ({
+                ...st,
+                players: st.players.map((p) => {
+                  if (p.id !== pid) return p;
+                  const { photo: _, ...rest } = p;
+                  return v ? { ...rest, photo: v } : rest;
+                }),
+              }));
+            }}
             onDone={(change) => {
               const gid = nameFor.meta.id;
               const old = nameFor.playerId!;
@@ -337,7 +349,7 @@ function OrgClaim({ row, onDone, notify }: { row: Row; onDone: (playerId: string
 type NameChange = { kind: 'rename'; name: string } | { kind: 'switch'; playerId: string; removed: boolean };
 
 /** "השם שלי בקבוצה" (v21): rename my roster player, or say I'm another (unclaimed) name in the list. */
-function MyName({ row, onDone, notify }: { row: Row; onDone: (c: NameChange) => void; notify: (m: string) => void }) {
+function MyName({ row, onDone, onPhoto, notify }: { row: Row; onDone: (c: NameChange) => void; onPhoto: (v: string | null) => void; notify: (m: string) => void }) {
   const sync = useSync();
   const current = row.roster.find((p) => p.id === row.playerId)?.name ?? '';
   const [name, setName] = useState(current);
@@ -366,8 +378,10 @@ function MyName({ row, onDone, notify }: { row: Row; onDone: (c: NameChange) => 
       return { kind: 'rename', name: n };
     });
   };
+  const me = row.roster.find((p) => p.id === row.playerId);
   return (
     <div className="stack">
+      {me && <PhotoButton player={me} groupId={row.meta.id} notify={notify} onDone={onPhoto} />}
       <form className="stack" onSubmit={save}>
         <input className="input input-big" aria-label="השם שלי" maxLength={MAX_PLAYER_NAME} value={name} onChange={(e) => setName(e.target.value)} />
         <button type="submit" className="btn btn-primary btn-block" disabled={busy || !cleanName(name) || cleanName(name) === current}>

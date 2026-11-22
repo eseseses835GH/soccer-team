@@ -49,6 +49,7 @@ import { Icon } from './icons';
 import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
 import { useEndEvening } from './LiveControl';
+import { Avatar } from '../photos/Avatar';
 import { celebrateGoal, playWhistle, stopSounds, unlockAudio, unlockOnNextTap } from './sounds';
 
 /** Quick picks in the match length sheet, in minutes. */
@@ -584,6 +585,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
                     setScorerFor(null);
                   }}
                 >
+                  {byId.get(id) && <Avatar player={byId.get(id)!} />}
                   <span className="name">{byId.get(id)?.name}</span>
                 </button>
               </li>
@@ -608,6 +610,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
                     setGkPick(null);
                   }}
                 >
+                  {byId.get(id) && <Avatar player={byId.get(id)!} />}
                   <span className="name">{byId.get(id)?.name}</span>
                   {keeperId(gkPick).now === id && <span aria-hidden="true"> 🧤</span>}
                 </button>

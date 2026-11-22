@@ -15,6 +15,7 @@ import { Icon } from './icons';
 import { LateSheet } from './LateSheet';
 import { LeaveSheet } from './LeaveSheet';
 import { rerollTeams, splitTeams } from './split';
+import { Avatar } from '../photos/Avatar';
 import { teamTotals } from '../state/splitCore';
 
 type Sel = { kind: 'team'; i: number } | { kind: 'sub'; id: string } | null;
@@ -267,6 +268,7 @@ export function TeamsScreen() {
                             {slot === 0 && p.canGK ? '🧤' : ''}
                           </span>
                         )}
+                        <Avatar player={p} size={24} />
                         <span className="name">{p.name}</span>
                         <CardBadges cards={p.cards} />
                       </button>

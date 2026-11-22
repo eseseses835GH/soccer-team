@@ -11,9 +11,42 @@ export const CLOUD_ME = '00000000-0000-4000-8000-0000000000dd';
  * `auto` = the player claim_self made for me (gid → id); `invites` = token → { gid, role } for join_group;
  * `roles` = my role per joined group (group_public_get answers for those).
  * `members` = group_members_list rows per group (gid → rows), when a block needs other members.
+ * `photos` = the player-photos bucket (path → { type, body }); set_player_photo / set_my_card change the roster.
  */
 export function cloudServer() {
-  return { groups: new Map(), calls: [], logins: 0, beforePush: null, mine: [], selfName: null, claims: new Map(), auto: new Map(), invites: {}, roles: new Map(), members: new Map() };
+  return { groups: new Map(), calls: [], logins: 0, beforePush: null, mine: [], selfName: null, claims: new Map(), auto: new Map(), invites: {}, roles: new Map(), members: new Map(), photos: new Map() };
+}
+
+/** The file part of a multipart upload (storage-js sends a FormData). */
+function filePart(buf, contentType) {
+  const m = /boundary=(.+)$/.exec(contentType ?? '');
+  if (!m) return { type: contentType, body: buf };
+  const sep = Buffer.from(`--${m[1]}`);
+  let at = buf.indexOf(sep);
+  while (at >= 0) {
+    const next = buf.indexOf(sep, at + sep.length);
+    if (next < 0) break;
+    const part = buf.subarray(at + sep.length + 2, next - 2);
+    const head = part.indexOf('\r\n\r\n');
+    const headers = part.subarray(0, head).toString();
+    const type = /content-type:\s*(\S+)/i.exec(headers)?.[1];
+    if (type && type.startsWith('image/')) return { type, body: part.subarray(head + 4) };
+    at = next;
+  }
+  return { type: 'application/octet-stream', body: buf };
+}
+
+/** set_player_photo / set_my_card on the mocked server: one roster field, version bumped. */
+function setPlayerField(s, gid, pid, k, v) {
+  const g = s.groups.get(gid);
+  if (!g?.data?.players?.some((p) => p.id === pid)) return false;
+  g.data = { ...g.data, players: g.data.players.map((p) => {
+    if (p.id !== pid) return p;
+    const { [k]: _, ...rest } = p;
+    return v == null ? rest : { ...rest, [k]: v };
+  }) };
+  g.version++;
+  return true;
 }
 
 const ATTRS5 = Object.fromEntries(['overall', 'stamina', 'passing', 'dribbling', 'shooting', 'defense', 'teamwork', 'leadership'].map((k) => [k, 5]));
@@ -80,6 +113,21 @@ export async function cloudRoutes(ctxOrPage, s) {
       return json(session());
     }
     if (u.pathname.endsWith('/auth/v1/logout')) return route.fulfill({ status: 204, body: '' });
+    const sm = /\/storage\/v1\/object\/player-photos(?:\/(.+))?$/.exec(u.pathname);
+    if (sm) {
+      const path = sm[1] ? decodeURIComponent(sm[1]) : '';
+      s.calls.push({ storage: req.method(), path });
+      if (req.method() === 'GET') {
+        const f = s.photos.get(path);
+        return f ? route.fulfill({ status: 200, contentType: f.type, body: f.body }) : json({ statusCode: '404', error: 'not_found', message: 'Object not found' }, 400);
+      }
+      if (req.method() === 'DELETE') {
+        for (const p of req.postDataJSON()?.prefixes ?? []) s.photos.delete(p);
+        return json([]);
+      }
+      s.photos.set(path, filePart(req.postDataBuffer() ?? Buffer.alloc(0), req.headers()['content-type']));
+      return json({ Id: path, Key: `player-photos/${path}` });
+    }
     if (u.pathname.endsWith('/rest/v1/groups')) {
       const id = (u.searchParams.get('id') ?? '').slice(3);
       const g = s.groups.get(id);
@@ -154,6 +202,11 @@ export async function cloudRoutes(ctxOrPage, s) {
     if (rpc === 'group_members_list' && s.members.has(body.p_group_id)) return json(s.members.get(body.p_group_id));
     if (rpc === 'group_members_list' && s.selfName)
       return json([{ user_id: CLOUD_ME, display_name: s.selfName, role: 'organizer', player_id: s.claims.get(body.p_group_id) ?? null, can_rate: false, joined_at: '2026-10-21T10:00:00Z', is_me: true }]);
+    if (rpc === 'set_player_photo' || rpc === 'set_my_card') {
+      const ok = setPlayerField(s, body.p_group_id, body.p_player_id, rpc === 'set_my_card' ? 'card' : 'photo', rpc === 'set_my_card' ? body.p_card : body.p_version);
+      if (!ok) return json({ code: '22023', message: 'unknown player', details: null, hint: null }, 400);
+      return rpc === 'set_my_card' ? json(body.p_card ?? null) : route.fulfill({ status: 204, body: '' });
+    }
     if (rpc === 'live_get' || rpc === 'group_votes') return json([]);
     if (rpc === 'live_set') return json(s.calls.filter((c) => c.rpc === 'live_set').length);
     return json(null);

@@ -8,7 +8,7 @@ import { newId, withNoGK, type Player } from '../state/model';
 import { withPositions } from '../state/positions';
 import { SHARED_HASH } from '../state/whatsapp';
 import { loadJSON, saveJSON } from '../state/storage';
-import { useStore } from '../state/store';
+import { useGroups, useStore } from '../state/store';
 import { isTuned, votesLine } from '../state/votes';
 import { useVoterId } from '../sync/SyncProvider';
 import { usePlayerVotes } from '../sync/OrganizerSync';
@@ -21,6 +21,7 @@ import { Icon } from './icons';
 import { InviteFriends } from './InviteFriends';
 import { SwipeRow, closeSwipeRows } from './SwipeRow';
 import { usePlayerGate } from './useGate';
+import { Avatar, PhotoButton } from '../photos/Avatar';
 
 const MAX_NAME = 24;
 /** Per phone: the "swipe to delete" tip was dismissed (or the user already swiped). */
@@ -295,6 +296,7 @@ export function PlayersScreen() {
                   onClick={() => (selecting ? toggleSelected(p.id) : setEditing(p))}
                 >
                   {selecting && <span className="select-tick" aria-hidden="true" />}
+                  <Avatar player={p} />
                   <span className="name">{p.name}</span>
                   <PositionBadges player={p} />
                   <CardBadges cards={p.cards} all />
@@ -316,6 +318,7 @@ export function PlayersScreen() {
               <SwipeRow key={p.id} actionLabel={`מחיקת ${p.name}`} className={p.id === fresh ? 'is-new' : undefined} onDelete={() => setDeleting([p])}>
                 <div className="guest-row">
                   <button type="button" onClick={() => setEditing(p)}>
+                    <Avatar player={p} />
                     <span className="name">{p.name}</span>
                     <span className="level" aria-label={`רמה ${p.attrs.overall}`}>
                       {p.attrs.overall}
@@ -355,6 +358,12 @@ export function PlayersScreen() {
           nameTaken={nameTaken}
           fixedKeepers={fixedKeepers}
           onClose={() => setEditing(null)}
+          onPhoto={(id, photo) => {
+            const cur = state.players.find((x) => x.id === id);
+            if (!cur) return;
+            const { photo: _, ...rest } = cur;
+            dispatch({ type: 'updatePlayer', player: photo ? { ...rest, photo } : rest });
+          }}
           onSave={(p) => {
             dispatch({ type: 'updatePlayer', player: p });
             notify('נשמר');
@@ -392,6 +401,7 @@ function PlayerSheet({
   nameTaken,
   fixedKeepers,
   onClose,
+  onPhoto,
   onSave,
   onDelete,
 }: {
@@ -399,12 +409,15 @@ function PlayerSheet({
   nameTaken: (n: string, exceptId?: string) => boolean;
   fixedKeepers: boolean;
   onClose: () => void;
+  onPhoto: (id: string, photo: string | null) => void;
   onSave: (p: Player) => void;
   onDelete: (p: Player) => void;
 }) {
   const [draft, setDraft] = useState<Player>(player);
   const [error, setError] = useState<string | null>(null);
   const voter = useVoterId();
+  const { current } = useGroups();
+  const { notify } = useUi();
   const playerVotes = usePlayerVotes().rows;
   const myVote = voter ? draft.levelVotes?.[voter] : undefined;
   // In a synced group the organizer's tap is their vote; the level follows levelFromVotes (v18).
@@ -426,6 +439,20 @@ function PlayerSheet({
   return (
     <Sheet title={player.name} onClose={onClose}>
       <form className="player-form" onSubmit={save} noValidate>
+        {current.synced && (
+          <PhotoButton
+            player={draft}
+            groupId={current.id}
+            notify={notify}
+            onDone={(v) => {
+              setDraft((d) => {
+                const { photo: _, ...rest } = d;
+                return v ? { ...rest, photo: v } : rest;
+              });
+              onPhoto(draft.id, v);
+            }}
+          />
+        )}
         <label className="label" htmlFor="pf-name">
           שם
         </label>

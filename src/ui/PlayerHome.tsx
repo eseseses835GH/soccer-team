@@ -18,6 +18,7 @@ import type { PublicPlayer } from '../sync/players';
 import { splitApi } from '../sync/splitRemote';
 import { SyncError } from '../sync/supabase';
 import { currentTeams } from '../state/shuffle';
+import { Avatar } from '../photos/Avatar';
 import { eveningOf } from '../state/evening';
 
 const laterKey = (gid: string) => `kochot:claim-later:${gid}`;
@@ -400,6 +401,7 @@ export function LiveView({
                   <li key={id}>
                     <span className={`member ${id === me ? 'me' : ''} ${borrowed.has(id) ? 'away' : ''}`} aria-current={id === me ? 'true' : undefined}>
                       <span className="slot">{showKeeper && id === team.keeper ? '🧤' : ''}</span>
+                      <Avatar player={{ id, name: name(id), photo: roster.find((x) => x.id === id)?.photo }} size={24} />
                       <span className="name">{name(id)}</span>
                       {badges(id)}
                     </span>

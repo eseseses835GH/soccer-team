@@ -3057,6 +3057,18 @@ thead th {
 .avatar-btn {
   padding: 0;
 }
+/* Player photos: round, in name rows; the "תמונה" row in the player's sheets. */
+.p-avatar.avatar-letter {
+  background: var(--sunk);
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.photo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-block-end: 8px;
+}
 .me-head {
   display: flex;
   align-items: center;

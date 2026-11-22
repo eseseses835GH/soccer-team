@@ -556,6 +556,20 @@ function ratedLevel(all, organizers) {
   return Object.keys(all ?? {}).length >= MIN_RATERS ? averageLevel(all) : averageLevel(organizers);
 }
 
+// src/photos/style.ts
+var VERSION_RE = /^[0-9a-z]{1,20}$/;
+var STYLE_RE = /^[A-Za-z0-9#_-]{1,20}$/;
+var sanitizePhoto = (v) => typeof v === "string" && VERSION_RE.test(v) ? v : void 0;
+function sanitizeCard(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
+  const r = raw;
+  const out = {};
+  if (typeof r.shirt === "string" && STYLE_RE.test(r.shirt)) out.shirt = r.shirt;
+  if (typeof r.pattern === "string" && STYLE_RE.test(r.pattern)) out.pattern = r.pattern;
+  if (typeof r.number === "number" && Number.isInteger(r.number) && r.number >= 1 && r.number <= 99) out.number = r.number;
+  return Object.keys(out).length ? out : void 0;
+}
+
 // src/match/match.ts
 var kick = (v) => Number.isInteger(v) && v >= 0 && v <= 99 ? v : void 0;
 function cleanPens(raw, a, b, ga, gb) {
@@ -717,6 +731,8 @@ function sanitizePlayer(p) {
   const m = migrateCards(r.cards, attrs);
   const positions = sanitizePositions([...Array.isArray(r.positions) ? r.positions : [], ...m.addDef ? ["def"] : []]);
   const levelVotes = sanitizeVotes(r.levelVotes);
+  const photo = sanitizePhoto(r.photo);
+  const card = sanitizeCard(r.card);
   return {
     id: r.id,
     name: r.name.trim().slice(0, 24),
@@ -727,7 +743,9 @@ function sanitizePlayer(p) {
     ...levelVotes ? { levelVotes } : {},
     ...r.occasional === true ? { occasional: true } : {},
     ...r.occasional === true && r.pendingRegular === true ? { pendingRegular: true } : {},
-    ...r.noGK === true ? { noGK: true } : {}
+    ...r.noGK === true ? { noGK: true } : {},
+    ...photo ? { photo } : {},
+    ...card ? { card } : {}
   };
 }
 function sanitizeSettings(raw) {
