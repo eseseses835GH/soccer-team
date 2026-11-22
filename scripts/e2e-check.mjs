@@ -2931,6 +2931,7 @@ if (SB_URL) {
   });
   await cp.locator('input[type=file]:not([capture])').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: Buffer.from(photo, 'base64') });
   await cp.getByRole('button', { name: 'שמירה' }).waitFor({ timeout: 40000 }).catch(() => errors.push('card lab: no preview after the photo'));
+  await cp.locator('.card-maker .player-card image').first().waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
   assert(await cp.locator('.card-maker .player-card image').count() === 1, 'card lab: the preview card shows the photo');
   await cp.getByRole('button', { name: 'שמירה' }).click();
   const saved = await cp.evaluate(() => window.__cardLab?.saved);
