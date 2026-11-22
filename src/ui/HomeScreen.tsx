@@ -3,7 +3,8 @@ import { Avatar } from '../photos/Avatar';
 import { MIN_TEAM_SIZE, planFormat, type FormatPlan } from '../engine';
 import { newId, type Player } from '../state/model';
 import { checkInList, newGuest, withoutGuests } from '../state/guests';
-import { presentPlayers, useStore } from '../state/store';
+import { presentPlayers, useGroups, useStore } from '../state/store';
+import { CardsButton } from '../card/CardsButton';
 import { useUi } from './App';
 import { shouldOfferInstall } from '../state/install';
 import { CardBadges, Empty, Sheet } from './components';
@@ -39,6 +40,7 @@ export function planSentence(n: number, plan: FormatPlan | null, size: number): 
 export function HomeScreen() {
   const { state, dispatch } = useStore();
   const { go, notify } = useUi();
+  const { current } = useGroups();
   const { viewer } = useLiveControl();
   const [welcome, setWelcome] = useState(() => shouldWelcome(state.players.length));
   const [busy, setBusy] = useState(false);
@@ -212,6 +214,12 @@ export function HomeScreen() {
         <button type="button" className="text-btn inline" onClick={() => setGuest(true)}>
           אורח
         </button>
+        {current.synced && (
+          <>
+            {' · '}
+            <CardsButton notify={notify} inline />
+          </>
+        )}
       </p>
 
       <div className="cta-dock">

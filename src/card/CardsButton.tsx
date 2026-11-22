@@ -3,11 +3,11 @@ import { lazy, Suspense, useState } from 'react';
 
 const CardsSheet = lazy(() => import('./CardsSheet'));
 
-export function CardsButton({ notify }: { notify: (m: string) => void }) {
+export function CardsButton({ notify, inline = false }: { notify: (m: string) => void; inline?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" className="text-btn" onClick={() => setOpen(true)}>
+      <button type="button" className={`text-btn ${inline ? "inline" : ""}`} onClick={() => setOpen(true)}>
         הקלפים
       </button>
       {open && (
