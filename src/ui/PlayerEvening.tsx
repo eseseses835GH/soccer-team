@@ -1,6 +1,7 @@
 // A player starts an evening (DECISIONS → "Players start an evening (v20)"): who's here, players per
 // team, teams from the server (split-teams; this phone never gets a level), one total per team, then
 // he runs it like any runner. Same look as the organizer's main screen.
+import { Avatar } from '../photos/Avatar';
 import { useState } from 'react';
 import { keyOf, planFormat } from '../engine';
 import { liveFromState } from '../sync/live';
@@ -166,6 +167,7 @@ export function NewEvening({ gid, onClose }: { gid: string; onClose(): void }) {
               <label className={on ? 'on' : ''}>
                 <input type="checkbox" checked={on} onChange={() => pick(on ? present.filter((id) => id !== p.id) : [...present, p.id])} />
                 <span className="tick" aria-hidden="true" />
+                <Avatar player={p} size={32} />
                 <span className="name">{p.name}</span>
               </label>
             </li>

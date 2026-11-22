@@ -2,7 +2,7 @@
  * A phone photo → a card-ready portrait: face-centred head-and-shoulders square, auto-enhanced,
  * plus the same framing with the background removed. All in the browser (canvas + MediaPipe).
  */
-import { centerFace, cropBox, mapBox, type Box } from './crop';
+import { centerFace, cropBox, extendBox, type Box, type Square } from './crop';
 import { applyEnhance, enhanceParams, featherMask, measure } from './enhance';
 import { loadVision, type Vision } from './vision';
 
@@ -21,12 +21,27 @@ export interface Processed {
   cutout: Blob | null;
   /** A face was found (false: centre crop). */
   face: boolean;
+  /** The enhanced picture around the framing, kept in memory so the photo can be moved (`renderFramed`). */
+  source: Source;
+}
+
+export interface Source {
+  /** Enhanced, a wider area than the frame. */
+  portrait: HTMLCanvasElement;
+  /** The same with the background removed; null without the models. */
+  cutout: HTMLCanvasElement | null;
+  /** The automatic frame, in the source's pixels. */
+  base: Square;
 }
 
 export interface ProcessOptions {
   /** false: skip the models (offline, tests). */
   models?: boolean;
 }
+
+/** Pixels the automatic frame gets in the source (room to zoom in), and the source's longest side. */
+const FRAME_PX = 640;
+const SOURCE_MAX = 1400;
 
 export async function processPhoto(file: File | Blob, opts: ProcessOptions = {}): Promise<Processed> {
   const src = await decode(file);
@@ -35,37 +50,83 @@ export async function processPhoto(file: File | Blob, opts: ProcessOptions = {})
   let faceBox: Box | null = null;
   if (vision) faceBox = safe(() => vision.face(src));
   const crop = cropBox(src.width, src.height, faceBox);
-  const canvas = makeCanvas(OUT);
+
+  // A wider area around the crop, enhanced and cut out once; any frame inside it is drawn from it.
+  const area = extendBox(crop, src.width, src.height);
+  const k = Math.min(FRAME_PX / crop.size, SOURCE_MAX / Math.max(area.w, area.h));
+  const W = Math.max(1, Math.round(area.w * k));
+  const H = Math.max(1, Math.round(area.h * k));
+  const canvas = makeCanvas(W, H);
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(src, crop.x, crop.y, crop.size, crop.size, 0, 0, OUT, OUT);
+  ctx.drawImage(src, area.x, area.y, area.w, area.h, 0, 0, W, H);
+  const base: Square = { x: (crop.x - area.x) * k, y: (crop.y - area.y) * k, size: crop.size * k };
 
-  const face = faceBox ? mapBox(faceBox, crop, OUT) : centerFace(OUT);
-  const img = ctx.getImageData(0, 0, OUT, OUT);
-  const whole = measure(img.data, OUT, OUT, { x: 0, y: 0, w: OUT, h: OUT });
-  applyEnhance(img.data, OUT, OUT, enhanceParams(measure(img.data, OUT, OUT, face), OUT / crop.size, whole));
+  const face = faceBox
+    ? { x: (faceBox.x - area.x) * k, y: (faceBox.y - area.y) * k, w: faceBox.w * k, h: faceBox.h * k }
+    : offsetBox(centerFace(base.size), base);
+  const img = ctx.getImageData(0, 0, W, H);
+  const whole = measure(img.data, W, H, { x: base.x, y: base.y, w: base.size, h: base.size });
+  applyEnhance(img.data, W, H, enhanceParams(measure(img.data, W, H, face), OUT / crop.size, whole));
   ctx.putImageData(img, 0, 0);
-  const portrait = await encodeSmall(canvas);
 
-  const cutout = vision ? await cutoutOf(vision, canvas, img, face) : null;
-  return { portrait, cutout, face: !!faceBox };
+  const cut = vision ? cutoutSource(vision, canvas, img, face, base) : null;
+  const source: Source = { portrait: canvas, cutout: cut, base };
+  const out = await renderFramed(source, base);
+  return { ...out, face: !!faceBox, source };
 }
 
-async function cutoutOf(vision: Vision, canvas: HTMLCanvasElement, img: ImageData, face: Box): Promise<Blob | null> {
+/** The portrait and cutout files for a frame of the source (512 square each). */
+export async function renderFramed(source: Source, frame: Square): Promise<{ portrait: Blob; cutout: Blob | null }> {
+  const portrait = await encodeSmall(drawFrame(source.portrait, frame));
+  const cutout = source.cutout ? await encodeCutout(drawFrame(source.cutout, frame)) : null;
+  return { portrait, cutout };
+}
+
+/** A smaller copy of a source picture for the live preview (object URL). */
+export async function previewUrl(c: HTMLCanvasElement, max = 800): Promise<string | null> {
+  const k = Math.min(1, max / Math.max(c.width, c.height));
+  const s = makeCanvas(Math.round(c.width * k), Math.round(c.height * k));
+  const sx = s.getContext('2d')!;
+  sx.imageSmoothingQuality = 'high';
+  sx.drawImage(c, 0, 0, s.width, s.height);
+  const b = (await toBlob(s, 'image/webp', 0.85)) ?? (await toBlob(s, 'image/png'));
+  return b ? URL.createObjectURL(b) : null;
+}
+
+function drawFrame(from: HTMLCanvasElement, f: Square): HTMLCanvasElement {
+  const c = makeCanvas(OUT);
+  const ctx = c.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(from, f.x, f.y, f.size, f.size, 0, 0, OUT, OUT);
+  return c;
+}
+
+const offsetBox = (b: Box, by: Square): Box => ({ x: b.x + by.x, y: b.y + by.y, w: b.w, h: b.h });
+
+function cutoutSource(vision: Vision, canvas: HTMLCanvasElement, img: ImageData, face: Box, base: Square): HTMLCanvasElement | null {
   const conf = safe(() => vision.person(canvas));
   if (!conf) return null;
-  const alpha = featherMask(conf, OUT, OUT, face);
+  const { width: W, height: H } = canvas;
+  const alpha = featherMask(conf, W, H, face);
+  const out = new ImageData(new Uint8ClampedArray(img.data), W, H);
+  for (let j = 0, i = 3; j < alpha.length; j++, i += 4) out.data[i] = alpha[j];
+  // Nobody found in the frame (a photo of a wall): no cutout rather than an empty picture.
   let any = 0;
-  const out = new ImageData(new Uint8ClampedArray(img.data), OUT, OUT);
-  for (let j = 0, i = 3; j < alpha.length; j++, i += 4) {
-    out.data[i] = alpha[j];
-    any += alpha[j] > 128 ? 1 : 0;
-  }
-  // Nobody found (a photo of a wall): no cutout rather than an empty picture.
-  if (any < OUT * OUT * 0.03) return null;
-  const c = makeCanvas(OUT);
+  const x0 = Math.max(0, Math.floor(base.x));
+  const y0 = Math.max(0, Math.floor(base.y));
+  const x1 = Math.min(W, Math.ceil(base.x + base.size));
+  const y1 = Math.min(H, Math.ceil(base.y + base.size));
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) any += alpha[y * W + x] > 128 ? 1 : 0;
+  if (any < (x1 - x0) * (y1 - y0) * 0.03) return null;
+  const c = makeCanvas(W, H);
   c.getContext('2d')!.putImageData(out, 0, 0);
+  return c;
+}
+
+async function encodeCutout(c: HTMLCanvasElement): Promise<Blob | null> {
   const webp = await toBlob(c, 'image/webp', 0.86);
   if (webp?.type === 'image/webp') return webp;
   // Safari writes no WebP: PNG, smaller when it would pass the bucket's 500 KB.
@@ -134,10 +195,10 @@ function loadImage(file: Blob): Promise<HTMLImageElement> {
   });
 }
 
-function makeCanvas(size: number): HTMLCanvasElement {
+function makeCanvas(w: number, h = w): HTMLCanvasElement {
   const c = document.createElement('canvas');
-  c.width = size;
-  c.height = size;
+  c.width = w;
+  c.height = h;
   return c;
 }
 

@@ -3572,3 +3572,16 @@ thead th {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* v34: a round photo at the start of a name chip. */
+.member.chip:has(.p-avatar) {
+  padding-inline-start: 6px;
+}
+/* A letter avatar inside a grey chip: lighter, so it reads as a circle. */
+.member.chip .p-avatar.avatar-letter {
+  background: var(--surface);
+}
+.member.chip.sel .p-avatar.avatar-letter {
+  background: var(--bg);
+  color: var(--ink);
+}

@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react';
 import { surveyList, surveyStart } from '../sync/playerGroup';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
+import { Avatar } from '../photos/Avatar';
 import { useUi } from './App';
 import { Empty } from './components';
 import { ClaimView } from './PlayerHome';
@@ -34,6 +35,7 @@ export function RateScreen() {
                   setAll(false);
                 }}
               >
+                <Avatar player={q} size={36} />
                 <span className="name">{q.name}</span>
                 <span className="level">{pg.votes[q.id] ?? '–'}</span>
               </button>
@@ -76,6 +78,7 @@ export function RateScreen() {
       <p className="rate-progress" dir="ltr">
         {at + 1}/{list.length}
       </p>
+      <Avatar player={p} size={88} />
       <h1 className="rate-name">{p.name}</h1>
       <div className="rate-levels" role="radiogroup" aria-label={`רמה של ${p.name}`}>
         {LEVELS.map((n) => (

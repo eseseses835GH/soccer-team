@@ -287,6 +287,7 @@ export function TeamsScreen() {
           <span className="label">מחליפים</span>
           {r.subIds.map((id) => (
             <button key={id} type="button" className={`member chip ${sel?.kind === 'sub' && sel.id === id ? 'sel' : ''}`} onClick={() => tapSub(id)}>
+              {byId.get(id) && <Avatar player={byId.get(id)!} size={28} />}
               {nameOf(id)}
             </button>
           ))}
@@ -390,6 +391,7 @@ export function TeamsScreen() {
             keeper: state.match ? keeperAt(teamMembers(r, t), state.match.conceded[t] ?? 0, state.settings.gkSwitchGoals, state.settings.gkMode === 'rotate', noGK, shiftOf(state.match, t)).now : null,
           }))}
           name={nameOf}
+          photo={(id) => state.players.find((p) => p.id === id)?.photo}
           every={state.settings.gkSwitchGoals}
           noGK={noGK}
           onSwap={(team, a, b) => dispatch({ type: 'swapKeepers', team, a, b })}

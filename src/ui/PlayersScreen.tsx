@@ -22,6 +22,7 @@ import { InviteFriends } from './InviteFriends';
 import { SwipeRow, closeSwipeRows } from './SwipeRow';
 import { usePlayerGate } from './useGate';
 import { Avatar, PhotoButton } from '../photos/Avatar';
+import { CardsButton } from '../card/CardsButton';
 import { cardScore, withPhotoChange, type PhotoChange } from '../photos/style';
 import { positionOf } from '../card/cardData';
 
@@ -81,6 +82,7 @@ function MoreAboutPlayer({
 
 export function PlayersScreen() {
   const { state, dispatch } = useStore();
+  const { current } = useGroups();
   const { notify } = useUi();
   const [name, setName] = useState('');
   const [level, setLevel] = useState(5);
@@ -188,6 +190,7 @@ export function PlayersScreen() {
           <ul>
             {pending.map((p) => (
               <li key={p.id}>
+                <Avatar player={p} size={28} />
                 <span className="name">{p.name}</span>
                 <button type="button" className="btn btn-primary btn-small" onClick={() => settle(p, true)}>
                   לאשר כקבוע
@@ -338,6 +341,12 @@ export function PlayersScreen() {
             ))}
           </ul>
         </details>
+      )}
+
+      {current.synced && sorted.length > 0 && !selecting && (
+        <div className="row-links">
+          <CardsButton notify={notify} />
+        </div>
       )}
 
       {selecting && (

@@ -11,6 +11,7 @@ import { useVoterId } from '../sync/SyncProvider';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
 import { cleanName, sameName } from '../sync/playerGroup';
 import { newGuest, pickOrder } from '../state/guests';
+import { Avatar } from '../photos/Avatar';
 import { useUi } from './App';
 import { CardBadges, LevelPicker, Sheet } from './components';
 import { KindChoice, NAME_TAKEN } from './GuestSheet';
@@ -158,6 +159,7 @@ function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player
           {others.map((p) => (
             <li key={p.id}>
               <button type="button" onClick={() => onPick(p, false)}>
+                <Avatar player={p} size={36} />
                 <span className="name">{p.name}</span>
                 <CardBadges cards={p.cards} />
               </button>
@@ -219,6 +221,7 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
       {ps.map((p) => (
         <li key={p.id}>
           <button type="button" onClick={() => onPick(p, sub)}>
+            <Avatar player={p} size={36} />
             <span className="name">{p.name}</span>
           </button>
         </li>

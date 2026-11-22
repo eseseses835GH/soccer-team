@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Avatar } from '../photos/Avatar';
 import { borrowCost, scoreFromCost, suggestBorrowers, type BorrowInput } from '../engine';
 import { borrowNeed, setBorrow, type MatchState } from '../match/match';
 import { engineOptions, teamLook, type GameResult } from '../state/model';
@@ -103,6 +104,7 @@ export function BorrowCard({ m, r, set }: { m: MatchState; r: GameResult; set: (
           const on = chosen.includes(id);
           return (
             <button key={id} type="button" className={`member chip ${on ? 'sel' : ''}`} aria-pressed={on} onClick={() => tap(id)}>
+              {byId.get(id) && <Avatar player={byId.get(id)!} size={28} />}
               <span className="name">{name(id)}</span>
               {suggested.includes(id) && <small className="rec">מומלץ</small>}
             </button>

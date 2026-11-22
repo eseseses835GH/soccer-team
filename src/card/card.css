@@ -143,3 +143,48 @@
 .card-view .player-card.is-loading {
   opacity: 0.6;
 }
+.card-maker-stage.is-movable {
+  touch-action: none;
+  cursor: grab;
+}
+.card-maker-stage.is-movable:active {
+  cursor: grabbing;
+}
+.card-maker-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  inline-size: 100%;
+  max-inline-size: 260px;
+  margin-block-start: calc(-1 * var(--space-2));
+}
+.card-maker-zoom input {
+  flex: 1;
+  min-inline-size: 0;
+  accent-color: var(--accent);
+}
+
+/* "הקלפים": everyone's cards, two per row. */
+.cards-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4) var(--space-3);
+}
+.cards-tile {
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.cards-tile .player-card {
+  inline-size: 100%;
+  max-inline-size: 170px;
+  block-size: auto;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 0.25));
+}

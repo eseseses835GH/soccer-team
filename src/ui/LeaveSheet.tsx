@@ -6,6 +6,7 @@ import { teamLook } from '../state/model';
 import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
 import { subsAfterLeave } from '../sync/runnerLate';
+import { Avatar } from '../photos/Avatar';
 import { useUi } from './App';
 import { Sheet } from './components';
 
@@ -36,6 +37,7 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
   const m = state.match;
   const byId = new Map(state.players.map((p) => [p.id, p]));
   const nameOf = (id: string) => byId.get(id)?.name ?? '?';
+  const face = (id: string) => (byId.get(id) ? <Avatar player={byId.get(id)!} size={28} /> : null);
   const look = (t: number) => teamLook(state.settings, t);
   const live = inProgress(m);
   const count = (res: typeof r, t: number) => res.assignment.filter((x) => x === t).length;
@@ -64,6 +66,7 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
     const toggle = (id: string) => setPicked((ps) => (ps.includes(id) ? ps.filter((x) => x !== id) : [...ps, id]));
     const chip = (id: string) => (
       <button key={id} type="button" className={`member chip ${picked.includes(id) ? 'sel' : ''}`} aria-pressed={picked.includes(id)} onClick={() => toggle(id)}>
+        {face(id)}
         {nameOf(id)}
       </button>
     );
@@ -151,6 +154,7 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
             <div className="leave-chips center" aria-label="מי נכנס">
               {r.subIds.map((sid) => (
                 <button key={sid} type="button" className="member chip" onClick={() => confirm(sid)}>
+                  {face(sid)}
                   {nameOf(sid)}
                 </button>
               ))}
@@ -193,6 +197,7 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
                   onClose();
                 }}
               >
+                {face(id)}
                 {nameOf(id)}
               </button>
             ))}
@@ -236,6 +241,7 @@ export function LeaveSheet({ onClose, mode }: { onClose: () => void; mode?: 'run
             <div className="leave-chips center" aria-label="מחליף אחר">
               {others.map((id) => (
                 <button key={id} type="button" className="member chip" onClick={() => bringIn(id)}>
+                  {face(id)}
                   {nameOf(id)}
                 </button>
               ))}

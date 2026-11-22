@@ -3,6 +3,7 @@ import { goalsEvery } from '../i18n';
 import { rotation } from '../match/match';
 import type { TeamLook } from '../state/model';
 import { loadJSON, saveJSON } from '../state/storage';
+import { Avatar } from '../photos/Avatar';
 import { Sheet } from './components';
 
 /** Remembered per phone: the order sheet already opened by itself once. */
@@ -45,6 +46,7 @@ export function GkOrderButton({ onClick }: { onClick: () => void }) {
 export function GkOrderSheet({
   teams,
   name,
+  photo,
   every,
   noGK,
   onSwap,
@@ -52,6 +54,8 @@ export function GkOrderSheet({
 }: {
   teams: GkTeam[];
   name: (id: string) => string;
+  /** His photo version (round photos in cloud groups). */
+  photo?: (id: string) => string | undefined;
   every: number;
   noGK: ReadonlySet<string>;
   onSwap?: (team: number, a: string, b: string) => void;
@@ -82,6 +86,7 @@ export function GkOrderSheet({
                   const label = (
                     <>
                       <span className="slot">{i + 1}</span>
+                      <Avatar player={{ id, name: name(id), photo: photo?.(id) }} size={24} />
                       <span className="name">{name(id)}</span>
                       {team.keeper === id && <span aria-label="בשער עכשיו">🧤</span>}
                     </>

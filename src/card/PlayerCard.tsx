@@ -27,6 +27,14 @@ export interface PlayerCardProps {
   className?: string;
   /** Leave the text out (the PNG renderer draws it with the page's fonts). */
   textless?: boolean;
+  /** Where the picture lies, in shares of its square slot (moving the photo in the maker); default the slot. */
+  imageBox?: { x: number; y: number; w: number; h: number };
+}
+
+/** The `<image>` placement for a slot, honouring `imageBox`. */
+function placed(slot: { x: number; y: number; s: number }, b?: PlayerCardProps['imageBox']) {
+  if (!b) return { x: slot.x, y: slot.y, width: slot.s, height: slot.s, preserveAspectRatio: 'xMidYMid slice' };
+  return { x: slot.x + b.x * slot.s, y: slot.y + b.y * slot.s, width: b.w * slot.s, height: b.h * slot.s, preserveAspectRatio: 'none' };
 }
 
 export const VIEW_W = 300;
@@ -216,11 +224,11 @@ export function PlayerCard(props: PlayerCardProps) {
         <rect width={VIEW_W} height={VIEW_H} fill={`url(#${id('shade')})`} />
 
         {img && cutout ? (
-          <image href={img} x="20" y="30" width="260" height="260" mask={`url(#${id('imgmask')})`} preserveAspectRatio="xMidYMid slice" />
+          <image href={img} {...placed({ x: 20, y: 30, s: 260 }, props.imageBox)} mask={`url(#${id('imgmask')})`} />
         ) : img ? (
           <g>
             <circle cx="150" cy="158" r="103" fill={`url(#${id('metal')})`} />
-            <image href={img} x="52" y="60" width="196" height="196" clipPath={`url(#${id('medal')})`} preserveAspectRatio="xMidYMid slice" />
+            <image href={img} {...placed({ x: 52, y: 60, s: 196 }, props.imageBox)} clipPath={`url(#${id('medal')})`} />
           </g>
         ) : (
           <path d={SILHOUETTE} fill="#fff" opacity="0.14" />

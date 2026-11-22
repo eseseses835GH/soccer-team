@@ -19,6 +19,7 @@ import { splitApi } from '../sync/splitRemote';
 import { SyncError } from '../sync/supabase';
 import { currentTeams } from '../state/shuffle';
 import { Avatar } from '../photos/Avatar';
+import { CardsButton } from '../card/CardsButton';
 import { eveningOf } from '../state/evening';
 
 const laterKey = (gid: string) => `kochot:claim-later:${gid}`;
@@ -141,6 +142,9 @@ export function PlayerHome() {
           </div>
         </Empty>
       )}
+      <div className="row-links">
+        <CardsButton notify={notify} />
+      </div>
     </section>
   );
 }
@@ -277,6 +281,7 @@ export function ClaimView({ onLater, onDone }: { onLater?: () => void; onDone?: 
           <div className="claim-grid">
             {choices.map((p) => (
               <button key={p.id} type="button" className="member chip" disabled={p.taken || busy} onClick={() => void pick(p.id)}>
+                <Avatar player={p} size={32} />
                 {p.name}
               </button>
             ))}
@@ -418,6 +423,7 @@ export function LiveView({
         <GkOrderSheet
           teams={data.teams.map((team, t) => ({ look: look(t), ids: team.ids, keeper: m ? team.keeper : null }))}
           name={name}
+          photo={(id) => roster.find((x) => x.id === id)?.photo}
           every={data.rules?.gkEvery ?? 1}
           noGK={new Set(roster.filter((p) => p.noGK).map((p) => p.id))}
           onClose={() => setGkOpen(false)}
@@ -429,6 +435,7 @@ export function LiveView({
           <span className="label">מחליפים</span>
           {data.subs.map((id) => (
             <span key={id} className={`member chip ${id === me ? 'me' : ''}`}>
+              <Avatar player={{ id, name: name(id), photo: roster.find((x) => x.id === id)?.photo }} size={28} card />
               {name(id)} {badges(id)}
             </span>
           ))}

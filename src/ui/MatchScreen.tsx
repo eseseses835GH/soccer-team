@@ -585,7 +585,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
                     setScorerFor(null);
                   }}
                 >
-                  {byId.get(id) && <Avatar player={byId.get(id)!} />}
+                  {byId.get(id) && <Avatar player={byId.get(id)!} size={36} />}
                   <span className="name">{byId.get(id)?.name}</span>
                 </button>
               </li>
@@ -610,7 +610,7 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
                     setGkPick(null);
                   }}
                 >
-                  {byId.get(id) && <Avatar player={byId.get(id)!} />}
+                  {byId.get(id) && <Avatar player={byId.get(id)!} size={36} />}
                   <span className="name">{byId.get(id)?.name}</span>
                   {keeperId(gkPick).now === id && <span aria-hidden="true"> 🧤</span>}
                 </button>

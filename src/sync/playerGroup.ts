@@ -6,7 +6,7 @@ import { withEvening } from '../state/evening';
 import { sanitizePlayer, type AppState, type Player } from '../state/model';
 import type { KV } from '../state/groups';
 import type { LiveData, LiveRow } from './live';
-import { parsePublic, rateable, type PublicGroup } from './players';
+import { parsePublic, rateable, type PublicGroup, type PublicPlayer } from './players';
 
 /** A live row older than this is yesterday's evening that nobody ended: show nothing. */
 export const LIVE_STALE_MS = 12 * 60 * 60 * 1000;
@@ -63,7 +63,7 @@ export function liveNow(row: LiveRow | null, now: number): LiveData | null {
 }
 
 /** "Who are you?": free names first (A–Z), then the taken ones (shown greyed). */
-export function claimChoices(pub: PublicGroup): { id: string; name: string; taken: boolean }[] {
+export function claimChoices(pub: PublicGroup): (PublicPlayer & { taken: boolean })[] {
   const taken = new Set(pub.claimed.filter((id) => id !== pub.me.playerId));
   return pub.players
     .map((p) => ({ ...p, taken: taken.has(p.id) }))
@@ -71,7 +71,7 @@ export function claimChoices(pub: PublicGroup): { id: string; name: string; take
 }
 
 /** Whom I rate, in a stable order (A–Z), never myself or a guest. */
-export function surveyList(pub: PublicGroup): { id: string; name: string }[] {
+export function surveyList(pub: PublicGroup): PublicPlayer[] {
   return [...rateable(pub.players, pub.me.playerId)].sort((a, b) => a.name.localeCompare(b.name, 'he'));
 }
 

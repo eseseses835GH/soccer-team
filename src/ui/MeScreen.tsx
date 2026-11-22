@@ -15,7 +15,7 @@ import { useUi } from './App';
 import { Sheet } from './components';
 import { dateLabel } from './HistoryScreen';
 import { Icon } from './icons';
-import { PhotoButton } from '../photos/Avatar';
+import { Avatar as PlayerAvatar, PhotoButton } from '../photos/Avatar';
 import { cardScore, withPhotoChange, type CardStyle, type PhotoChange } from '../photos/style';
 import type { Position } from '../engine';
 import { positionOf } from '../card/cardData';
@@ -340,6 +340,7 @@ function OrgClaim({ row, onDone, notify }: { row: Row; onDone: (playerId: string
     <div className="claim-grid">
       {list.map((p) => (
         <button key={p.id} type="button" className="member chip" disabled={taken.has(p.id) || busy} onClick={() => void pick(p.id)}>
+          <PlayerAvatar player={p} groupId={row.meta.id} size={32} always />
           {p.name}
         </button>
       ))}
@@ -402,6 +403,7 @@ function MyName({ row, onDone, onPhoto, notify }: { row: Row; onDone: (c: NameCh
                   void run(async (api) => ({ kind: 'switch', playerId: p.id, removed: await api.switchMyPlayer(row.meta.id, p.id) }))
                 }
               >
+                <PlayerAvatar player={p} groupId={row.meta.id} size={32} always />
                 {p.name}
               </button>
             ))}

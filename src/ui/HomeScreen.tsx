@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Avatar } from '../photos/Avatar';
 import { MIN_TEAM_SIZE, planFormat, type FormatPlan } from '../engine';
 import { newId, type Player } from '../state/model';
 import { checkInList, newGuest, withoutGuests } from '../state/guests';
@@ -194,6 +195,7 @@ export function HomeScreen() {
               <label className={on ? 'on' : ''}>
                 <input type="checkbox" checked={on} onChange={() => tick(p, on)} />
                 <span className="tick" aria-hidden="true" />
+                <Avatar player={p} size={32} />
                 <span className="name">{p.name}</span>
                 <CardBadges cards={p.cards} />
               </label>

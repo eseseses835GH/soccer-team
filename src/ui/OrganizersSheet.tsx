@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Avatar } from '../photos/Avatar';
 import { useGroups, useStore } from '../state/store';
 import { usePlayerVotes } from '../sync/OrganizerSync';
 import { playerMemberRows, playerShareText, ratingProgress, type PlayerMemberRow } from '../sync/organizer';
@@ -34,9 +35,21 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
   const [mode, setMode] = useState<RatingMode>('organizers');
   const roster = useStore().state.players;
   const rows = playerMemberRows(members, roster);
-  const playsAs = (userId: string) => {
+  const playerOf = (userId: string) => {
     const pid = members.find((m) => m.userId === userId)?.playerId;
-    return (pid && roster.find((p) => p.id === pid)?.name) || null;
+    return (pid && roster.find((p) => p.id === pid)) || null;
+  };
+  const playsAs = (userId: string) => playerOf(userId)?.name || null;
+  /** His roster player's round photo when he has one, else the member's initial. */
+  const face = (userId: string, name: string) => {
+    const p = playerOf(userId);
+    return p?.photo ? (
+      <Avatar player={p} size={34} />
+    ) : (
+      <span className="org-avatar" aria-hidden="true">
+        {name.slice(0, 1).toUpperCase()}
+      </span>
+    );
   };
   const [confirm, setConfirm] = useState<string | null>(null);
   const votes = usePlayerVotes();
@@ -179,9 +192,7 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
           <ul className="org-list">
             {organizers.map((o) => (
               <li key={o.userId}>
-                <span className="org-avatar" aria-hidden="true">
-                  {o.name.slice(0, 1).toUpperCase()}
-                </span>
+                {face(o.userId, o.name)}
                 <span className="group-text">
                   <strong>
                     <bdi>{o.name}</bdi>
@@ -342,9 +353,7 @@ export function OrganizersSheet({ onBack, onClose }: { onBack: () => void; onClo
                         </div>
                       ) : (
                         <>
-                          <span className="org-avatar" aria-hidden="true">
-                            {m.name.slice(0, 1).toUpperCase()}
-                          </span>
+                          {face(m.userId, m.name)}
                           <span className="group-text">
                             <strong>
                               <bdi>{m.name}</bdi>
