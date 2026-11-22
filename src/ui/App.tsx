@@ -28,6 +28,7 @@ import { ViewerScreen } from './LiveControl';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
 import { CardViewer } from '../card/CardViewer';
+import { TourHost } from './Tour';
 
 export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help' | 'rate' | 'claim' | 'me';
 const ROUTES: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'history', 'evening', 'help', 'rate', 'claim', 'me'];
@@ -258,7 +259,7 @@ export function App() {
       <header className={`topbar ${safeRoute === 'home' ? 'is-home' : ''}`}>
         {safeRoute === 'home' ? (
           <>
-            <button type="button" className="brand group-btn" aria-label={`קבוצה: ${groups.current.name}. החלפת קבוצה`} onClick={() => setGroupsOpen(true)}>
+            <button type="button" className="brand group-btn" data-tour="group" aria-label={`קבוצה: ${groups.current.name}. החלפת קבוצה`} onClick={() => setGroupsOpen(true)}>
               <span className="brand-mark" aria-hidden="true">
                 <BallMark size={26} />
               </span>
@@ -286,6 +287,7 @@ export function App() {
                 <button
                   type="button"
                   className={`icon-btn ${waiting ? 'has-dot' : ''}`}
+                  data-tour="players"
                   aria-label={waiting ? 'השחקנים · ממתין לאישור' : 'השחקנים'}
                   onClick={() => go('players')}
                 >
@@ -296,7 +298,7 @@ export function App() {
                 <Icon name="gear" />
               </button>
               {sync.profile && (
-                <button type="button" className="icon-btn avatar-btn" aria-label="הדף שלי" onClick={() => go('me')}>
+                <button type="button" className="icon-btn avatar-btn" data-tour="me" aria-label="הדף שלי" onClick={() => go('me')}>
                   <Avatar profile={sync.profile} />
                 </button>
               )}
@@ -315,6 +317,7 @@ export function App() {
       </header>
       <main key={safeRoute} className={`screen screen-${safeRoute}`}>
         {safeRoute === 'home' && (isPlayer ? <PlayerHome /> : <HomeScreen />)}
+        {safeRoute === 'home' && <TourHost key={groups.current.id} kind={isPlayer ? 'player' : 'org'} />}
         {safeRoute === 'teams' && (viewing ? <ViewerScreen /> : <TeamsScreen />)}
         {safeRoute === 'match' && (viewing ? <ViewerScreen /> : <MatchScreen />)}
         {safeRoute === 'players' && <PlayersScreen />}

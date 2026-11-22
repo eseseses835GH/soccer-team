@@ -1,11 +1,12 @@
 // Test helper: every new browser context starts with the first-visit "פעם ראשונה בכוחות?" sheet
 // already seen, so existing flows aren't covered by it. Pass `{ welcome: true }` to newContext to
 // get a truly fresh visitor. Same for the keeper-order sheet that opens by itself on the first
-// teams screen: `{ gkIntro: true }` keeps it.
+// teams screen: `{ gkIntro: true }` keeps it. And the one-time home prompts (v36: "סיור קצר?" and
+// "עצבו את הקלף שלכם"): `{ nudges: true }` keeps them.
 export function quietWelcome(browser) {
   const newContext = browser.newContext.bind(browser);
   browser.newContext = async (opts = {}) => {
-    const { welcome, gkIntro, ...rest } = opts;
+    const { welcome, gkIntro, nudges, ...rest } = opts;
     const ctx = await newContext(rest);
     if (!welcome)
       await ctx.addInitScript(() => {
@@ -19,6 +20,20 @@ export function quietWelcome(browser) {
       await ctx.addInitScript(() => {
         try {
           if (!localStorage.getItem('kochot:gk-order-seen')) localStorage.setItem('kochot:gk-order-seen', 'true');
+        } catch {
+          /* ignore */
+        }
+      });
+    if (!nudges)
+      await ctx.addInitScript(() => {
+        try {
+          for (const k of ['kochot:tour:org', 'kochot:tour:player']) if (!localStorage.getItem(k)) localStorage.setItem(k, 'true');
+          // The card invite is per group: every group reads as answered.
+          const get = Storage.prototype.getItem;
+          Storage.prototype.getItem = function (k) {
+            const v = get.call(this, k);
+            return v === null && typeof k === 'string' && k.startsWith('kochot:card-invite:') ? 'true' : v;
+          };
         } catch {
           /* ignore */
         }

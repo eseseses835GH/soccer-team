@@ -2036,6 +2036,98 @@ if (SB_URL) {
   await jc.close();
 }
 
+// 20a. v36: the tour. A new organizer is offered "סיור קצר?" once (after the welcome sheet); the steps
+// walk the home screen; never offered again; "סיור באפליקציה" in help replays it.
+{
+  const shots = process.env.TOUR_SHOTS;
+  const tc = await browser.newContext({ viewport: { width: 390, height: 844 }, welcome: true, nudges: true });
+  const tp = await tc.newPage();
+  tp.on('pageerror', (e) => errors.push(`tour: ${e.message}`));
+  await tp.goto(base);
+  await tp.getByRole('dialog', { name: /פעם ראשונה בכוחות/ }).getByRole('button', { name: 'לנסות עם סגל לדוגמה' }).click();
+  const offer = tp.locator('.tour-offer');
+  await offer.waitFor({ timeout: 3000 }).catch(() => errors.push('tour: not offered to a new organizer'));
+  assert((await offer.getByRole('heading').textContent()) === 'סיור קצר?', 'tour: the offer text');
+  if (shots) await tp.screenshot({ path: `${shots}/tour-offer.png` });
+  await offer.getByRole('button', { name: 'יאללה' }).click();
+  const bubble = tp.getByRole('dialog', { name: /^סיור/ });
+  await bubble.waitFor({ timeout: 3000 }).catch(() => errors.push('tour: no bubble after יאללה'));
+  const label = await bubble.getAttribute('aria-label');
+  const total = Number(label?.match(/מתוך (\d+)/)?.[1]);
+  // A local group: no cards icon and no "הדף שלי", so attend, size, split, players, group.
+  assert(total === 5, `tour: organizer steps ${label}`);
+  await tp.waitForFunction(() => document.activeElement?.textContent === 'הבא', null, { timeout: 2000 }).catch(() => errors.push('tour: focus on הבא'));
+  const texts = [];
+  for (let i = 1; i <= total; i++) {
+    await tp.waitForTimeout(350);
+    texts.push(await bubble.locator('.tour-text').textContent());
+    const box = await bubble.boundingBox();
+    assert(box && box.x >= 0 && box.x + box.width <= 390 && box.y >= 0 && box.y + box.height <= 844, `tour: bubble ${i} off screen ${JSON.stringify(box)}`);
+    if (shots && (i === 1 || i === 3)) await tp.screenshot({ path: `${shots}/tour-step${i}.png` });
+    // Taps outside the bubble do nothing.
+    if (i === 1) {
+      await tp.mouse.click(200, 400);
+      assert((await bubble.getAttribute('aria-label')) === `סיור · 1 מתוך ${total}`, 'tour: a tap outside moved the tour');
+    }
+    await bubble.getByRole('button', { name: i === total ? 'סיימתי' : 'הבא' }).click();
+  }
+  assert(texts[0] === 'מסמנים מי הגיע היום' && texts[total - 1] === 'כאן מזמינים חברים ומחליפים קבוצה', `tour: steps ${JSON.stringify(texts)}`);
+  assert(!(await tp.locator('.tour').count()), 'tour: closed after סיימתי');
+  await tp.reload();
+  await tp.locator('ul.attend li').first().waitFor();
+  await tp.waitForTimeout(300);
+  assert(!(await tp.locator('.tour-offer').count()), 'tour: offered again after a reload');
+  // Replay from help; Escape quits.
+  await tp.getByRole('button', { name: 'שאלות ותשובות' }).click();
+  await tp.getByRole('button', { name: 'סיור באפליקציה' }).click();
+  await bubble.waitFor({ timeout: 3000 }).catch(() => errors.push('tour: no replay from help'));
+  assert((await bubble.locator('.tour-text').textContent()) === 'מסמנים מי הגיע היום', 'tour: replay starts at the first step');
+  await tp.keyboard.press('Escape');
+  assert(!(await tp.locator('.tour').count()), 'tour: Escape quits');
+  console.log(`tour: ${total} organizer steps, offered once, replay from help`);
+  await tc.close();
+}
+
+// 20a2. v36: a player with a claimed player and no photo: "עצבו את הקלף שלכם" (once per group on this
+// phone). "לעצב" opens the card maker for him; "אחר כך" hides it for good.
+if (SB_URL) {
+  const shots = process.env.TOUR_SHOTS;
+  const { ctx: ic, page: ip } = await playerContext(browser, { me: 'p3', canRate: false, live: false, nudges: true });
+  ip.on('pageerror', (e) => errors.push(`card invite: ${e.message}`));
+  // The group is new on this phone (the tour would come first): the tour was offered in an earlier visit.
+  await ic.addInitScript(() => localStorage.setItem('kochot:tour:player', 'true'));
+  await ip.goto(base);
+  await ip.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  const invite = ip.locator('.card-invite');
+  await invite.waitFor({ timeout: 3000 }).catch(() => errors.push('card invite: not shown'));
+  assert((await invite.getByRole('heading').textContent()) === 'עצבו את הקלף שלכם', 'card invite: text');
+  assert(await invite.locator('svg.player-card, .player-card').count(), 'card invite: a mini card');
+  if (shots) await ip.screenshot({ path: `${shots}/tour-card-invite.png` });
+  await invite.getByRole('button', { name: 'לעצב' }).click();
+  const maker = ip.getByRole('dialog', { name: 'גיל' });
+  await maker.waitFor({ timeout: 5000 }).catch(() => errors.push('card invite: לעצב did not open the card maker'));
+  assert(await maker.getByRole('button', { name: /צילום/ }).first().isVisible(), 'card invite: the maker shows צילום');
+  await ip.keyboard.press('Escape');
+  await ip.waitForTimeout(200);
+  assert(!(await ip.locator('.card-invite').count()), 'card invite: gone after לעצב');
+  await ip.reload();
+  await ip.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  await ip.waitForTimeout(400);
+  assert(!(await ip.locator('.card-invite').count()), 'card invite: back after לעצב + reload');
+  // Again with a clean flag: "אחר כך".
+  await ip.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('kochot:card-invite:')).forEach((k) => localStorage.removeItem(k)));
+  await ip.reload();
+  await invite.waitFor({ timeout: 5000 }).catch(() => errors.push('card invite: not shown again with a clean flag'));
+  await invite.getByRole('button', { name: 'אחר כך' }).click();
+  assert(!(await ip.locator('.card-invite').count()), 'card invite: אחר כך hides it');
+  await ip.reload();
+  await ip.getByText('אין ערב עכשיו').waitFor({ timeout: 10000 });
+  await ip.waitForTimeout(400);
+  assert(!(await ip.locator('.card-invite').count()), 'card invite: back after אחר כך + reload');
+  console.log('card invite: shown, opens the maker, אחר כך sticks');
+  await ic.close();
+}
+
 // 20b. Keeper order (rotating keepers): the team cards are plain lists; "סדר שוערים" opens by itself
 // once per phone, the 🧤 button reopens it, tapping two swaps them, and a "לא בשער" player isn't in it.
 {

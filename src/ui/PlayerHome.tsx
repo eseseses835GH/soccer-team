@@ -21,13 +21,17 @@ import { currentTeams } from '../state/shuffle';
 import { Avatar } from '../photos/Avatar';
 import { CardsButton } from '../card/CardsButton';
 import { eveningOf } from '../state/evening';
+import { Nudges } from './Nudges';
+import { positionOf } from '../card/cardData';
+import { withPhotoChange } from '../photos/style';
 
 const laterKey = (gid: string) => `kochot:claim-later:${gid}`;
 
 export function PlayerHome() {
   const pg = usePlayerGroup();
   const sync = useSync();
-  const { current } = useGroups();
+  const groups = useGroups();
+  const { current } = groups;
   const { go, notify } = useUi();
   const [later, setLater] = useState(() => loadJSON<boolean>(laterKey(current.id)) === true);
   useEffect(() => setLater(loadJSON<boolean>(laterKey(current.id)) === true), [current.id]);
@@ -118,10 +122,25 @@ export function PlayerHome() {
   if (starting && !live) return <NewEvening gid={current.id} onClose={() => setStarting(false)} />;
 
   const card = rateCard(pg.pub, pg.votes);
+  const myId = mine ? pg.pub.me.playerId : null;
+  const me = myId ? pg.pub.players.find((p) => p.id === myId) : undefined;
   return (
     <section className="player-home" aria-label="הערב">
+      <Nudges
+        key={current.id}
+        tour={{ kind: 'player', players: 0, uses: 0, groupAge: Date.now() - current.createdAt }}
+        groupId={current.id}
+        synced={current.synced}
+        // Players' phones: only the public score, never a level.
+        me={me ? { player: me, score: me.score, position: positionOf(me) } : null}
+        matchOn={!!live?.match}
+        notify={notify}
+        onPhoto={(pid, change) =>
+          groups.setGroupState(current.id, (st) => ({ ...st, players: st.players.map((p) => (p.id === pid ? withPhotoChange(p, change) : p)) }))
+        }
+      />
       {card !== 'none' && (
-        <div className="rate-card">
+        <div className="rate-card" data-tour="rate">
           <p>
             <strong>{card === 'update' ? 'הדירוגים שלך' : 'רוצה לדרג את החברים?'}</strong>
             <span className="hint small">הדירוג אנונימי ונכנס לממוצע</span>
@@ -131,17 +150,19 @@ export function PlayerHome() {
           </button>
         </div>
       )}
-      {live ? (
-        <LiveView data={live} roster={pg.pub.players} me={pg.pub.me.playerId} now={now} control={<TakeControl />} />
-      ) : (
-        <Empty icon="🌙" title="אין ערב עכשיו">
-          <div className="stack narrow">
-            <button type="button" className="btn btn-primary btn-block" onClick={() => setStarting(true)}>
-              ערב חדש
-            </button>
-          </div>
-        </Empty>
-      )}
+      <div data-tour="tonight">
+        {live ? (
+          <LiveView data={live} roster={pg.pub.players} me={pg.pub.me.playerId} now={now} control={<TakeControl />} />
+        ) : (
+          <Empty icon="🌙" title="אין ערב עכשיו">
+            <div className="stack narrow">
+              <button type="button" className="btn btn-primary btn-block" onClick={() => setStarting(true)}>
+                ערב חדש
+              </button>
+            </div>
+          </Empty>
+        )}
+      </div>
       <div className="row-links">
         <CardsButton notify={notify} />
       </div>

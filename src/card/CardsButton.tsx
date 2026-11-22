@@ -9,11 +9,11 @@ export function CardsButton({ notify, inline = false, icon = false }: { notify: 
   return (
     <>
       {icon ? (
-        <button type="button" className="icon-btn cards-btn" aria-label="הקלפים" title="הקלפים" onClick={() => setOpen(true)}>
+        <button type="button" className="icon-btn cards-btn" data-tour="cards" aria-label="הקלפים" title="הקלפים" onClick={() => setOpen(true)}>
           <Icon name="cards" size={24} />
         </button>
       ) : (
-        <button type="button" className={`text-btn ${inline ? 'inline' : ''}`} onClick={() => setOpen(true)}>
+        <button type="button" className={`text-btn ${inline ? 'inline' : ''}`} data-tour="cards" onClick={() => setOpen(true)}>
           הקלפים
         </button>
       )}

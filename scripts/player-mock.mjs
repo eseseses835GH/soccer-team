@@ -150,7 +150,7 @@ export function orgHistory(now) {
  * appends to it (same name ignoring case/spaces → 23505 name_taken) and calls `onJoin(id, name)`,
  * so a test can put the same player on an organizer's mocked server.
  */
-export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true, google = false, avatar = TEST_AVATAR, org = false, orgMe = null, roster = null, onJoin = null } = {}) {
+export async function playerContext(browser, { scheme = 'light', me = null, canRate = true, live = true, google = false, avatar = TEST_AVATAR, org = false, orgMe = null, roster = null, onJoin = null, nudges = false } = {}) {
   const now = Date.now();
   const db = {
     me,
@@ -190,6 +190,7 @@ export async function playerContext(browser, { scheme = 'light', me = null, canR
     hasTouch: true,
     locale: 'he-IL',
     reducedMotion: 'reduce',
+    nudges,
   });
   const exp = Math.floor(now / 1000) + 3600 * 24;
   const session = {

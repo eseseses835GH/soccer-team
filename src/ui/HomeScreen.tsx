@@ -18,6 +18,10 @@ import { splitTeams } from './split';
 import { useLiveControl } from '../sync/OrganizerSync';
 import { runnerLine } from './LiveControl';
 import { KickArt } from './art';
+import { Nudges, useMyOrgPlayer } from './Nudges';
+import { cardInviteAnswered } from './onboarding';
+import { cardScore, withPhotoChange } from '../photos/style';
+import { positionOf } from '../card/cardData';
 
 export const SIZES = Array.from({ length: 7 - MIN_TEAM_SIZE + 1 }, (_, i) => i + MIN_TEAM_SIZE); // 3..7 on the main screen
 
@@ -40,8 +44,10 @@ export function planSentence(n: number, plan: FormatPlan | null, size: number): 
 export function HomeScreen() {
   const { state, dispatch } = useStore();
   const { go, notify } = useUi();
-  const { current } = useGroups();
+  const groups = useGroups();
+  const { current } = groups;
   const { viewer } = useLiveControl();
+  const myId = useMyOrgPlayer(current.id, current.synced && !cardInviteAnswered(current.id));
   const [welcome, setWelcome] = useState(() => shouldWelcome(state.players.length));
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
@@ -142,9 +148,26 @@ export function HomeScreen() {
     clockRunning: !!state.match?.clock.running,
   });
 
+  const mine = myId ? state.players.find((p) => p.id === myId) : undefined;
+
   return (
     <section className="home" aria-labelledby="home-h">
-      {offerInstall && <InstallCard install={install} />}
+      {offerInstall ? (
+        <InstallCard install={install} />
+      ) : (
+        <Nudges
+          key={current.id}
+          tour={{ kind: 'org', players: state.players.length, uses: install.flags.uses, groupAge: 0 }}
+          groupId={current.id}
+          synced={current.synced}
+          me={mine ? { player: mine, score: cardScore(mine.attrs.overall), position: positionOf(mine) } : null}
+          matchOn={!!live || !!viewer}
+          notify={notify}
+          onPhoto={(pid, change) =>
+            groups.setGroupState(current.id, (st) => ({ ...st, players: st.players.map((p) => (p.id === pid ? withPhotoChange(p, change) : p)) }))
+          }
+        />
+      )}
       <div className="hero">
         <h1 id="home-h">מי הגיע היום?</h1>
         {current.synced && <CardsButton notify={notify} icon />}
@@ -153,7 +176,7 @@ export function HomeScreen() {
         </p>
       </div>
 
-      <div className="size-row">
+      <div className="size-row" data-tour="size">
         <span className="label">כמה בקבוצה</span>
         <div className="size-pills" role="radiogroup" aria-label="כמה בקבוצה">
           {sizes.map((s) => (
@@ -190,7 +213,7 @@ export function HomeScreen() {
         )}
       </div>
 
-      <ul className="attend">
+      <ul className="attend" data-tour="attend">
         {sorted.map((p) => {
           const on = presentSet.has(p.id);
           return (
@@ -223,12 +246,12 @@ export function HomeScreen() {
         </p>
         {viewer ? (
           // Another phone runs tonight: watch it (and take it back) from the match screen.
-          <button type="button" className="btn btn-hero btn-block" onClick={() => go('match')}>
+          <button type="button" className="btn btn-hero btn-block" data-tour="split" onClick={() => go('match')}>
             {viewer.data.match ? `לערב · משחק ${viewer.data.match.n}` : 'לערב'}
           </button>
         ) : live ? (
           <>
-            <button type="button" className="btn btn-hero btn-block" onClick={() => go('match')}>
+            <button type="button" className="btn btn-hero btn-block" data-tour="split" onClick={() => go('match')}>
               חזרה למשחק · משחק {played + 1}
             </button>
             <button type="button" className="text-btn dock-secondary" disabled={!plan || busy} onClick={() => setConfirmResplit(true)}>
@@ -242,7 +265,7 @@ export function HomeScreen() {
                 חזרה לקבוצות
               </button>
             )}
-            <button type="button" className="btn btn-hero btn-block" disabled={!plan || busy} onClick={go2}>
+            <button type="button" className="btn btn-hero btn-block" data-tour="split" disabled={!plan || busy} onClick={go2}>
               {busy ? 'מערבבים…' : 'עושים כוחות'}
             </button>
           </>

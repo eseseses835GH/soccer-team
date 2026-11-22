@@ -4,6 +4,7 @@ import { InstallHelp } from './InstallPrompt';
 import { openSettingsFold } from './SettingsFold';
 import { searchHelp, type HelpItem, type LegendMark } from './help';
 import { Icon } from './icons';
+import { startTour } from './onboarding';
 
 function Mark({ mark }: { mark: LegendMark }) {
   if ('dot' in mark) return <span className={`sync-dot tone-${mark.dot}`} />;
@@ -46,6 +47,7 @@ function Question({ item, open }: { item: HelpItem; open: boolean }) {
 
 /** "שאלות ותשובות". `focus` (from `#help/<id>`) opens that question and scrolls to it. */
 export function HelpScreen({ focus }: { focus: string }) {
+  const { go } = useUi();
   const [query, setQuery] = useState('');
   const sections = searchHelp(query);
   const searching = query.trim() !== '';
@@ -59,6 +61,16 @@ export function HelpScreen({ focus }: { focus: string }) {
 
   return (
     <section className="help" aria-label="שאלות ותשובות">
+      <button
+        type="button"
+        className="btn btn-quiet btn-block help-tour"
+        onClick={() => {
+          startTour();
+          go('home');
+        }}
+      >
+        סיור באפליקציה
+      </button>
       <input className="search help-search" type="search" placeholder="חיפוש: פנדלים, שוער, גיבוי…" aria-label="חיפוש בשאלות" value={query} onChange={(e) => setQuery(e.target.value)} />
       {sections.map((s) => (
         <div key={s.id} className="help-section">

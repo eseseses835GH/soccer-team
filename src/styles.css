@@ -3591,3 +3591,117 @@ thead th {
   background: var(--bg);
   color: var(--ink);
 }
+
+/* v36: the one-time prompts on a home screen, and the tour (coach marks). */
+.nudge,
+.card-invite {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-block: 4px 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.nudge {
+  justify-content: space-between;
+}
+.nudge h2,
+.card-invite h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.nudge-actions,
+.card-invite-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+.card-invite .player-card {
+  flex: none;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.25));
+}
+.card-invite-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.help-tour {
+  margin-block-end: 12px;
+}
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+}
+.tour-block {
+  position: absolute;
+  inset: 0;
+}
+.tour-spot {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.62);
+  pointer-events: none;
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+.tour-bubble {
+  position: fixed;
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: tour-in 0.2s ease;
+}
+@keyframes tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.tour-x {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-end: 2px;
+  color: var(--ink-3);
+}
+.tour-text {
+  margin: 0;
+  padding-inline-end: 34px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-start: 12px;
+}
+.tour-dots {
+  display: flex;
+  gap: 6px;
+}
+.tour-dots i {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.tour-dots i.on {
+  background: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot {
+    transition: none;
+  }
+  .tour-bubble {
+    animation: none;
+  }
+}
