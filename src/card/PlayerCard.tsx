@@ -87,7 +87,7 @@ export function cardTexts(p: PlayerCardProps): CardText[] {
   out.push({ text: name, x: 150, y: 342, size: nameSize, weight: 800, fill: '#ffffff', shadow: true });
   const hasScore = typeof p.score === 'number' && Number.isFinite(p.score);
   if (hasScore) out.push({ text: String(Math.round(p.score!)), x: 250, y: 66, size: 27, weight: 900, fill: ink });
-  if (p.position) out.push({ text: POSITION_NAMES[p.position], x: 250, y: hasScore ? 104 : 60, size: hasScore ? 10.5 : 12, weight: 700, fill: '#ffffff', spacing: 0.3 });
+  if (p.position) out.push({ text: POSITION_NAMES[p.position], x: 250, y: hasScore ? 104 : 60, size: hasScore ? 10.5 : 12, weight: 700, fill: '#ffffff' });
   if (p.style.number) {
     const fill = shirtInk(shirt, p.style.pattern);
     out.push({ text: String(p.style.number), x: 50, y: 70, size: 17, weight: 900, fill, outline: fill === '#ffffff' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.7)' });
