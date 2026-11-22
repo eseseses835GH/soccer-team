@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, createContext, lazy, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { playersCount } from '../i18n';
 import { IMPORT_HASH, decodeBackup, mergePlayers, type Backup } from '../state/io';
 import { useGroups, useStore } from '../state/store';
@@ -63,6 +63,10 @@ const PARENT: Record<Route, Route> = {
 /** Help can be opened from several screens; "back" returns to the one it came from. */
 const HELP_FROM: Route[] = ['home', 'teams', 'match', 'players', 'settings', 'me'];
 
+/** Dev page for the player card (not linked from the app; its code loads only here). */
+const CARD_LAB = '#card-lab';
+const CardLab = lazy(() => import('../card/CardLab'));
+
 const isRoute = (s: string): s is Route => (ROUTES as string[]).includes(s);
 
 /** `#evening/<id>`: a route plus an optional parameter. */
@@ -95,6 +99,7 @@ export function App() {
   const [goneSeen, setGoneSeen] = useState<string | null>(null);
   const [route, setRoute] = useState<Route>(() => initialRoute(!!state.result, !!state.match));
   const [param, setParam] = useState(() => parseHash().param);
+  const [lab, setLab] = useState(() => location.hash === CARD_LAB);
   const [toast, setToast] = useState<string | null>(null);
   // A new version is ready (main.tsx): one quiet bar with a reload button.
   const [updateReady, setUpdateReady] = useState(false);
@@ -143,6 +148,7 @@ export function App() {
 
   useEffect(() => {
     const onPop = () => {
+      setLab(location.hash === CARD_LAB);
       const h = parseHash();
       setRoute(h.route ?? 'home');
       setParam(h.param);
@@ -237,6 +243,13 @@ export function App() {
     setIncoming(null);
     notify(`נוספו ${m.added}, עודכנו ${m.updated}`);
   };
+
+  if (lab)
+    return (
+      <Suspense fallback={null}>
+        <CardLab />
+      </Suspense>
+    );
 
   return (
     <UiCtx.Provider value={{ go, notify }}>

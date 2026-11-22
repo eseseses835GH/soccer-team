@@ -148,3 +148,40 @@ describe('live', () => {
     expect(sanitizeLive(raw)!.match!.gkShift).toEqual([0, 0]);
   });
 });
+
+describe('"לא בשער" mid-evening', () => {
+  const r = result([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3']]);
+  const mark = (s: AppState, id: string, on: boolean): AppState =>
+    reducer(s, { type: 'updatePlayer', player: on ? { ...s.players.find((x) => x.id === id)!, noGK: true } : (({ noGK: _n, ...rest }) => rest)(s.players.find((x) => x.id === id)!) });
+  const gk = (s: AppState, t: number) =>
+    keeperAt(teamMembers(s.result!, t), s.match!.conceded[t] ?? 0, s.settings.gkSwitchGoals, s.settings.gkMode === 'rotate', new Set(s.players.filter((x) => x.noGK).map((x) => x.id)), shiftOf(s.match, t)).now;
+
+  it('marking someone else, or unmarking, keeps who is in goal now', () => {
+    let s = state(r, addGoal(startClock(startSession(2), 0), 0, 1)); // team 1 conceded 1 → b2 in goal
+    s = { ...s, match: addGoal(s.match!, 1, 2) }; // team 0 conceded 1 → a2
+    expect([gk(s, 0), gk(s, 1)]).toEqual(['a2', 'b2']);
+    s = mark(s, 'a1', true);
+    expect([gk(s, 0), gk(s, 1)]).toEqual(['a2', 'b2']);
+    s = mark(s, 'b1', true);
+    expect(gk(s, 1)).toBe('b2');
+    s = mark(s, 'a1', false);
+    s = mark(s, 'b1', false);
+    expect([gk(s, 0), gk(s, 1)]).toEqual(['a2', 'b2']);
+    // The rotation goes on from him: next goal → the one after him.
+    s = { ...s, match: addGoal(s.match!, 0, 3) };
+    expect(gk(s, 1)).toBe('b3');
+  });
+
+  it('marking the keeper himself sends the next one in; the live snapshot follows', () => {
+    let s = state(r, addGoal(startClock(startSession(2), 0), 0, 1)); // b2 in goal
+    s = mark(s, 'b2', true);
+    expect(gk(s, 1)).toBe('b3');
+    const live = sanitizeLive(JSON.parse(JSON.stringify(liveFromState({ result: s.result!, match: s.match, players: s.players, settings: s.settings, now: 5 }))));
+    expect(live?.teams[1].keeper).toBe('b3');
+  });
+
+  it('no match session: nothing to hold', () => {
+    const s = { ...state(r, startSession(2)), match: null };
+    expect(mark(s, 'a1', true).match).toBeNull();
+  });
+});
