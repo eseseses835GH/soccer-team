@@ -147,6 +147,7 @@ export function HomeScreen() {
       {offerInstall && <InstallCard install={install} />}
       <div className="hero">
         <h1 id="home-h">מי הגיע היום?</h1>
+        {current.synced && <CardsButton notify={notify} icon />}
         <p className="hero-count" aria-live="polite">
           <strong>{present.length}</strong> מתוך {listed.length}
         </p>
@@ -214,12 +215,6 @@ export function HomeScreen() {
         <button type="button" className="text-btn inline" onClick={() => setGuest(true)}>
           אורח
         </button>
-        {current.synced && (
-          <>
-            {' · '}
-            <CardsButton notify={notify} inline />
-          </>
-        )}
       </p>
 
       <div className="cta-dock">

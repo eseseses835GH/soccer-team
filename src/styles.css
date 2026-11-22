@@ -707,7 +707,13 @@ input[type='range']::-moz-range-thumb {
 
 /* ---------- home ---------- */
 .hero {
+  position: relative;
   padding-block: 12px 4px;
+}
+.hero .cards-btn {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 0;
 }
 .hero h1 {
   font-size: 2.1rem;
