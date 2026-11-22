@@ -14,14 +14,17 @@ export interface CardData {
   score?: number;
   style: CardStyle;
   stats: CardStat[];
+  /** The back of the card: games, goals, wins, evenings (zeros kept). */
+  record: CardStat[];
 }
 
 /** His first field position; only "good in goal" → keeper. */
 export const positionOf = (p: { positions?: Position[]; canGK?: boolean }): CardPosition | undefined => p.positions?.[0] ?? (p.canGK ? 'gk' : undefined);
 
-/** Evenings (a shuffle's parts count once), wins and goals from the group's history. */
-export function playerTotals(history: EveningRecord[], id: string): { evenings: number; wins: number; goals: number } {
+/** Evenings (a shuffle's parts count once), games, wins and goals from the group's history. */
+export function playerTotals(history: EveningRecord[], id: string): { evenings: number; games: number; wins: number; goals: number } {
   const nights = new Set<string>();
+  let games = 0;
   let wins = 0;
   let goals = 0;
   for (const rec of history) {
@@ -29,22 +32,31 @@ export function playerTotals(history: EveningRecord[], id: string): { evenings: 
     nights.add(nightOf(rec.id));
     for (const mt of rec.matches) {
       for (const g of mt.goals) if (g.by === id) goals++;
+      if (sideIds(rec, mt, 0).includes(id) || sideIds(rec, mt, 1).includes(id)) games++;
       const w = matchWinner(mt);
       if (w === null) continue;
       if (sideIds(rec, mt, w === mt.a ? 0 : 1).includes(id)) wins++;
     }
   }
-  return { evenings: nights.size, wins, goals };
+  return { evenings: nights.size, games, wins, goals };
+}
+
+/** The back of the card: everything, zeros included. */
+export function cardRecord(history: EveningRecord[], id: string): CardStat[] {
+  const t = playerTotals(history, id);
+  return [
+    { label: 'משחקים', value: t.games },
+    { label: 'שערים', value: t.goals },
+    { label: 'ניצחונות', value: t.wins },
+    { label: 'ערבים', value: t.evenings },
+  ];
 }
 
 /** Up to 3 stats, only the ones that aren't zero. */
 export function cardStats(history: EveningRecord[], id: string): CardStat[] {
-  const t = playerTotals(history, id);
-  return [
-    { label: 'שערים', value: t.goals },
-    { label: 'ניצחונות', value: t.wins },
-    { label: 'ערבים', value: t.evenings },
-  ].filter((s) => s.value > 0);
+  return cardRecord(history, id)
+    .slice(1)
+    .filter((s) => Number(s.value) > 0);
 }
 
 interface RosterPlayer {
@@ -83,5 +95,6 @@ export function cardData(
     ...(score !== undefined ? { score } : {}),
     style: sanitizeStyle(card),
     stats: cardStats(history, id),
+    record: cardRecord(history, id),
   };
 }

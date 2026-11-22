@@ -188,3 +188,84 @@
   block-size: auto;
   filter: drop-shadow(0 4px 8px rgb(0 0 0 / 0.25));
 }
+
+/* The big card: tilt toward the finger, spin to the back (SpinCard). */
+.card-spin {
+  position: relative;
+  perspective: 900px;
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.card-spin-body {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+  transform-style: preserve-3d;
+}
+.card-spin-body.is-moving {
+  will-change: transform;
+}
+.card-spin-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: rotateY(0deg);
+}
+.card-spin-face.is-back {
+  transform: rotateY(180deg);
+}
+.card-spin .player-card {
+  inline-size: 100%;
+  block-size: 100%;
+}
+.card-shine {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+.card-glare,
+.card-foil {
+  position: absolute;
+  opacity: 0;
+}
+.card-glare {
+  inset: -50%;
+  background: radial-gradient(circle at 50% 50%, rgb(255 255 255 / 0.75), rgb(255 255 255 / 0.18) 22%, transparent 45%);
+  mix-blend-mode: overlay;
+}
+.card-foil {
+  inset: 0 -100%;
+  background: linear-gradient(
+    115deg,
+    transparent 36%,
+    #ff6b9a 41%,
+    #ffd36b 44%,
+    #8cff9e 47%,
+    #6bd4ff 50%,
+    #b98cff 53%,
+    transparent 58%
+  );
+  mix-blend-mode: color-dodge;
+}
+.card-flip-btn {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: calc(100% + 2px);
+  inline-size: 36px;
+  block-size: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-2, var(--ink));
+  font-size: 1.25rem;
+  opacity: 0.7;
+  cursor: pointer;
+}

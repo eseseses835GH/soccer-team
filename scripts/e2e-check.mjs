@@ -2704,13 +2704,21 @@ if (SB_URL) {
   assert((await pp.locator('.roster li', { hasText: 'בני' }).locator('img').count()) === 0, 'photos: another player got a photo');
   await row.getByRole('button', { name: 'הקלף של אבי', exact: true }).click();
   const view = pp.getByRole('dialog', { name: 'אבי' });
-  await view.locator('.card-view .player-card').waitFor({ timeout: 8000 }).catch(() => errors.push('photos: card sheet not shown'));
+  await view.locator('.card-view .player-card:not(.card-back)').waitFor({ timeout: 8000 }).catch(() => errors.push('photos: card sheet not shown'));
   const cardText = await view.locator('.card-view').textContent().catch(() => '');
   assert(cardText.includes('86') && cardText.includes('התקפה'), `photos: card score/position (${cardText})`);
   assert(await view.locator('.card-view image').count() === 1, 'photos: the card shows his photo');
   assert(!(await pp.locator('.player-form').count()), 'photos: the avatar tap opened the edit sheet');
   if (process.env.SHOTS) await pp.screenshot({ path: `${process.env.SHOTS}/wire-organizer-card.png` });
   await view.getByRole('button', { name: 'שיתוף' }).waitFor({ timeout: 3000 }).catch(() => errors.push('photos: no share'));
+  if (process.env.SHOTS) {
+    // v35: his gold card leaning mid-drag, then the back.
+    await spinCard(pp, view, `${process.env.SHOTS}/tilt-front.png`);
+    await view.locator('.card-spin[data-side="back"]').waitFor({ timeout: 4000 }).catch(() => errors.push('photos: card did not spin'));
+    await pp.mouse.move(5, 5);
+    await pp.waitForTimeout(800);
+    await view.screenshot({ path: `${process.env.SHOTS}/tilt-back.png` });
+  }
   await pp.keyboard.press('Escape');
   await pp.getByRole('button', { name: 'הקלפים', exact: true }).click();
   const oGrid = pp.getByRole('dialog', { name: 'הקלפים' });
@@ -2761,6 +2769,21 @@ if (SB_URL) {
   console.log('player card: tap a photo in the teams → his card with the public score; share 720 px');
 }
 
+/** v35: drag the big card sideways with the mouse (optionally a screenshot halfway). */
+async function spinCard(page, dialog, shot) {
+  const box = await dialog.locator('.card-spin').boundingBox();
+  const x = box.x + box.width * 0.3;
+  const y = box.y + box.height * 0.35;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) {
+    await page.mouse.move(x + i * 22, y + i * 2);
+    await page.waitForTimeout(16);
+    if (shot && i === 2) await dialog.screenshot({ path: shot });
+  }
+  await page.mouse.up();
+}
+
 // v34: round photos where a person is picked: the rating survey (one player and "כל השחקנים") and
 // "מי אתה?" on a first visit. אבי has a photo, the rest show their initial.
 if (SB_URL) {
@@ -2791,8 +2814,16 @@ if (SB_URL) {
   if (process.env.SHOTS) await ap.screenshot({ path: `${process.env.SHOTS}/av-cards.png` });
   await grid.getByRole('button', { name: 'הקלף של בני' }).click();
   const big = ap.getByRole('dialog', { name: 'בני' });
-  await big.locator('.card-view .player-card').waitFor({ timeout: 8000 }).catch(() => errors.push('cards: tile did not open the card'));
+  await big.locator('.card-view .player-card:not(.card-back)').waitFor({ timeout: 8000 }).catch(() => errors.push('cards: tile did not open the card'));
   await big.getByRole('button', { name: 'שיתוף' }).waitFor({ timeout: 3000 }).catch(() => errors.push('cards: no share on the big card'));
+  // v35: a sideways drag spins the card to its back (his record), another one back to the front.
+  await spinCard(ap, big);
+  await big.locator('.card-spin[data-side="back"]').waitFor({ timeout: 4000 }).catch(() => errors.push('cards: the drag did not turn the card over'));
+  const backLabel = (await big.locator('.card-back').getAttribute('aria-label').catch(() => '')) ?? '';
+  assert(backLabel.includes('משחקים') && backLabel.includes('ערבים'), `cards: the back shows the record (${backLabel})`);
+  assert((await big.locator('.card-spin-face.is-back').getAttribute('aria-hidden')) === 'false', 'cards: the back is the face shown');
+  await spinCard(ap, big);
+  await big.locator('.card-spin[data-side="front"]').waitFor({ timeout: 4000 }).catch(() => errors.push('cards: the second drag did not turn it back'));
   await actx.close();
 
   const { ctx: cctx, page: cp } = await playerContext(browser, { me: null, canRate: true, live: true, roster });

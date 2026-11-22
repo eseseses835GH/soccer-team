@@ -102,7 +102,7 @@ export function cardTexts(p: PlayerCardProps): CardText[] {
 }
 
 /** Ink for the number on the little shirt. */
-function shirtInk(shirt: Shirt, pattern: ShirtPattern): string {
+export function shirtInk(shirt: Shirt, pattern: ShirtPattern): string {
   const base = pattern === 'plain' ? shirt.colors[0] : mix(shirt.colors[0], shirt.colors[1], 0.5);
   return luma(base) > 0.62 ? '#15161a' : '#ffffff';
 }
@@ -289,11 +289,11 @@ export function PlayerCard(props: PlayerCardProps) {
 }
 
 /** A small shirt (44×42) for the number. */
-const JERSEY = 'M14,1 L4,6 L0,17 L8,20 L9,41 L35,41 L36,20 L44,17 L40,6 L30,1 Q22,8 14,1 Z';
+export const JERSEY = 'M14,1 L4,6 L0,17 L8,20 L9,41 L35,41 L36,20 L44,17 L40,6 L30,1 Q22,8 14,1 Z';
 
 const SILHOUETTE = 'M150,92 a42,46 0 1 1 -0.1,0 Z M60,290 C64,232 98,206 150,206 C202,206 236,232 240,290 Z';
 
-function hexPath(cx: number, cy: number, r: number): string {
+export function hexPath(cx: number, cy: number, r: number): string {
   const pts = Array.from({ length: 6 }, (_, k) => {
     const a = (Math.PI / 3) * k + Math.PI / 6;
     return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
@@ -302,7 +302,7 @@ function hexPath(cx: number, cy: number, r: number): string {
 }
 
 /** The shirt pattern drawn in c2 over c1 (the caller paints c1 or a tint underneath). */
-function Pattern({ pattern, c2, y, h, w = VIEW_W, scale = 1 }: { pattern: ShirtPattern; c1?: string; c2: string; y: number; h: number; w?: number; scale?: number }) {
+export function Pattern({ pattern, c2, y, h, w = VIEW_W, scale = 1 }: { pattern: ShirtPattern; c1?: string; c2: string; y: number; h: number; w?: number; scale?: number }) {
   switch (pattern) {
     case 'stripes': {
       const sw = 30 * scale;
