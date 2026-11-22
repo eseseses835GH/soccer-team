@@ -3,7 +3,7 @@ import { addTeam, startSession, swapKeepers, type MatchState } from '../match/ma
 import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, noGKIds, teamBibs, type AppState, type Player, type Settings } from './model';
 import { addEvening, buildEvening, eveningId, mergeHistory, nightOf, stampSides, teamMembers, type EveningRecord } from './history';
 import { addFromBench, lateJoin, type LateChoice } from './late';
-import { holdKeepers, leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
+import { holdKeepers, holdKeepersOnNoGK, leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
 export type Action =
@@ -123,10 +123,12 @@ export function reducer(state: AppState, action: Action): AppState {
   }
   // The teams changed under a match session: whoever is in goal stays in goal (new teams: no).
   if (next.result && next.result !== state.result && action.type !== 'shuffle' && action.type !== 'setResult') {
-    const held = holdKeepers(state.result, prev, next.result, match, leaveCtx(next));
+    const held = holdKeepers(state.result, prev, next.result, match, { ...leaveCtx(next), prevNoGK: noGKIds(state.players) });
     if (held !== match) return { ...next, match: held };
+    return next;
   }
-  return next;
+  // Someone was marked / unmarked "לא בשער" mid-evening: the keeper in goal stays (unless it's him).
+  return holdKeepersOnNoGK(state, next);
 }
 
 /** Remove players with their attendance and pairs; today's teams go if any of them was in them. */

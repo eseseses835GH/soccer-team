@@ -67,8 +67,18 @@ export function inProgress(m: MatchState | null): boolean {
  * whoever is in goal now in goal (if he left, the next one in the rotation takes over). The order
  * itself is never turned: newcomers stay last. Returns `shift` unchanged when nobody fits.
  */
-export function keepKeeper(prev: string[], next: string[], conceded: number, every: number, rotate: boolean, noGK?: ReadonlySet<string>, shift = 0): number {
-  const pr = rotation(prev, noGK);
+export function keepKeeper(
+  prev: string[],
+  next: string[],
+  conceded: number,
+  every: number,
+  rotate: boolean,
+  noGK?: ReadonlySet<string>,
+  shift = 0,
+  /** "לא בשער" before the change, when it changed too (default: same as `noGK`). */
+  prevNoGK: ReadonlySet<string> | undefined = noGK,
+): number {
+  const pr = rotation(prev, prevNoGK);
   const nr = rotation(next, noGK);
   if (!pr.length || !nr.length) return shift;
   const ci = keeperIndex(rotate ? conceded : 0, every, pr.length, shift);
@@ -88,19 +98,46 @@ export function holdKeepers(
   prevM: MatchState | null,
   next: GameResult,
   m: MatchState | null,
-  ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'>,
+  ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'> & { prevNoGK?: ReadonlySet<string> },
 ): MatchState | null {
   if (!m || !prevM) return m;
+  const before = 'prevNoGK' in ctx ? ctx.prevNoGK : ctx.noGK;
   let out = m;
   for (let t = 0; t < Math.min(prev.numTeams, next.numTeams); t++) {
     const a = teamMembers(prev, t);
     const b = teamMembers(next, t);
-    if (a.length === b.length && a.every((id, i) => id === b[i]) && shiftOf(prevM, t) === shiftOf(m, t)) continue;
-    const s = keepKeeper(a, b, prevM.conceded[t] ?? 0, ctx.every, ctx.rotate, ctx.noGK, shiftOf(prevM, t));
+    const sameGK = a.every((id) => !!before?.has(id) === !!ctx.noGK?.has(id));
+    if (sameGK && a.length === b.length && a.every((id, i) => id === b[i]) && shiftOf(prevM, t) === shiftOf(m, t)) continue;
+    const s = keepKeeper(a, b, prevM.conceded[t] ?? 0, ctx.every, ctx.rotate, ctx.noGK, shiftOf(prevM, t), before);
     out = withShift(out, t, s, rotation(b, ctx.noGK).length);
   }
   return out;
 }
+
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+
+/**
+ * Players were marked / unmarked "לא בשער" (here, or from another phone's copy of the group) while a
+ * match session is open: whoever is in goal now stays in goal. Only if he himself is now "לא בשער"
+ * does the next one in the rotation go in. Returns `after` (same object when nothing moves).
+ */
+export function holdKeepersOnNoGK<S extends { players: readonly Player[]; result: GameResult | null; match: MatchState | null; settings: { gkMode: string; gkSwitchGoals: number } }>(
+  before: Pick<S, 'players' | 'result' | 'match'>,
+  after: S,
+): S {
+  if (!after.match || !after.result || !before.match || !before.result) return after;
+  const a = noGKOf(before.players);
+  const b = noGKOf(after.players);
+  if (sameSet(a, b)) return after;
+  const match = holdKeepers(before.result, before.match, after.result, after.match, {
+    rotate: after.settings.gkMode === 'rotate',
+    every: after.settings.gkSwitchGoals,
+    noGK: b,
+    prevNoGK: a,
+  });
+  return match === after.match ? after : { ...after, match };
+}
+const noGKOf = (players: readonly Player[]) => new Set(players.filter((p) => p.noGK).map((p) => p.id));
 
 function engineRoster(ctx: LeaveCtx, ids: string[]) {
   const byId = new Map(ctx.players.map((p) => [p.id, p]));

@@ -5,6 +5,7 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { isUuid, meKey, newGroupState } from '../state/groups';
+import { holdKeepersOnNoGK } from '../state/leave';
 import { sanitize } from '../state/model';
 import { profileOf, type Profile } from '../state/me';
 import { localKV, useGroups, useStore } from '../state/store';
@@ -171,7 +172,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         saveMeta(localKV, gid, out.meta);
         if (out.pulled) {
           // Edits made on this phone while the round ran win over the server's copy.
-          groupsRef.current.setGroupState(gid, (s) => sanitize(applyDoc(s, mergeDocs(local, docFromState(s), out.doc))));
+          groupsRef.current.setGroupState(gid, (s) => holdKeepersOnNoGK(s, sanitize(applyDoc(s, mergeDocs(local, docFromState(s), out.doc)))));
         }
         if (out.name !== meta.name) groupsRef.current.setMeta(gid, { name: out.name });
         setStatus('synced');
