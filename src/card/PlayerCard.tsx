@@ -36,15 +36,15 @@ export const FONT = "Heebo, system-ui, -apple-system, 'Segoe UI', Arial, sans-se
 /** The shield, `i` px inside the outer edge. */
 export function shieldPath(i: number): string {
   const c = 22 - i * 0.4; // top chamfer
-  const y1 = 318;
+  const y1 = 345;
   const r = VIEW_W - i;
   return [
     `M${i + c},${i}`,
     `H${r - c}`,
     `L${r},${i + c}`,
     `V${y1}`,
-    `C${r},${y1 + 34} ${208},${398 - i * 0.6} 150,${VIEW_H - i}`,
-    `C${92},${398 - i * 0.6} ${i},${y1 + 34} ${i},${y1}`,
+    `C${r},${y1 + 30} ${218},${412 - i * 0.6} 150,${VIEW_H - i}`,
+    `C${82},${412 - i * 0.6} ${i},${y1 + 30} ${i},${y1}`,
     `V${i + c}`,
     'Z',
   ].join(' ');
@@ -75,8 +75,8 @@ export function cardTexts(p: PlayerCardProps): CardText[] {
   const light = firstStops(p)[0];
   const out: CardText[] = [];
   const name = p.name.trim() || ' ';
-  const nameSize = Math.min(30, Math.max(15, 250 / (Array.from(name).length * 0.6)));
-  out.push({ text: name, x: 150, y: 346, size: nameSize, weight: 800, fill: '#ffffff', shadow: true });
+  const nameSize = Math.min(30, Math.max(15, 220 / (Array.from(name).length * 0.6)));
+  out.push({ text: name, x: 150, y: 342, size: nameSize, weight: 800, fill: '#ffffff', shadow: true });
   const hasScore = typeof p.score === 'number' && Number.isFinite(p.score);
   if (hasScore) out.push({ text: String(Math.round(p.score!)), x: 250, y: 66, size: 27, weight: 900, fill: ink });
   if (p.position) out.push({ text: POSITION_NAMES[p.position], x: 250, y: hasScore ? 104 : 60, size: hasScore ? 10.5 : 12, weight: 700, fill: '#ffffff', spacing: 0.3 });
@@ -85,10 +85,10 @@ export function cardTexts(p: PlayerCardProps): CardText[] {
     out.push({ text: String(p.style.number), x: 50, y: 70, size: 17, weight: 900, fill, outline: fill === '#ffffff' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.7)' });
   }
   const stats = (p.stats ?? []).slice(0, 3);
-  const xs = stats.length === 1 ? [150] : stats.length === 2 ? [118, 182] : [95, 150, 205];
+  const xs = stats.length === 1 ? [150] : stats.length === 2 ? [124, 176] : [108, 150, 192];
   stats.forEach((s, i) => {
-    out.push({ text: String(s.value), x: xs[i], y: 375, size: 15, weight: 800, fill: light });
-    out.push({ text: s.label, x: xs[i], y: 388, size: 8.5, weight: 500, fill: '#ffffff', opacity: 0.72 });
+    out.push({ text: String(s.value), x: xs[i], y: 368, size: 15, weight: 800, fill: light });
+    out.push({ text: s.label, x: xs[i], y: 381, size: 8.5, weight: 500, fill: '#ffffff', opacity: 0.72 });
   });
   return out;
 }
@@ -236,7 +236,7 @@ export function PlayerCard(props: PlayerCardProps) {
 
         {/* Stats row divider and the tip ornament. */}
         {(props.stats?.length ?? 0) > 1 &&
-          (props.stats!.length === 2 ? [150] : [122.5, 177.5]).map((x) => <line key={x} x1={x} x2={x} y1="364" y2="390" stroke="#fff" strokeOpacity="0.2" />)}
+          (props.stats!.length === 2 ? [150] : [129, 171]).map((x) => <line key={x} x1={x} x2={x} y1="357" y2="384" stroke="#fff" strokeOpacity="0.2" />)}
         <path d="M150,398 l5,6 l-5,6 l-5,-6 Z" fill={`url(#${id('metal')})`} />
       </g>
 
