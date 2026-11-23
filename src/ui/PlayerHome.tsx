@@ -19,7 +19,6 @@ import { splitApi } from '../sync/splitRemote';
 import { SyncError } from '../sync/supabase';
 import { currentTeams } from '../state/shuffle';
 import { Avatar } from '../photos/Avatar';
-import { CardsButton } from '../card/CardsButton';
 import { eveningOf } from '../state/evening';
 import { Nudges } from './Nudges';
 import { ReviewCard } from './ReviewCard';
@@ -164,9 +163,6 @@ export function PlayerHome() {
             </div>
           </Empty>
         )}
-      </div>
-      <div className="row-links">
-        <CardsButton notify={notify} />
       </div>
     </section>
   );

@@ -28,6 +28,7 @@ import { ViewerScreen } from './LiveControl';
 import { SettingsScreen } from './SettingsScreen';
 import { TeamsScreen } from './TeamsScreen';
 import { CardViewer } from '../card/CardViewer';
+import { CardsButton } from '../card/CardsButton';
 import { TourHost } from './Tour';
 
 export type Route = 'home' | 'teams' | 'match' | 'players' | 'settings' | 'history' | 'evening' | 'help' | 'rate' | 'claim' | 'me';
@@ -283,6 +284,7 @@ export function App() {
               <button type="button" className="icon-btn help-btn" aria-label="שאלות ותשובות" onClick={() => go('help')}>
                 <Icon name="help" size={20} />
               </button>
+              {isPlayer && <CardsButton notify={notify} icon />}
               {!isPlayer && (
                 <button
                   type="button"

@@ -1,5 +1,6 @@
 /** "הקלפים": everyone's cards in the group, as a grid (the sheet loads only when opened). */
 import { lazy, Suspense, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from '../ui/icons';
 
 const CardsSheet = lazy(() => import('./CardsSheet'));
@@ -17,11 +18,14 @@ export function CardsButton({ notify, inline = false, icon = false }: { notify: 
           הקלפים
         </button>
       )}
-      {open && (
-        <Suspense fallback={null}>
-          <CardsSheet notify={notify} onClose={() => setOpen(false)} />
-        </Suspense>
-      )}
+      {/* On the body: from the top bar a sheet would be clipped by it. */}
+      {open &&
+        createPortal(
+          <Suspense fallback={null}>
+            <CardsSheet notify={notify} onClose={() => setOpen(false)} />
+          </Suspense>,
+          document.body,
+        )}
     </>
   );
 }
