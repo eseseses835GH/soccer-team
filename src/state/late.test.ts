@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../engine';
 import { addGoal, endMatch, keeperAt, keeperIndex, setBorrow, shiftOf, startClock, startSession } from '../match/match';
 import { teamMembers } from './history';
-import { addFromBench, lateJoin, nowTarget, suggestAfterLate } from './late';
+import { addFromBench, lateArrive, lateJoin, nowTarget, suggestAfterLate } from './late';
 import type { LeaveCtx } from './leave';
 import { INITIAL_STATE, defaultAttrs, type AppState, type GameResult, type Player } from './model';
 import { reducer } from './reducer';
@@ -203,5 +203,76 @@ describe('bench: add a sub to a team on request', () => {
     expect(addFromBench(r, null, 'x', 5, ctx).result).toBe(r);
     const s: AppState = { ...INITIAL_STATE, players: roster, teamSize: 3, presentIds: [...r.playerIds, 'x'], result: r };
     expect(reducer(s, { type: 'addFromBench', subId: 'zz', team: 0 })).toBe(s);
+  });
+});
+
+describe('late arrivals, several at once (v38)', () => {
+  const full = () => result([['a', 'b', 'c', 'd', 'e'], ['f', 'g', 'h', 'i', 'j']], 5);
+
+  it('3 arrive at 5/5: one new team of 3 at the back of the queue, the teams on the pitch untouched', () => {
+    const r = full();
+    let s: AppState = { ...INITIAL_STATE, players: roster, teamSize: 5, presentIds: [...r.playerIds], result: r };
+    s = reducer(s, { type: 'setMatch', match: startClock(startSession(2), 0), now: 1 });
+    s = reducer(s, { type: 'lateArrive', ids: ['x', 'y', 'z'], seed: 1, now: 5 });
+    expect(sizes(s.result!)).toEqual([5, 5, 3]);
+    expect(teamMembers(s.result!, 2).sort()).toEqual(['x', 'y', 'z']);
+    expect(s.result!.subIds).toEqual([]);
+    expect(s.match!.onPitch).toEqual([0, 1]);
+    expect(s.match!.queue).toEqual([2]);
+    expect(s.presentIds).toEqual(expect.arrayContaining(['x', 'y', 'z']));
+    expect(isResultStale(s)).toBe(false);
+  });
+
+  it('1 arrives at 5/5: a sub; 2 more: a new team of 3 with him', () => {
+    const one = lateArrive(full(), null, ['x'], 'in', ctx, 1);
+    expect(one.outcome).toBe('bench');
+    expect(one.waiting).toEqual(['x']);
+    expect(sizes(one.result)).toEqual([5, 5]);
+    expect(one.result.subIds).toEqual(['x']);
+    const two = lateArrive(one.result, null, ['y', 'z'], 'in', ctx, 1);
+    expect(two.outcome).toBe('newTeam');
+    expect(two.newTeams).toEqual([2]);
+    expect(two.waiting).toEqual([]);
+    expect(teamMembers(two.result, 2).sort()).toEqual(['x', 'y', 'z']);
+    expect(two.result.subIds).toEqual([]);
+  });
+
+  it('fills a short team first, then the rest wait (or form a team)', () => {
+    const r = result([['a', 'b', 'c', 'd'], ['e', 'f', 'g', 'h'], ['i', 'j', 'k']], 4);
+    const j = lateArrive(r, null, ['x', 'y'], 'in', ctx, 1);
+    expect(j.placed).toEqual([{ id: 'x', team: 2 }]);
+    expect(j.outcome).toBe('filled');
+    expect(sizes(j.result)).toEqual([4, 4, 4]);
+    expect(j.result.subIds).toEqual(['y']);
+    expect(j.waiting).toEqual(['y']);
+  });
+
+  it('mid-match: full teams on the pitch take nobody; a short one on the pitch is filled', () => {
+    const m = startClock(startSession(2), 0);
+    const a = lateArrive(full(), m, ['x'], 'in', ctx, 1);
+    expect(sizes(a.result)).toEqual([5, 5]);
+    expect(a.match).toBe(m);
+    const r = result([['a', 'b', 'c', 'd', 'e'], ['f', 'g', 'h', 'i']], 5);
+    const b = lateArrive(r, m, ['x', 'y'], 'in', ctx, 1);
+    expect(b.placed).toEqual([{ id: 'x', team: 1 }]);
+    expect(sizes(b.result)).toEqual([5, 5]);
+    expect(b.result.subIds).toEqual(['y']);
+    expect(b.match!.onPitch).toEqual([0, 1]);
+  });
+
+  it('"מחכים בצד": all on the bench, never a team', () => {
+    const j = lateArrive(full(), null, ['x', 'y', 'z'], 'wait', ctx, 1);
+    expect(j.outcome).toBe('bench');
+    expect(sizes(j.result)).toEqual([5, 5]);
+    expect(j.result.subIds).toEqual(['x', 'y', 'z']);
+  });
+
+  it('a new player is added to the roster; someone already here is ignored', () => {
+    const r = full();
+    const s0: AppState = { ...INITIAL_STATE, players: roster, teamSize: 5, presentIds: [...r.playerIds], result: r };
+    const s = reducer(s0, { type: 'lateArrive', players: [p('new')], ids: ['new', 'a'], wait: true, seed: 1, now: 5 });
+    expect(s.players.some((x) => x.id === 'new')).toBe(true);
+    expect(s.result!.subIds).toEqual(['new']);
+    expect(reducer(s0, { type: 'lateArrive', ids: ['a'], seed: 1, now: 5 })).toBe(s0);
   });
 });

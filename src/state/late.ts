@@ -1,7 +1,8 @@
 /**
- * "הגיע מאוחר": someone arrives in the middle of the evening. Nobody is reshuffled, and the
- * organizer always chooses: he goes in now (into the team the app suggests, or another one),
- * or he waits on the side as a sub and the sizes stay as they are (3×3 stays 3×3).
+ * "הגיע מאוחר" / "מישהו הגיע?": one or several arrive in the middle of the evening. Nobody is
+ * reshuffled. `lateArrive` (v38) places them all at once: short teams first, then a new team
+ * waiting outside once there are enough; or they all wait on the side. `lateJoin` is the
+ * one-player step underneath (and the explicit-team version some callers still use).
  */
 import { MAX_TEAMS, createRng, shuffle, suggestSwaps, type SwapSuggestion } from '../engine';
 import type { MatchState } from '../match/match';
@@ -68,24 +69,8 @@ export function lateJoin(
   const t = choice.team ?? nowTarget(r);
   if (t === r.numTeams && r.numTeams < MAX_TEAMS) {
     // He and the subs become a new team, at the back of the queue (the reducer adds it to the match).
-    const assignment = [...r.assignment, ...subIds.map(() => t)];
-    return {
-      result: {
-        ...r,
-        playerIds: [...r.playerIds, ...subIds],
-        subIds: [],
-        numTeams: t + 1,
-        sizes: [...r.sizes, subIds.length],
-        assignment,
-        generated: assignment,
-        gkOrder: [...r.gkOrder, shuffle(createRng(seed), [...subIds])],
-        pool: [],
-        shown: [],
-      },
-      match: m,
-      outcome: subIds.length === r.teamSize ? 'filled' : 'newTeam',
-      team: t,
-    };
+    const result = withNewTeam(r, subIds, [], seed);
+    return { result, match: m, outcome: subIds.length === r.teamSize ? 'filled' : 'newTeam', team: t };
   }
   if (t < 0 || t >= r.numTeams) return { result: r, match: m, outcome: 'bench', team: null };
 
@@ -102,6 +87,102 @@ export function lateJoin(
   }
   const filled = shortBefore && counts.every((c) => c >= r.teamSize);
   return { result, match, outcome: filled ? 'filled' : 'joined', team: t };
+}
+
+/** `members` become a new team at the back (the reducer adds it to the match's queue); `subIds` is the bench after. */
+function withNewTeam(r: GameResult, members: string[], subIds: string[], seed: number): GameResult {
+  const t = r.numTeams;
+  const assignment = [...r.assignment, ...members.map(() => t)];
+  return {
+    ...r,
+    playerIds: [...r.playerIds, ...members],
+    subIds,
+    numTeams: t + 1,
+    sizes: [...r.sizes, members.length],
+    assignment,
+    generated: assignment,
+    gkOrder: [...r.gkOrder, shuffle(createRng(seed), [...members])],
+    pool: [],
+    shown: [],
+  };
+}
+
+/** The smallest team that isn't full (ties to the later team, the one outside), or -1. */
+function shortTeam(r: GameResult): number {
+  const counts = countsOf(r);
+  let best = -1;
+  for (let t = r.numTeams - 1; t >= 0; t--) if (counts[t] < r.teamSize && (best < 0 || counts[t] < counts[best])) best = t;
+  return best;
+}
+
+export interface LateArrival extends LateJoin {
+  /** Who went into an existing (short) team. */
+  placed: { id: string; team: number }[];
+  /** New teams formed (arrivals with the subs), at the back of the queue. */
+  newTeams: number[];
+  /** Arrivals left on the bench. */
+  waiting: string[];
+}
+
+/**
+ * "מי הגיע?" with one or several at once (v38). No question per player:
+ * - `wait` ("מחכים בצד"): all become subs, nothing else changes.
+ * - `in` ("נכנסים"): in order, each fills the smallest short team (one on the pitch mid-match too,
+ *   with the keeper rules of `lateJoin`). Once every team is full, the rest join the subs, and
+ *   when they reach the short-team threshold (`max(2, size − 2)`) they become a new team at the
+ *   back of the queue ("ממתינים בחוץ"); fewer wait as subs and the next arrivals join them.
+ *   A full team never grows, and no team on the pitch takes anyone beyond its size.
+ */
+export function lateArrive(
+  r: GameResult,
+  m: MatchState | null,
+  ids: string[],
+  how: 'in' | 'wait',
+  ctx: Pick<LeaveCtx, 'rotate' | 'every' | 'noGK'>,
+  seed: number,
+): LateArrival {
+  const fresh = ids.filter((id, i) => ids.indexOf(id) === i && !r.playerIds.includes(id) && !r.subIds.includes(id));
+  const none: LateArrival = { result: r, match: m, outcome: 'bench', team: null, placed: [], newTeams: [], waiting: [] };
+  if (!fresh.length) return none;
+  if (how === 'wait') return { ...none, result: { ...r, subIds: [...r.subIds, ...fresh] }, waiting: fresh };
+
+  const shortBefore = shortTeam(r) >= 0;
+  let result = r;
+  let match = m;
+  const placed: LateArrival['placed'] = [];
+  const rest: string[] = [];
+  for (const id of fresh) {
+    const t = shortTeam(result);
+    if (t < 0) {
+      rest.push(id);
+      continue;
+    }
+    const j = lateJoin(result, match, id, { kind: 'now', team: t }, ctx, seed);
+    result = j.result;
+    match = j.match;
+    placed.push({ id, team: t });
+  }
+  // Everyone's full: the rest wait with the subs, and enough of them make a team outside.
+  let pool = [...result.subIds, ...rest];
+  const newTeams: number[] = [];
+  const min = Math.max(2, r.teamSize - 2);
+  while (rest.length && pool.length >= min && result.numTeams < MAX_TEAMS) {
+    newTeams.push(result.numTeams);
+    result = withNewTeam(result, pool.slice(0, r.teamSize), [], seed + newTeams.length - 1);
+    pool = pool.slice(r.teamSize);
+  }
+  result = { ...result, subIds: pool };
+  const inNew = new Set(newTeams.flatMap((t) => result.assignment.map((x, i) => (x === t ? result.playerIds[i] : '')).filter(Boolean)));
+  const filled = shortBefore && placed.length > 0 && shortTeam(result) < 0;
+  return {
+    result,
+    match,
+    outcome: filled ? 'filled' : newTeams.length ? 'newTeam' : placed.length ? 'joined' : 'bench',
+    team: newTeams[0] ?? placed[placed.length - 1]?.team ?? null,
+    placed,
+    newTeams,
+    waiting: rest.filter((id) => !inNew.has(id)),
+  };
 }
 
 /**

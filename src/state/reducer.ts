@@ -2,7 +2,7 @@ import { MAX_TEAM_SIZE, MIN_TEAM_SIZE, type Constraints, type Pair, type Solutio
 import { addTeam, startSession, swapKeepers, type MatchState } from '../match/match';
 import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, noGKIds, teamBibs, type AppState, type Player, type Settings } from './model';
 import { addEvening, buildEvening, eveningId, mergeHistory, nightOf, stampSides, teamMembers, type EveningRecord } from './history';
-import { addFromBench, lateJoin, type LateChoice } from './late';
+import { addFromBench, lateArrive, lateJoin, type LateChoice } from './late';
 import { holdKeepers, holdKeepersOnNoGK, leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
@@ -54,6 +54,8 @@ export type Action =
   | { type: 'swapKeepers'; team: number; a: string; b: string }
   /** Someone arrived late (late.ts): he goes in now or waits on the side; nobody reshuffled. */
   | { type: 'lateJoin'; player?: Player; id: string; choice: LateChoice; seed: number; now: number }
+  /** One or several arrived (v38): `players` = new to the roster; `wait` = all on the bench. */
+  | { type: 'lateArrive'; players?: Player[]; ids: string[]; wait?: boolean; seed: number; now: number }
   /** Someone left early (leave.ts): out of the teams and today's attendance, nobody reshuffled. */
   | { type: 'leave'; id: string; now: number; subId?: string }
   /** Several left at once (leave.ts leaveMany): the same rules for each, in the order picked. */
@@ -313,6 +315,17 @@ function baseReducer(state: AppState, action: Action): AppState {
         result: j.result,
         match: j.match && grew ? addTeam(j.match, j.result.numTeams - 1) : j.match,
       };
+    }
+    case 'lateArrive': {
+      if (!state.result) return state;
+      const known = new Set(state.players.map((p) => p.id));
+      const players = [...state.players, ...(action.players ?? []).filter((p) => !known.has(p.id))];
+      const s = { ...state, players };
+      const j = lateArrive(state.result, state.match, action.ids, action.wait ? 'wait' : 'in', leaveCtx(s), action.seed);
+      if (j.result === state.result) return state;
+      let match = j.match;
+      for (let t = state.result.numTeams; match && t < j.result.numTeams; t++) match = addTeam(match, t);
+      return { ...s, presentIds: [...new Set([...state.presentIds, ...action.ids])], dayAt: action.now, result: j.result, match };
     }
     case 'leave': {
       if (!state.result) return state;

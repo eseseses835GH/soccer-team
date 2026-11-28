@@ -1,49 +1,46 @@
 import { useState } from 'react';
 import { randomSeed, scoreFromCost, type SwapSuggestion } from '../engine';
 import { applyCards } from '../state/cards';
-import { lateJoin, nowTarget, suggestAfterLate, type LateChoice } from '../state/late';
-import { inProgress } from '../state/leave';
-import { newId, teamLook, type Player } from '../state/model';
+import { lateArrive, suggestAfterLate, type LateArrival } from '../state/late';
+import { newId, teamLook, verb, type Player } from '../state/model';
 import { leaveCtx } from '../state/reducer';
 import { useStore } from '../state/store';
 import { arrivalChoices, benchTarget } from '../sync/runnerLate';
 import { useVoterId } from '../sync/SyncProvider';
 import { usePlayerGroup } from '../sync/PlayerGroupProvider';
 import { cleanName, sameName } from '../sync/playerGroup';
-import { newGuest, pickOrder } from '../state/guests';
+import { newGuest } from '../state/guests';
 import { Avatar } from '../photos/Avatar';
 import { useUi } from './App';
-import { CardBadges, LevelPicker, Sheet } from './components';
+import { LevelPicker, Sheet } from './components';
 import { KindChoice, NAME_TAKEN } from './GuestSheet';
 import { usePlayerGate } from './useGate';
 
-type Step = { kind: 'pick' } | { kind: 'choose'; player: Player; isNew: boolean; sub?: boolean } | { kind: 'suggest'; s: SwapSuggestion; names: string[] };
+const names = (list: string[]) => (list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} ו${list[list.length - 1]}`);
 
 /**
- * "הגיע מאוחר" / "מישהו הגיע?": pick who arrived → he goes in now (the suggested team, or
- * another with a tap) or waits on the side → if he completed the teams, an optional swap or two.
- * `mode: 'runner'` (a player running the match, no ratings on his phone): roster, bench or a new
- * guest with a level (v23), the smallest team and no swap suggestions (DECISIONS → v15).
+ * "הגיע מאוחר" / "מישהו הגיע?" / ticking someone at home once teams exist (v38): tap everyone who
+ * arrived → "נכנסים": short teams first, then a new team waiting outside once there are enough
+ * (`lateArrive`), or the quiet "מחכים בצד" → if they completed the teams, an optional swap or two.
+ * `mode: 'runner'` (a player running the match, no ratings on his phone): the roster by name, the
+ * bench (a tap brings a sub in), a new guest added on the server, no swap suggestions (v15, v23).
  */
 export function LateSheet({ onClose, arrived, mode }: { onClose: () => void; arrived?: Player; mode?: 'runner' }) {
   const { state, dispatch } = useStore();
   const { notify } = useUi();
-  const [step, setStep] = useState<Step>(arrived ? { kind: 'choose', player: arrived, isNew: false } : { kind: 'pick' });
+  const [picked, setPicked] = useState<string[]>(arrived ? [arrived.id] : []);
+  /** New to the roster, added here (not in the store until they arrive). */
+  const [added, setAdded] = useState<Player[]>([]);
+  const [suggest, setSuggest] = useState<{ s: SwapSuggestion; names: string[] } | null>(null);
   const r = state.result;
   if (!r) return null;
   const m = state.match;
   const look = (t: number) => teamLook(state.settings, t);
+  const byId = new Map([...state.players, ...added].map((p) => [p.id, p]));
+  const nameOf = (id: string) => byId.get(id)?.name ?? '?';
 
-  if (step.kind === 'pick')
-    return mode === 'runner' ? (
-      <RunnerPick onClose={onClose} onPick={(player, sub, isNew) => setStep({ kind: 'choose', player, isNew: !!isNew, sub })} />
-    ) : (
-      <PickStep onClose={onClose} onPick={(player, isNew) => setStep({ kind: 'choose', player, isNew })} />
-    );
-
-  if (step.kind === 'suggest') {
-    const { s, names } = step;
-    const nameOf = (id: string) => (state.players.find((p) => p.id === id)?.name ?? '?');
+  if (suggest) {
+    const { s } = suggest;
     return (
       <Sheet title="הקבוצות התמלאו" onClose={onClose}>
         <p className="lead">
@@ -53,7 +50,7 @@ export function LateSheet({ onClose, arrived, mode }: { onClose: () => void; arr
         <ul className="swap-list">
           {s.swaps.map(([i, j]) => (
             <li key={`${i}-${j}`}>
-              {nameOf(names[i])} ⇄ {nameOf(names[j])}
+              {nameOf(suggest.names[i])} ⇄ {nameOf(suggest.names[j])}
             </li>
           ))}
         </ul>
@@ -77,125 +74,122 @@ export function LateSheet({ onClose, arrived, mode }: { onClose: () => void; arr
     );
   }
 
-  const { player, isNew, sub } = step;
-  const live = inProgress(m);
-  const context = m && live ? `משחק באמצע · ${look(m.onPitch[0]).name} נגד ${look(m.onPitch[1]).name}` : m?.history.length ? 'בין משחקים' : 'עוד לא התחיל משחק';
-  const target = sub ? benchTarget(r) : nowTarget(r);
-  const others = Array.from({ length: r.numTeams }, (_, t) => t).filter((t) => t !== target);
+  const { roster, bench } = arrivalChoices(state.players, r, state.history);
+  const list = [...added, ...roster];
+  const toggle = (id: string) => setPicked((ps) => (ps.includes(id) ? ps.filter((x) => x !== id) : [...ps, id]));
+  const add = (p: Player) => {
+    setAdded((ps) => [...ps, p]);
+    setPicked((ps) => [...ps, p.id]);
+  };
+  const n = picked.length;
 
-  const choose = (choice: LateChoice) => {
-    if (sub) {
-      // From the bench: a sub coming in, as on the teams screen.
-      const t = choice.kind === 'now' ? (choice.team ?? target) : null;
-      if (t !== null) {
-        dispatch({ type: 'subIn', subId: player.id, team: t });
-        notify(`${player.name} נכנס ${look(t).to}`);
-      }
-      return onClose();
+  const summary = (j: LateArrival) => {
+    const parts: string[] = [];
+    for (const t of new Set(j.placed.map((x) => x.team))) {
+      const ids = j.placed.filter((x) => x.team === t).map((x) => x.id);
+      parts.push(`${names(ids.map(nameOf))} ${ids.length > 1 ? 'נכנסו' : 'נכנס'} ${look(t).to}`);
     }
+    for (const t of j.newTeams) {
+      const tl = look(t);
+      parts.push(`${verb(tl, 'נוצרו', 'נוצרה')} ${tl.the} · ${verb(tl, 'ממתינים', 'ממתינה')} בתור`);
+    }
+    if (j.waiting.length) parts.push(`${names(j.waiting.map(nameOf))} ${j.waiting.length > 1 ? 'מחכים' : 'מחכה'} בצד`);
+    return parts.join(' · ');
+  };
+
+  const go = (wait: boolean) => {
+    if (!n) return;
     const seed = randomSeed();
-    const ctx = leaveCtx(isNew ? { ...state, players: [...state.players, player] } : state);
-    const j = lateJoin(r, m, player.id, choice, ctx, seed);
-    dispatch({ type: 'lateJoin', player: isNew ? player : undefined, id: player.id, choice, seed, now: Date.now() });
-    const tl = j.team !== null ? look(j.team) : null;
-    if (j.outcome === 'bench') notify(`${player.name} מחכה בצד`);
-    else if (j.outcome === 'newTeam') notify(`נפתחה קבוצה חדשה: ${tl!.the}`);
-    else if (j.outcome === 'joined') notify(`${player.name} הצטרף ${tl!.to}`);
-    else {
-      notify(`${player.name} השלים את ${tl!.the}`);
-      const s = mode === 'runner' ? null : suggestAfterLate(j, ctx);
-      if (s) return setStep({ kind: 'suggest', s, names: j.result.playerIds });
-    }
+    const fresh = added.filter((p) => picked.includes(p.id));
+    const ctx = leaveCtx({ ...state, players: [...state.players, ...fresh] });
+    const j = lateArrive(r, m, picked, wait ? 'wait' : 'in', ctx, seed);
+    dispatch({ type: 'lateArrive', ...(fresh.length ? { players: fresh } : {}), ids: picked, wait, seed, now: Date.now() });
+    notify(summary(j));
+    const s = mode === 'runner' ? null : suggestAfterLate(j, ctx);
+    if (s) return setSuggest({ s, names: j.result.playerIds });
     onClose();
   };
 
+  const chip = (p: Player, on: boolean, onClick: () => void) => (
+    <button key={p.id} type="button" className={`member chip ${on ? 'sel' : ''}`} aria-pressed={on} onClick={onClick}>
+      <Avatar player={p} size={28} />
+      {p.name}
+    </button>
+  );
+
   return (
-    <Sheet title={`${player.name} הגיע`} onClose={onClose}>
-      <p className="lead">{context}</p>
-      <div className="stack">
-        <button type="button" className="btn btn-primary btn-block" onClick={() => choose({ kind: 'now' })}>
-          נכנס עכשיו {target === r.numTeams ? '· קבוצה חדשה' : look(target).to}
+    <Sheet title="מי הגיע?" onClose={onClose}>
+      {list.length > 0 && <div className="leave-chips late-picks">{list.map((p) => chip(p, picked.includes(p.id), () => toggle(p.id)))}</div>}
+      <div className="late-go">
+        <button type="button" className="btn btn-primary btn-block" disabled={!n} onClick={() => go(false)}>
+          {n > 1 ? `נכנסים (${n})` : 'נכנס'}
         </button>
-        {others.length > 0 && (
-          <div className="leave-chips center" role="group" aria-label="לקבוצה אחרת">
-            {others.map((t) => (
-              <button
-                key={t}
-                type="button"
-                className="member chip late-team"
-                style={{ '--team': look(t).color } as React.CSSProperties}
-                onClick={() => choose({ kind: 'now', team: t })}
-              >
-                <span className="dot" aria-hidden="true" /> {look(t).name}
-              </button>
-            ))}
-          </div>
-        )}
-        {!sub && (
-          <button type="button" className="btn btn-quiet btn-block" onClick={() => choose({ kind: 'wait' })}>
-            מחכה בצד
-          </button>
-        )}
+        <button type="button" className="text-btn quiet" disabled={!n} onClick={() => go(true)}>
+          {n > 1 ? 'מחכים בצד' : 'מחכה בצד'}
+        </button>
       </div>
+      {mode === 'runner' && bench.length > 0 && (
+        <>
+          <span className="label">מחליפים</span>
+          <div className="leave-chips">
+            {bench.map((p) =>
+              chip(p, false, () => {
+                // From the bench: a sub coming in, as on the teams screen.
+                const t = benchTarget(r);
+                dispatch({ type: 'subIn', subId: p.id, team: t });
+                notify(`${p.name} נכנס ${look(t).to}`);
+                onClose();
+              }),
+            )}
+          </div>
+        </>
+      )}
+      {mode === 'runner' ? <RunnerNew onAdd={add} added={added} /> : <OrganizerNew onAdd={add} added={added} />}
     </Sheet>
   );
 }
 
-function PickStep({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, isNew: boolean) => void }) {
+/** "מישהו חדש" on the organizer's phone: name, level, guest or regular; added to the picks. */
+function OrganizerNew({ onAdd, added }: { onAdd: (p: Player) => void; added: Player[] }) {
   const { state } = useStore();
   const [name, setName] = useState('');
   const [level, setLevel] = useState(5);
   const [guest, setGuest] = useState(false);
   const voter = useVoterId();
   const gate = usePlayerGate();
-  const inGame = new Set([...(state.result?.playerIds ?? []), ...(state.result?.subIds ?? [])]);
-  // Regulars A–Z, then guests by how often they played (v23).
-  const others = pickOrder(state.players.filter((p) => !inGame.has(p.id)), state.history);
-  const taken = state.players.some((p) => p.name.trim() === name.trim());
+  const taken = [...state.players, ...added].some((p) => p.name.trim() === name.trim());
   return (
-    <Sheet title="מי הגיע?" onClose={onClose}>
-      {others.length > 0 && (
-        <ul className="pick-list">
-          {others.map((p) => (
-            <li key={p.id}>
-              <button type="button" onClick={() => onPick(p, false)}>
-                <Avatar player={p} size={36} />
-                <span className="name">{p.name}</span>
-                <CardBadges cards={p.cards} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form
-        className="late-new"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!name.trim() || taken) return;
-          const p: Player = guest
-            ? newGuest(newId(), name, level, voter)
-            : { id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [], ...(voter ? { levelVotes: { [voter]: level } } : {}) };
-          gate([p], () => onPick(p, true));
-        }}
-      >
-        <label className="label" htmlFor="late-name">
-          מישהו חדש
-        </label>
-        <input id="late-name" className="input" placeholder="שם" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
-        {taken && <p className="field-error">כבר יש שחקן בשם הזה, בחרו אותו מהרשימה</p>}
-        <span className="label">רמה</span>
-        <LevelPicker value={level} onChange={setLevel} />
-        <KindChoice guest={guest} onChange={setGuest} />
-        <button type="submit" className="btn btn-primary btn-block" disabled={!name.trim() || taken}>
-          המשך
-        </button>
-      </form>
-    </Sheet>
+    <form
+      className="late-new"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!name.trim() || taken) return;
+        const p: Player = guest
+          ? newGuest(newId(), name, level, voter)
+          : { id: newId(), name: name.trim().slice(0, 24), attrs: applyCards(level, []), canGK: false, cards: [], ...(voter ? { levelVotes: { [voter]: level } } : {}) };
+        gate([...added, p], () => {
+          onAdd(p);
+          setName('');
+        });
+      }}
+    >
+      <label className="label" htmlFor="late-name">
+        מישהו חדש
+      </label>
+      <input id="late-name" className="input" placeholder="שם" value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
+      {taken && <p className="field-error">כבר יש שחקן בשם הזה, בחרו אותו מהרשימה</p>}
+      <span className="label">רמה</span>
+      <LevelPicker value={level} onChange={setLevel} />
+      <KindChoice guest={guest} onChange={setGuest} />
+      <button type="submit" className="btn btn-quiet btn-block" disabled={!name.trim() || taken}>
+        הוספה
+      </button>
+    </form>
   );
 }
 
-/** A player runner's pick: the roster (names only), the bench, or someone new (name + level + guest/regular, added on the server). */
-function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Player, sub: boolean, isNew?: boolean) => void }) {
+/** "מישהו חדש" on a player runner's phone: added on the server (v23), then to the picks. */
+function RunnerNew({ onAdd, added }: { onAdd: (p: Player) => void; added: Player[] }) {
   const { state } = useStore();
   const pg = usePlayerGroup();
   const [name, setName] = useState('');
@@ -203,65 +197,46 @@ function RunnerPick({ onClose, onPick }: { onClose: () => void; onPick: (p: Play
   const [guest, setGuest] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!state.result) return null;
   const n = cleanName(name);
-  const taken = !!sameName(state.players, n);
+  const taken = !!sameName([...state.players, ...added], n);
   const addGuest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!n || taken || busy) return;
     setBusy(true);
     const res = await pg.addGuest(n, level, !guest);
     setBusy(false);
-    if ('id' in res) return onPick(newGuest(res.id, n, level), false, true);
+    if ('id' in res) {
+      onAdd(newGuest(res.id, n, level));
+      setName('');
+      return;
+    }
     setError(GUEST_ERROR[res.error] ?? 'משהו השתבש, נסו שוב');
   };
-  const { roster, bench } = arrivalChoices(state.players, state.result, state.history);
-  const list = (ps: Player[], sub: boolean) => (
-    <ul className="pick-list">
-      {ps.map((p) => (
-        <li key={p.id}>
-          <button type="button" onClick={() => onPick(p, sub)}>
-            <Avatar player={p} size={36} />
-            <span className="name">{p.name}</span>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
   return (
-    <Sheet title="מי הגיע?" onClose={onClose}>
-      {roster.length > 0 && list(roster, false)}
-      {bench.length > 0 && (
-        <>
-          <span className="label">מחליפים</span>
-          {list(bench, true)}
-        </>
-      )}
-      <form className="late-new" onSubmit={addGuest}>
-        <label className="label" htmlFor="late-guest">
-          מישהו חדש
-        </label>
-        <input
-          id="late-guest"
-          className="input"
-          placeholder="שם"
-          value={name}
-          maxLength={24}
-          autoComplete="off"
-          onChange={(e) => {
-            setName(e.target.value);
-            setError(null);
-          }}
-        />
-        {(taken || error) && <p className="field-error">{taken ? NAME_TAKEN : error}</p>}
-        <span className="label">רמה</span>
-        <LevelPicker value={level} onChange={setLevel} />
-        <KindChoice guest={guest} onChange={setGuest} player />
-        <button type="submit" className="btn btn-primary btn-block" disabled={!n || taken || busy}>
-          המשך
-        </button>
-      </form>
-    </Sheet>
+    <form className="late-new" onSubmit={addGuest}>
+      <label className="label" htmlFor="late-guest">
+        מישהו חדש
+      </label>
+      <input
+        id="late-guest"
+        className="input"
+        placeholder="שם"
+        value={name}
+        maxLength={24}
+        autoComplete="off"
+        onChange={(e) => {
+          setName(e.target.value);
+          setError(null);
+        }}
+      />
+      {(taken || error) && <p className="field-error">{taken ? NAME_TAKEN : error}</p>}
+      <span className="label">רמה</span>
+      <LevelPicker value={level} onChange={setLevel} />
+      <KindChoice guest={guest} onChange={setGuest} player />
+      <button type="submit" className="btn btn-quiet btn-block" disabled={!n || taken || busy}>
+        הוספה
+      </button>
+    </form>
   );
 }
 

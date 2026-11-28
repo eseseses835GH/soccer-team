@@ -61,7 +61,7 @@ export function HomeScreen() {
   const [guest, setGuest] = useState(false);
   const gate = usePlayerGate();
   const voter = useVoterId();
-  // Teams are already made: someone ticked now arrived late. Don't reshuffle; ask "in now or wait".
+  // Teams are already made: someone ticked now arrived late. Don't reshuffle: the late sheet with him picked.
   const inTeams = new Set(state.result ? [...state.result.playerIds, ...state.result.subIds] : []);
   const tick = (p: Player, on: boolean) => {
     if (!on && state.result && !inTeams.has(p.id)) return setArrived(p);
