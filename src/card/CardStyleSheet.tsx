@@ -20,7 +20,7 @@ export function CardStyleSheet({
   const set = (patch: Partial<CardStyle>) => setStyle((s) => sanitizeStyle({ ...s, ...patch }));
 
   return (
-    <Sheet title="החולצה" onClose={onClose}>
+    <Sheet title="עיצוב הקלף" onClose={onClose}>
       <div className="card-style">
         <div className="card-style-preview">
           <PlayerCard {...card} style={style} size={150} />
