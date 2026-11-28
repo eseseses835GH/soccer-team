@@ -189,7 +189,7 @@ export function CardMaker({
             {/* No photo yet: the photo is the main thing; a new shirt alone is only a side save. */}
             {existing && onSaveStyle && styleChanged && state !== 'busy' && (
               <button type="button" className="btn btn-quiet btn-block" disabled={saving} onClick={() => save(() => onSaveStyle(style))}>
-                שמירת החולצה
+                שמירה
               </button>
             )}
           </>
@@ -199,7 +199,7 @@ export function CardMaker({
             תמונה מהגלריה
           </button>
           <button type="button" className="text-btn" onClick={() => setStyling(true)}>
-            החולצה
+            עיצוב הקלף
           </button>
         </div>
       </div>

@@ -182,6 +182,22 @@
   place-items: center;
   cursor: pointer;
 }
+.cards-tile {
+  position: relative;
+}
+.cards-tile-mine {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-start: 4px;
+  display: grid;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+}
 .cards-tile .player-card {
   inline-size: 100%;
   max-inline-size: 170px;

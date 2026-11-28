@@ -2975,13 +2975,17 @@ if (SB_URL) {
   const grid = ap.getByRole('dialog', { name: 'הקלפים' });
   await grid.locator('.cards-grid li').first().waitFor({ timeout: 8000 }).catch(() => errors.push('cards: no grid'));
   assert((await grid.locator('.cards-grid li').count()) === roster.length, `cards: ${await grid.locator('.cards-grid li').count()} tiles`);
-  assert((await grid.locator('.cards-tile').first().getAttribute('aria-label')) === 'הקלף של אבי', 'cards: the one with a photo first');
-  await grid.locator('.cards-tile').first().locator('image').waitFor({ timeout: 8000 }).catch(() => errors.push('cards: no photo on אבי\'s tile'));
+  // v38: my own card first, marked ✎; then the ones with a photo.
+  assert((await grid.locator('.cards-tile').first().getAttribute('aria-label')) === 'הקלף שלי', 'cards: my own card first');
+  assert((await grid.locator('.cards-tile-mine').count()) === 1, 'cards: one card marked as mine');
+  assert((await grid.locator('.cards-tile').nth(1).getAttribute('aria-label')) === 'הקלף של אבי', 'cards: then the one with a photo');
+  await grid.locator('.cards-tile').nth(1).locator('image').waitFor({ timeout: 8000 }).catch(() => errors.push('cards: no photo on אבי\'s tile'));
   if (process.env.SHOTS) await ap.screenshot({ path: `${process.env.SHOTS}/av-cards.png` });
   await grid.getByRole('button', { name: 'הקלף של בני' }).click();
   const big = ap.getByRole('dialog', { name: 'בני' });
   await big.locator('.card-view .player-card:not(.card-back)').waitFor({ timeout: 8000 }).catch(() => errors.push('cards: tile did not open the card'));
   await big.getByRole('button', { name: 'שיתוף' }).waitFor({ timeout: 3000 }).catch(() => errors.push('cards: no share on the big card'));
+  assert((await big.getByRole('button', { name: 'עריכת הקלף' }).count()) === 0, 'cards: edit on someone else\'s card');
   // v35: a sideways drag spins the card to its back (his record), another one back to the front.
   await spinCard(ap, big);
   await big.locator('.card-spin[data-side="back"]').waitFor({ timeout: 4000 }).catch(() => errors.push('cards: the drag did not turn the card over'));
@@ -2990,6 +2994,15 @@ if (SB_URL) {
   assert((await big.locator('.card-spin-face.is-back').getAttribute('aria-hidden')) === 'false', 'cards: the back is the face shown');
   await spinCard(ap, big);
   await big.locator('.card-spin[data-side="front"]').waitFor({ timeout: 4000 }).catch(() => errors.push('cards: the second drag did not turn it back'));
+  // v38: my own card → "עריכת הקלף" → the card maker (photo + "עיצוב הקלף").
+  await ap.keyboard.press('Escape');
+  await ap.waitForTimeout(300);
+  if (!(await grid.isVisible())) await ap.getByRole('button', { name: 'הקלפים', exact: true }).click();
+  await grid.getByRole('button', { name: 'הקלף שלי' }).click();
+  const mineBig = ap.getByRole('dialog', { name: 'גיל' });
+  await mineBig.getByRole('button', { name: 'עריכת הקלף' }).click({ timeout: 5000 }).catch(() => errors.push('cards: no edit on my own card'));
+  await ap.getByRole('button', { name: 'עיצוב הקלף' }).waitFor({ timeout: 8000 }).catch(() => errors.push('cards: edit did not open the card maker'));
+  await ap.getByRole('button', { name: 'צילום' }).first().waitFor({ timeout: 3000 }).catch(() => errors.push('cards: no photo button in the maker'));
   await actx.close();
 
   const { ctx: cctx, page: cp } = await playerContext(browser, { me: null, canRate: true, live: true, roster });
@@ -3102,10 +3115,10 @@ if (SB_URL) {
   await cp.getByRole('button', { name: 'שמירה' }).click();
   const saved = await cp.evaluate(() => window.__cardLab?.saved);
   assert(saved && saved.portrait > 1000 && saved.portrait <= 125000 && saved.cutout === null, `card lab: saved ${JSON.stringify(saved)}`);
-  await cp.getByRole('button', { name: 'החולצה' }).click();
+  await cp.getByRole('button', { name: 'עיצוב הקלף' }).click();
   await cp.getByRole('radio', { name: 'תכלת', exact: true }).click();
   await cp.getByRole('radio', { name: 'פסים', exact: true }).click();
-  await cp.getByRole('dialog', { name: 'החולצה' }).getByRole('button', { name: 'שמירה' }).click();
+  await cp.getByRole('dialog', { name: 'עיצוב הקלף' }).getByRole('button', { name: 'שמירה' }).click();
   await cp.getByRole('button', { name: 'שמירה' }).click();
   const st = await cp.evaluate(() => window.__cardLab?.saved?.style);
   assert(st?.shirt === 'sky' && st?.pattern === 'stripes' && st?.number === 10, `card lab: style ${JSON.stringify(st)}`);

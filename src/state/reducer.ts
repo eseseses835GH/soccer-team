@@ -5,6 +5,7 @@ import { addEvening, buildEvening, eveningId, mergeHistory, nightOf, stampSides,
 import { addFromBench, lateJoin, type LateChoice } from './late';
 import { holdKeepers, holdKeepersOnNoGK, leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
+import { fairKeeperOrders, keeperTurns, type KeeperPart } from './keeperTurns';
 
 export type Action =
   | { type: 'addPlayer'; player: Player; present?: boolean }
@@ -226,6 +227,24 @@ function baseReducer(state: AppState, action: Action): AppState {
       if (!old) return state;
       // The records of tonight's team sets share the night's first id (one evening in the stats).
       const night = state.match?.history.length ? nightOf(eveningId(old)) : old.night;
+      // Rotating keepers: whoever already stood in goal tonight goes after those who haven't.
+      let gkOrder = action.gkOrder;
+      if (state.settings.gkMode === 'rotate') {
+        const noGK = noGKIds(state.players);
+        const tonight = old.night ?? nightOf(eveningId(old));
+        const ownId = eveningId(old);
+        const parts: KeeperPart[] = state.history
+          .filter((h) => h.id !== ownId && nightOf(h.id) === tonight)
+          .map((h) => ({ orders: h.teams.map((t) => t.ids), matches: h.matches }));
+        if (state.match) {
+          parts.push({
+            orders: Array.from({ length: old.numTeams }, (_, t) => teamMembers(old, t)),
+            matches: state.match.history,
+            shifts: state.match.gkShift,
+          });
+        }
+        gkOrder = fairKeeperOrders(action.gkOrder, keeperTurns(parts, state.settings.gkSwitchGoals, noGK), noGK);
+      }
       return {
         ...state,
         dayAt: action.now,
@@ -239,7 +258,7 @@ function baseReducer(state: AppState, action: Action): AppState {
           generated: action.assignment,
           pool: action.pool,
           shown: [action.assignment],
-          gkOrder: action.gkOrder,
+          gkOrder,
           createdAt: action.now,
           ...(night ? { night } : {}),
         },

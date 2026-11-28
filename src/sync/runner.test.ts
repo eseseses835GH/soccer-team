@@ -310,7 +310,12 @@ describe('a player starts and ends an evening (v20)', () => {
     const call = t.api.set.mock.calls[sets];
     expect(call[2]).toBeUndefined();
     expect(call[1].night).toBe(eveningId(result()));
-    expect(call[1].teams.map((x) => x.ids)).toEqual(teams);
+    // v38: a1 and b1 kept goal in the played part (old teams 0 and 1): they go after the rest.
+    expect(call[1].teams.map((x) => x.ids)).toEqual([
+      ['c1', 'a1', 'b1'],
+      ['a2', 'b2', 'c2'],
+      ['a3', 'b3', 'c3'],
+    ]);
     expect(t.server().runner).toBe(ME);
     expect(t.r.rev()).toBe(t.server().rev);
   });
