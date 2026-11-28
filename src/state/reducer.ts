@@ -3,6 +3,7 @@ import { addTeam, startSession, swapKeepers, type MatchState } from '../match/ma
 import { DEFAULT_SETTINGS, INITIAL_STATE, engineOptions, noGKIds, teamBibs, type AppState, type Player, type Settings } from './model';
 import { addEvening, buildEvening, eveningId, mergeHistory, nightOf, stampSides, teamMembers, type EveningRecord } from './history';
 import { addFromBench, lateJoin, type LateChoice } from './late';
+import { moveBorrowers } from './borrow';
 import { holdKeepers, holdKeepersOnNoGK, leaveEarly, leaveMany, subIn, type LeaveCtx } from './leave';
 import { sampleSquad, SAMPLE_PRESENT } from './sample';
 
@@ -62,6 +63,8 @@ export type Action =
   | { type: 'subIn'; subId: string; team: number }
   /** A sub joins a team on request, nobody goes out: the team grows by one (late.ts). */
   | { type: 'addFromBench'; subId: string; team: number }
+  /** "עוברים אליהם": players from the losing team join the short team for good (borrow.ts). */
+  | { type: 'borrowMove'; team: number; from: number; ids: string[] }
   | { type: 'clearResult' }
   | { type: 'setMatch'; match: MatchState | null; now: number }
   /** End the evening: save it to the history (as `id`) and close the match session. */
@@ -341,6 +344,11 @@ function baseReducer(state: AppState, action: Action): AppState {
       if (!state.result) return state;
       const a = addFromBench(state.result, state.match, action.subId, action.team, leaveCtx(state));
       return a.result === state.result ? state : { ...state, result: a.result, match: a.match };
+    }
+    case 'borrowMove': {
+      if (!state.result) return state;
+      const mv = moveBorrowers(state.result, state.match, { team: action.team, from: action.from, ids: action.ids });
+      return mv.result === state.result ? state : { ...state, result: mv.result, match: mv.match };
     }
     case 'clearResult':
       return { ...state, result: null, match: null };

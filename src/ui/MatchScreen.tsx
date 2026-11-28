@@ -399,6 +399,9 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
         </Sheet>
       )}
 
+      {/* Above the pitch: a short team must not start a match short without anyone noticing. */}
+      <BorrowCard m={m} r={r} set={set} />
+
       <div className="pitch">
         {[a, b].map((t, side) => {
           const look = teamLook(state.settings, t);
@@ -444,7 +447,6 @@ export function MatchScreen({ runner }: { runner?: { onRelease(): void; onEnd():
       {arriving && <LateSheet onClose={() => setArriving(false)} mode={runner ? 'runner' : undefined} />}
       {leaving && <LeaveSheet onClose={() => setLeaving(false)} mode={runner ? 'runner' : undefined} />}
 
-      <BorrowCard m={m} r={r} set={set} />
 
       {askGk && (
         <div className="notice tip" role="status">

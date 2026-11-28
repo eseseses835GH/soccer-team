@@ -611,8 +611,10 @@ function mergeRecords(x, y) {
   const maxTeam = Math.max(-1, ...[...matches.values()].flatMap((mt) => [mt.a, mt.b]));
   const teams = [...newer.teams];
   for (let t = teams.length; t <= maxTeam; t++) teams.push(older.teams[t] ?? { bib: "", ids: [] });
+  const moved = [.../* @__PURE__ */ new Set([...older.moved ?? [], ...newer.moved ?? []])];
   return {
     ...newer,
+    ...moved.length ? { moved } : {},
     startedAt: Math.min(older.startedAt, newer.startedAt),
     endedAt: Math.max(older.endedAt, newer.endedAt),
     players: [...players.values()],
@@ -662,6 +664,7 @@ function sanitizeRecord(raw) {
   if (!matches.length) return null;
   const players = Array.isArray(r.players) ? r.players.filter((p) => p && typeof p.id === "string" && typeof p.name === "string").map((p) => ({ id: p.id, name: p.name.slice(0, 24) })) : [];
   const endedAt = isNum(r.endedAt) ? r.endedAt : Math.max(...matches.map((x) => x.endedAt));
+  const moved = strs(r.moved);
   return {
     id: r.id.slice(0, 64),
     v: 1,
@@ -671,7 +674,8 @@ function sanitizeRecord(raw) {
     players,
     teams,
     subIds: strs(r.subIds),
-    matches
+    matches,
+    ...moved.length ? { moved } : {}
   };
 }
 function sanitizeHistory(raw) {

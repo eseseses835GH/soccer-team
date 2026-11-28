@@ -2,7 +2,8 @@
  * "Winner stays" match night, as pure functions over a serialisable state:
  * two teams on the pitch, the rest queue outside. The loser goes to the back
  * of the queue and the next team comes in. A short team that comes on borrows
- * players from the team that just lost, for that match only (see `borrowNeed`).
+ * players from the team that just lost (see `borrowNeed`): for that match only,
+ * or for good (the state layer moves them, `src/state/borrow.ts`).
  */
 
 export interface Goal {
@@ -271,14 +272,16 @@ export interface BorrowNeed {
 }
 
 /**
- * After a match, a short team on the pitch (it just came on, or it won and
- * stays) completes itself from the team that just left. `sizes[t]` = players
- * in team t. Null when nobody is short or there is no queue (2 teams).
+ * A short team on the pitch (it just came on, or it won and stays) completes
+ * itself from the team that just left. With nobody just out (the first match,
+ * or the queue formed after the last match) it borrows from the team at the
+ * back of the queue. `sizes[t]` = players in team t. Null when nobody is short
+ * or there is no queue (2 teams).
  */
 export function borrowNeed(m: MatchState, sizes: number[], teamSize: number): BorrowNeed | null {
   const last = m.history[m.history.length - 1];
-  if (!last || last.out === null || m.onPitch.includes(last.out)) return null;
-  const from = last.out;
+  const from = last && last.out !== null && !m.onPitch.includes(last.out) ? last.out : m.queue[m.queue.length - 1];
+  if (from === undefined) return null;
   for (const team of m.onPitch) {
     const need = Math.min(teamSize - (sizes[team] ?? 0), sizes[from] ?? 0);
     if (need > 0) return { team, from, opponent: team === m.onPitch[0] ? m.onPitch[1] : m.onPitch[0], need };

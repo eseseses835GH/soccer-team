@@ -4,16 +4,19 @@ import { borrowCost, scoreFromCost, suggestBorrowers, type BorrowInput } from '.
 import { borrowNeed, setBorrow, type MatchState } from '../match/match';
 import { engineOptions, teamLook, type GameResult } from '../state/model';
 import { useStore } from '../state/store';
+import { useUi } from './App';
 
 const names = (list: string[]) => (list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} ו${list[list.length - 1]}`);
 
 /**
- * Optional step after a match: the short team that is on the pitch completes
- * itself from the team that just lost. Suggests the borrower(s) that make the
- * next match as even as possible; tap to choose others, or skip.
+ * A short team on the pitch completes itself from the team that just lost.
+ * Suggests the borrower(s) that make the next match as even as possible; tap to
+ * choose others. They move to the short team for good ("עוברים אליהם", the
+ * usual way), play only this match, or the step is skipped.
  */
 export function BorrowCard({ m, r, set }: { m: MatchState; r: GameResult; set: (next: MatchState) => void }) {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
+  const { notify } = useUi();
   const byId = useMemo(() => new Map(state.players.map((p) => [p.id, p])), [state.players]);
   const sizes = useMemo(() => {
     const c = new Array<number>(r.numTeams).fill(0);
@@ -82,6 +85,10 @@ export function BorrowCard({ m, r, set }: { m: MatchState; r: GameResult; set: (
     setPicked({ at: matchNo, ids: next });
   };
   const moves = suggested.length > 1 ? 'עוברים' : 'עובר';
+  const moveForGood = () => {
+    dispatch({ type: 'borrowMove', team: need.team, from: need.from, ids: chosen });
+    notify(`${names(chosen.map(name))} ${chosen.length > 1 ? 'עברו' : 'עבר'} ${shortLook.to}`);
+  };
 
   return (
     <section className="borrow" aria-label="השלמה מהמפסידה" style={{ '--team': shortLook.color } as React.CSSProperties}>
@@ -111,24 +118,23 @@ export function BorrowCard({ m, r, set }: { m: MatchState; r: GameResult; set: (
           );
         })}
       </div>
-      <p className="hint small">
-        {score !== null && (
-          <>
-            מדד המשחק הבא <strong className="borrow-score">{score}</strong>
-            {!isSuggested && ` (עם ההמלצה ${plan.best.score})`}
-            {' · '}
-          </>
-        )}
-        רק למשחק הזה, אחריו חוזרים לקבוצה
-      </p>
+      {score !== null && (
+        <p className="hint small">
+          מדד המשחק הבא <strong className="borrow-score">{score}</strong>
+          {!isSuggested && ` (עם ההמלצה ${plan.best.score})`}
+        </p>
+      )}
+      <button type="button" className="btn btn-primary btn-block" disabled={!complete} onClick={moveForGood}>
+        {need.need > 1 ? 'עוברים' : 'עובר'} אליהם
+      </button>
       <div className="row-2">
         <button
           type="button"
-          className="btn btn-small btn-primary"
+          className="btn btn-small btn-quiet"
           disabled={!complete}
           onClick={() => set(setBorrow(m, { team: need.team, from: need.from, ids: chosen }))}
         >
-          אישור
+          רק למשחק הזה
         </button>
         <button type="button" className="btn btn-small btn-quiet" onClick={() => set(setBorrow(m, { team: need.team, from: need.from, ids: [] }))}>
           דילוג

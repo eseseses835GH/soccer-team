@@ -59,6 +59,11 @@ export interface EveningRecord {
   subIds: string[];
   /** Oldest first. */
   matches: EveningMatch[];
+  /**
+   * Players who played a match for a team that isn't their final one, other than a one-match
+   * borrow: e.g. borrowers who moved to the short team for good ("עוברים אליהם"). Missing = none.
+   */
+  moved?: string[];
 }
 
 // ---------- building a record ----------
@@ -154,6 +159,16 @@ export function buildEvening({ match: m, result: r, players, bibs, now, id }: Bu
     });
   }
   if (!matches.length) return null;
+  const finalTeam = new Map<string, number>();
+  r.playerIds.forEach((pid, i) => finalTeam.set(pid, r.assignment[i]));
+  const moved = new Set<string>();
+  [...m.history, ...(inProgressCounts(m, now) ? [{ a: m.onPitch[0], b: m.onPitch[1], borrow: m.borrow, sides: matches[matches.length - 1].sides }] : [])].forEach((h) =>
+    h.sides?.forEach((side, k) => {
+      const t = k === 0 ? h.a : h.b;
+      const lent = h.borrow?.team === t ? h.borrow.ids : [];
+      for (const pid of side) if (finalTeam.has(pid) && finalTeam.get(pid) !== t && !lent.includes(pid)) moved.add(pid);
+    }),
+  );
   const names = new Map(players.map((p) => [p.id, p.name]));
   const ids = new Set([...r.playerIds, ...r.subIds]);
   for (const x of matches) {
@@ -170,6 +185,7 @@ export function buildEvening({ match: m, result: r, players, bibs, now, id }: Bu
     teams: Array.from({ length: r.numTeams }, (_, t) => ({ bib: bibs[t] ?? '', ids: teamMembers(r, t) })),
     subIds: r.subIds,
     matches,
+    ...(moved.size ? { moved: [...moved] } : {}),
   };
 }
 
@@ -187,8 +203,10 @@ export function mergeRecords(x: EveningRecord, y: EveningRecord): EveningRecord 
   const maxTeam = Math.max(-1, ...[...matches.values()].flatMap((mt) => [mt.a, mt.b]));
   const teams = [...newer.teams];
   for (let t = teams.length; t <= maxTeam; t++) teams.push(older.teams[t] ?? { bib: '', ids: [] });
+  const moved = [...new Set([...(older.moved ?? []), ...(newer.moved ?? [])])];
   return {
     ...newer,
+    ...(moved.length ? { moved } : {}),
     startedAt: Math.min(older.startedAt, newer.startedAt),
     endedAt: Math.max(older.endedAt, newer.endedAt),
     players: [...players.values()],
@@ -252,6 +270,7 @@ function sanitizeRecord(raw: unknown): EveningRecord | null {
     ? r.players.filter((p) => p && typeof p.id === 'string' && typeof p.name === 'string').map((p) => ({ id: p.id, name: p.name.slice(0, 24) }))
     : [];
   const endedAt = isNum(r.endedAt) ? r.endedAt : Math.max(...matches.map((x) => x.endedAt));
+  const moved = strs(r.moved);
   return {
     id: r.id.slice(0, 64),
     v: 1,
@@ -262,6 +281,7 @@ function sanitizeRecord(raw: unknown): EveningRecord | null {
     teams,
     subIds: strs(r.subIds),
     matches,
+    ...(moved.length ? { moved } : {}),
   };
 }
 
@@ -439,9 +459,11 @@ export function nightRecords(history: EveningRecord[], rec: EveningRecord): Even
 
 /**
  * Someone joined, left or moved team during the record: a match was played by a side that isn't
- * the team's final roster. A player borrowed from another team for one match doesn't count.
+ * the team's final roster, or someone moved for good (`moved`). A player borrowed from another team
+ * for one match doesn't count.
  */
 export function rosterChanged(rec: EveningRecord): boolean {
+  if (rec.moved?.length) return true;
   const all = new Set(rec.teams.flatMap((t) => t.ids));
   return rec.matches.some((mt) =>
     ([0, 1] as const).some((side) => {

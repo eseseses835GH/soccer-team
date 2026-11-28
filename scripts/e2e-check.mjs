@@ -304,7 +304,8 @@ const backupFile = await download.path();
   await lp.context().close();
 }
 
-// 11. 14 players at 5-a-side (5 · 5 · 4): the short team borrows from the losing team for one match.
+// 11. 14 players at 5-a-side (5 · 5 · 4): the short team borrows from the losing team, for one match
+// ("רק למשחק הזה") or for good ("עובר אליהם", v38).
 {
   const pg = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   pg.on('pageerror', (e) => errors.push(e.message));
@@ -320,6 +321,7 @@ const backupFile = await download.path();
   await pg.getByRole('button', { name: 'סיום משחק' }).click();
   const card = pg.locator('.borrow');
   assert(await card.isVisible(), 'borrow step shown when the short team comes on');
+  assert(await pg.evaluate(() => !!(document.querySelector('.borrow').compareDocumentPosition(document.querySelector('.pitch')) & Node.DOCUMENT_POSITION_FOLLOWING)), 'borrow card above the pitch');
   const title = await card.locator('h3').innerText();
   assert(/^משלימים את קבוצה \d מקבוצה \d$/.test(title), `borrow title: ${title}`);
   assert(/מומלץ: .+ עובר ל.+, כך המשחק הבא הכי שווה/.test(await card.locator('.borrow-why').innerText()), 'borrow reason');
@@ -331,7 +333,7 @@ const backupFile = await download.path();
   await other.click();
   assert(/בחרתם/.test(await card.locator('.borrow-why').innerText()), 'override shown');
   assert(/עם ההמלצה \d+/.test(await card.locator('.hint').innerText()), 'recommended score shown on override');
-  await card.getByRole('button', { name: 'אישור' }).click();
+  await card.getByRole('button', { name: 'רק למשחק הזה' }).click();
   assert(await pg.getByText(new RegExp(`${otherName} משחק עם קבוצה \\d`)).isVisible(), 'borrow recorded');
   // The borrower can score for the short team (second side = the team that came on).
   await pg.getByRole('button', { name: '+ גול' }).nth(1).click();
@@ -345,9 +347,21 @@ const backupFile = await download.path();
   assert(await pg.locator('.borrow').isVisible(), 'short team that stays borrows again');
   const donors = await pg.locator('.borrow-picks .name').allInnerTexts();
   assert(!donors.includes(otherName), 'borrows from the new loser, not the previous one');
-  await pg.locator('.borrow').getByRole('button', { name: 'דילוג' }).click();
-  assert((await pg.locator('.borrow').count()) === 0, 'skip hides the step');
-  console.log(`borrow: suggested ${suggested}, picked ${otherName}`);
+  // For good: he moves to the short team (last in its keeper order); the lender is now the short one.
+  const stored = () => pg.evaluate(() => JSON.parse(localStorage.getItem(`kochot:group:${JSON.parse(localStorage.getItem('kochot:groups')).currentId}`)));
+  const mover = await pg.locator('.borrow-picks button.sel .name').innerText();
+  await pg.locator('.borrow').getByRole('button', { name: 'עובר אליהם' }).click();
+  assert((await pg.locator('.borrow').count()) === 0, 'moving for good hides the step');
+  assert(!(await pg.getByText(/משחק עם .* במשחק הזה/).count()), 'no one-match borrow line after a move');
+  const st = await stored();
+  const r = st.result;
+  const sizes = Array.from({ length: r.numTeams }, (_, t) => r.assignment.filter((x) => x === t).length);
+  const moverId = st.players.find((x) => x.name === mover).id;
+  const team = r.assignment[r.playerIds.indexOf(moverId)];
+  assert(JSON.stringify([...sizes].sort()) === '[4,5,5]' && sizes[team] === 5, `sizes after the move: ${sizes}`);
+  assert(r.gkOrder[team].at(-1) === moverId, 'mover last in the keeper order');
+  assert(st.match.borrow === null, 'no one-match borrow recorded');
+  console.log(`borrow: suggested ${suggested}, picked ${otherName}, moved ${mover}`);
 }
 
 // 11a. Bibs (v7): off by default (numbered teams); switched on in Settings, teams get bib names.
